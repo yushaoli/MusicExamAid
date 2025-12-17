@@ -1,29 +1,34 @@
-System Context Diagram
-
 flowchart LR
-  %% --- CLIENTS ---
-  P["Parent (WeChat)"] --> MP["Mini Program<br/>考级助手 / Music Exam Aid"]
-  S["Student (uses parent's device)"] --> MP
-  T["Teacher"] --> TC["Teacher Console<br/>(limited UI)"]
+    P["Parent (WeChat)"]
+    MP["Mini Program<br/>考级助手 / Music Exam Aid"]
+    S["Student (uses parent's device)"]
+    T["Teacher"]
+    TC["Teacher Console<br/>(limited UI)"]
+    WA["WeChat Auth"]
+    BE["Backend API"]
+    DB["Database<br/>Profiles / Registrations"]
+    OS["Object Storage<br/>Attachments"]
+    EX["Excel Export Service"]
+    OUS["Official Upload System"]
+    GW["国音 Website"]
 
-  %% --- PLATFORM / INTEGRATIONS ---
-  MP -->| "WeChat Login (OpenID)" | WA["WeChat Auth"]
-  TC -->| "WeChat Login (OpenID)" | WA
+    P --> MP
+    S --> MP
+    T --> TC
 
-  %% --- CORE BACKEND ---
-  MP -->| "API calls" | BE["Backend API"]
-  TC -->| "API calls" | BE
+    MP -->|"WeChat Login (OpenID)"| WA
+    TC -->|"WeChat Login (OpenID)"| WA
 
-  %% --- DATA STORES ---
-  BE --> DB["Database<br/>(Profiles / Registrations / Certifications / Audit)"]
-  BE --> OS["Object Storage<br/>(Attachments)"]
+    MP -->|"API calls"| BE
+    TC -->|"API calls"| BE
 
-  %% --- EXPORT ---
-  BE --> EX["Excel Export Service<br/>(Template v2.1)"]
-  EX -->| "Generate .xlsx" | OS
-  TC -->| "Download export" | OS
-  TC -->| "Upload template manually" | OUS["Official Upload System<br/>(external)"]
+    BE --> DB
+    BE --> OS
 
-  %% --- GUOYIN (ASSISTED) ---
-  MP -->| "Open WebView" | GW["国音 Website<br/>(成绩/证书查询)"]
-  MP -->| "Save summary + attachments" | BE
+    BE --> EX
+    EX -->|"Generate .xlsx"| OS
+    TC -->|"Download export"| OS
+    TC -->|"Upload template manually"| OUS
+
+    MP -->|"Open WebView"| GW
+    MP -->|"Save summary + attachments"| BE
