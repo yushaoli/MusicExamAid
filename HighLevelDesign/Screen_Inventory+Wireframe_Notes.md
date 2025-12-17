@@ -420,3 +420,286 @@ flowchart TB
 ---
 
 If you want, next I will convert the above into a **single consolidated “Screen Spec” doc** with numbered components per screen (e.g., P22-1 Header, P22-2 Form, P22-3 Validation banner), which your dev can implement almost directly.
+
+### Next actions (the list we agreed)
+
+1. **Screen inventory + wireframe notes** (every screen, fields, CTAs, empty states)
+2. **Field dictionary** (exact labels, types, validation, required-by-template flags)
+3. **Excel template mapping doc** (column-by-column mapping + formatting rules)
+4. **Event tracking plan** (activation/retention funnel, teacher confirmation/export funnel)
+
+You asked to start with **(1)**, but first I’ll address your onboarding question because it directly changes the screen design.
+
+---
+
+## Onboarding + sensitive data: do we need to follow 等保 rules?
+
+In practice, yes—you should **design as if MLPS/等保 applies** and run a formal **定级** early, because you will store **minors’ personal information** and **ID-related fields** for exam registration.
+
+* **PIPL baseline (个人信息保护法):**
+
+  * Data minimization and purpose limitation are explicit obligations (e.g., “限于最小范围，不得过度收集”). ([spp.gov.cn][1])
+  * **Biometrics** and **personal info of minors under 14** are **敏感个人信息**. ([spp.gov.cn][1])
+  * Processing sensitive PI requires **单独同意**, plus extra notice of necessity/impact. ([spp.gov.cn][1])
+  * For **under 14**, you must obtain **guardian consent** and have **special processing rules**. ([spp.gov.cn][1])
+  * You should do a **PI protection impact assessment** before processing sensitive PI and keep records (≥3 years). ([spp.gov.cn][1])
+
+* **等保/MLPS (等级保护):**
+
+  * The “定级指南” is GB/T 22240-2020. ([openstd.samr.gov.cn][2])
+  * For **Level 2+ systems**, filing/备案 is generally required after level determination (the管理办法 describes “第二级以上…办理备案手续” and timing requirements). ([sz.gov.cn][3])
+  * Exact level (1/2/3) depends on your impact assessment; given minors + identity data, you should assume **at least Level 2 controls** in MVP design and verify via formal 定级.
+
+* **WeChat Mini Program platform compliance:** if you process personal information, WeChat requires completing the **“用户隐私保护指引”** and related consent gating for privacy-related capabilities. ([cloud.tencent.com][4])
+
+### Design implication for MVP onboarding
+
+**Do not collect sensitive fields at first launch.** Collect them **only at the moment they become necessary** (e.g., when creating a RegistrationRecord for a specific exam cycle), and gate them behind:
+
+* Clear purpose notice + retention period
+* **Separate consent** for sensitive fields (ID number, face photo/彩照, certificates upload, etc.)
+* Guardian confirmation for under-14 (in product terms: parent is the WeChat account owner, so consent is naturally anchored, but you should still present it explicitly)
+
+---
+
+# (1) Screen inventory + wireframe notes (MVP)
+
+Below is an implementation-oriented screen list. I’ve kept it “wireframe-notes style”: **Fields**, **CTAs**, **Empty states**, **Rules/validations**, **Privacy notes**.
+
+## Global
+
+### G0. First launch gate (Privacy + Terms)
+
+* **Purpose:** platform + legal readiness before any PI processing
+* **UI:** short summary + links to full “隐私政策 / 用户协议”
+* **CTAs:** `同意并继续` / `不同意退出`
+* **Rules:** block login/session initialization that would store PI until accepted
+* **Privacy note:** PIPL “告知—同意” baseline; record consent timestamp/version. ([spp.gov.cn][1])
+
+### G1. Role context (implicit)
+
+* No explicit “persona switch.” Parent/Student share one account.
+* Teacher is a separate login path (via WeChat openid mapping to TeacherAccount).
+
+---
+
+## Tab: 我的 Me
+
+### M1. Me home
+
+* **Content:** account status, linked classes, learner count
+* **CTAs:** `新增学员` `加入班级` `隐私与授权管理` `数据导出申请（后续）`
+* **Empty state:** “还没有学员档案，先创建一个”
+
+### M2. Consent & data controls (MVP-light, but important)
+
+* **Sections:**
+
+  * Consent records (privacy policy version, timestamps)
+  * Toggle: “允许上传彩照/证书附件”（can be default OFF until needed）
+  * `注销/删除账号` (optional MVP, but at least “申请删除”)
+* **Privacy note:** withdrawal must be possible and not block essential service unless necessary. ([spp.gov.cn][1])
+
+---
+
+## Tab: 考级 Exam
+
+### E1. Exam home (2 cards)
+
+* **Cards:** `报名信息` / `考级档案`
+* **Badges:** pending submissions, teacher feedback count
+
+---
+
+## Exam → 报名信息 Registration
+
+### R1. Cycle selector (考期选择)
+
+* **Fields:** Year, cycle (上半年/下半年), board/region template (MVP: 1–2 templates)
+* **CTAs:** `创建报名` `查看历史报名`
+* **Rules:** cycle drives allowed 专业/级别 lists (from 简章 rules screenshot; we’ll formalize later)
+
+### R2. Learner picker
+
+* **List:** learners under HouseholdAccount
+* **CTAs:** `选择学员` `新增学员`
+* **Empty state:** “先创建学员档案才能报名”
+
+### R3. Registration form (Draft)
+
+* **Sections (wireframe):**
+
+  1. **Basic:** 专业(乐器/方向), 级别, 报考曲目(如需要), 考点(可选), 指导老师/机构(默认绑定teacher)
+  2. **Identity (only if template requires):** 姓名、证件类型、证件号、出生日期等
+  3. **Attachments:** 彩照（上传）、其他材料（如需要）
+* **CTAs:** `保存草稿` `提交老师审核`
+* **Validations:**
+
+  * Required fields depend on template mapping (to be defined in task 3)
+  * ID number format validation (type-based)
+  * 彩照 file type/size limits; strip EXIF metadata (recommended)
+* **Empty state:** show template-specific “还缺 X 项必填”
+* **Privacy notes (critical):**
+
+  * Under PIPL, **biometrics** and **under-14 PI** are sensitive; face photo/彩照 should be treated as sensitive PI. ([spp.gov.cn][1])
+  * For sensitive PI you should do PIPIA and keep records. ([spp.gov.cn][1])
+  * UI should present **单独同意** when user first enters “证件号/彩照上传” section. ([spp.gov.cn][1])
+
+### R4. Submit confirmation (status becomes Submitted)
+
+* **Content:** summary of key fields + “teacher will review”
+* **CTAs:** `确认提交` `返回修改`
+* **Rules:** once submitted, editing is blocked except fields teacher flags (or you allow full edit in NeedsChanges state)
+
+### R5. Registration status tracking
+
+* **Timeline:** Draft → Submitted → NeedsChanges → Confirmed → Locked
+* **CTAs:**
+
+  * If NeedsChanges: `按老师意见修改`
+  * If Locked: `查看导出状态（只读）`
+* **Empty state:** no registrations yet
+
+---
+
+## Exam → 考级档案 Archive (国音 results/certificates vault)
+
+### A1. Archive list
+
+* **List items:** board, cycle_text, instrument, level, result, cert no (optional), verification status (manual)
+* **CTAs:** `新增档案记录` `去国音查询` (WebView entry points)
+* **Empty state:** “还没有档案记录，建议先从国音查询后归档”
+
+### A2. 国音查询 WebView launcher
+
+* **Buttons:** `成绩查询` `证书查询`
+* **UI note:** clearly indicate “官方页面在 WebView 打开，本小程序不自动抓取”
+* **Privacy note:** Non-goal is automated scraping; keep it manual.
+
+### A3. Save to archive (manual capture form)
+
+* **Fields:** cycle/date, instrument, level, result, certificate_no, optional screenshot/e-certificate upload
+* **CTAs:** `保存` `取消`
+* **Validations:** required minimal set; attachments optional
+* **Privacy note:** certificate screenshots can contain ID info → treat as sensitive PI.
+
+---
+
+## Tab: 练习 Practice
+
+### P1. Practice home (3 entry cards)
+
+* **Cards:** `音乐基础知识` `乐器陪练` `水平评估`
+* **CTAs:** `开始练习` `继续上次`
+
+### P2. 音乐基础知识 (Quiz pack list)
+
+* **List:** packs by level/instrument
+* **CTAs:** `开始` `错题本`
+* **Empty state:** “暂无题包（配置中）”
+
+### P3. Quiz session
+
+* **UI:** single question, answer options, explanation after submit
+* **CTAs:** `提交` `下一题` `加入错题本`
+* **Rules:** capture wrong answers for 错题本
+
+### P4. 错题本
+
+* **List:** wrong questions by tag
+* **CTAs:** `再练一次` `移除`
+* **Empty state:** “错题本是空的，继续保持”
+
+### P5. 乐器陪练 (record landing)
+
+* **Fields:** choose learner, instrument (default), target exercise (optional)
+* **CTAs:** `开始录制`
+* **Rules:** show environment tips (quiet room, camera angle)
+
+### P6. Recording screen
+
+* **UI:** audio/video recording, timer, waveform
+* **CTAs:** `结束录制` `重录`
+* **Privacy note:** recordings are highly sensitive; require explicit consent and retention settings (even if stored only temporarily).
+
+### P7. AI feedback summary
+
+* **Modules:** pitch/rhythm (if applicable), posture flags, key drill suggestions
+* **CTAs:** `进入专项练习` `再次录制`
+
+### P8. Drill loop
+
+* **UI:** drill instructions + record again
+* **CTA:** `完成本次`
+
+### P9. 水平评估 (mock assessment setup)
+
+* **Fields:** instrument, level, repertoire checklist
+* **CTAs:** `开始评估`
+
+### P10. Assessment result
+
+* **Outputs:** readiness score, gap list, suggested plan
+* **CTAs:** `加入进度计划` `分享给老师（后续）`
+
+---
+
+## Tab: 进度 Progress
+
+### G2. Progress dashboard
+
+* **Widgets:** weekly streak, quiz accuracy, coaching sessions, assessment readiness trend
+* **CTAs:** `本周计划` `历史记录`
+* **Empty state:** “开始一次练习后，这里会出现趋势”
+
+---
+
+## Teacher Console (limited UI)
+
+### T0. Teacher login / binding
+
+* **Flow:** WeChat openid recognized as TeacherAccount
+* **CTAs:** `进入教师端`
+
+### T1. Roster list
+
+* **Filters:** cycle/status/instrument/level
+* **Rows:** learner name, level, status, last update
+* **CTAs:** `查看` `导出Excel`
+
+### T2. Student detail (3 tabs)
+
+1. Profile (view + limited edits)
+2. Registration (review/edit/status actions)
+3. Archive (view)
+
+### T3. Registration review
+
+* **Actions:** `退回修改(NeedsChanges)` with notes, `确认(Confirmed)`, `锁定(Locked)`
+* **Rules:** unlocking restricted; log all sensitive views/edits
+* **Privacy note:** least-privilege; ID masked by default (only show last 4), reveal is logged (aligns with your spec).
+
+### T4. Export page
+
+* **Flow:** choose cycle → choose template → export “Locked only”
+* **Output:** XLSX file generated server-side
+* **Rules:** teacher cannot export Draft/Submitted/NeedsChanges/Confirmed unless Locked.
+
+---
+
+# Immediate design updates I recommend (based on 等保/PIPL constraints)
+
+1. **Progressive disclosure**: move ID number + 彩照 collection into Registration form step, not onboarding. (Supports minimization. ([spp.gov.cn][1]))
+2. **Sensitive consent micro-gates** inside the form: first time user enters “证件号/彩照/录音录像上传,” show 单独同意. ([spp.gov.cn][1])
+3. **PIPIA checklist as an internal artifact** (not user-facing): because you process敏感个人信息 + possibly automated assessment. ([spp.gov.cn][1])
+4. **WeChat privacy guide completion** in MP backend to avoid capability blocks during review/launch. ([cloud.tencent.com][4])
+
+---
+
+If you want, in the next step I will convert the above inventory into a **single Mermaid IA + screen flow diagram** (aligned to your conventions) and then proceed to **Task (2) Field Dictionary** and **Task (3) Excel mapping** once you confirm the first supported “报名简章模板/地区/考级机构” for export.
+
+[1]: https://www.spp.gov.cn/spp/fl/202108/t20210820_527244.shtml "中华人民共和国个人信息保护法_最高人民检察院门户网"
+[2]: https://openstd.samr.gov.cn/bzgk/gb/newGbInfo?hcno=63B89FFF7CC97EBBBED8A403396F0F00&utm_source=chatgpt.com "GB/T 22240-2020 - 国家标准全文公开"
+[3]: https://www.sz.gov.cn/cn/xxgk/zfxxgj/zcfg/content/post_8966153.html?utm_source=chatgpt.com "信息安全等级保护管理办法--政策法规"
+[4]: https://cloud.tencent.com/document/product/1301/97930?utm_source=chatgpt.com "小程序隐私保护指引适配说明"
+
