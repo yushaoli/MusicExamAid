@@ -1,0 +1,4 @@
+Product: WeChat Mini Program “考级助手 / Music Exam Aid”
+MVP Objective:
+Enable parents to (a) create/manage learner profiles, (b) link learners to an institution (MusicClass) with consent, (c) create exam-cycle registrations (per subject/level), optionally assign to a specific teacher, (d) submit for teacher review → confirm/lock, and (e) export an upload-ready Excel template (v2.1) at the institution + cycle level. Additionally, provide a “考级档案” vault for saving 国音 exam results/certificates (manual assisted via WebView).
+Non-goals (MVP): WeChat Pay, automated scraping/auto-sync from 国音, full LMS, end-to-end official submission.
