@@ -1,4 +1,6 @@
+```mermaid
 flowchart LR
+    %% --- NODES ---
     P["Parent (WeChat)"]
     MP["Mini Program<br/>考级助手 / Music Exam Aid"]
     S["Student (uses parent's device)"]
@@ -12,6 +14,7 @@ flowchart LR
     OUS["Official Upload System"]
     GW["国音 Website"]
 
+    %% --- FLOWS ---
     P --> MP
     S --> MP
     T --> TC
@@ -32,3 +35,4 @@ flowchart LR
 
     MP -->|"Open WebView"| GW
     MP -->|"Save summary + attachments"| BE
+```
