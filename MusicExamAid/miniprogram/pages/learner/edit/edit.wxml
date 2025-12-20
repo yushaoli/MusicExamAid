@@ -1,0 +1,42 @@
+<view class="container">
+  <view class="form-group">
+    <text class="label">姓名 *</text>
+    <input class="input" value="{{form.name_cn}}" data-field="name_cn" bindinput="onInput" placeholder="中文姓名"/>
+  </view>
+  <view class="form-group">
+    <text class="label">英文名</text>
+    <input class="input" value="{{form.name_en_optional}}" data-field="name_en_optional" bindinput="onInput" placeholder="可选"/>
+  </view>
+  <view class="form-group">
+    <text class="label">性别 *</text>
+    <picker mode="selector" range="{{genderOptions}}" data-field="gender" data-options="genderOptions" bindchange="onPickerChange">
+      <view class="picker">{{form.gender || '请选择'}}</view>
+    </picker>
+  </view>
+  <view class="form-group">
+    <text class="label">出生日期 *</text>
+    <picker mode="date" value="{{form.dob}}" data-field="dob" bindchange="onInput">
+      <view class="picker">{{form.dob || '请选择'}}</view>
+    </picker>
+  </view>
+  <view class="form-group">
+    <text class="label">证件类型 *</text>
+    <picker mode="selector" range="{{idTypeOptions}}" data-field="id_type" data-options="idTypeOptions" bindchange="onPickerChange">
+      <view class="picker">{{form.id_type || '请选择'}}</view>
+    </picker>
+  </view>
+  <view class="form-group">
+    <text class="label">证件号码 *</text>
+    <input class="input" value="{{form.id_number}}" data-field="id_number" bindinput="onInput" placeholder="{{id ? '重新输入以更新' : '请输入'}}"/>
+  </view>
+  <view class="form-group">
+    <text class="label">联系电话 *</text>
+    <input class="input" type="number" value="{{form.guardian_phone}}" data-field="guardian_phone" bindinput="onInput" placeholder="监护人手机"/>
+  </view>
+  <view class="form-group">
+    <text class="label">邮寄地址</text>
+    <input class="input" value="{{form.mailing_address_optional}}" data-field="mailing_address_optional" bindinput="onInput" placeholder="可选"/>
+  </view>
+  <button class="submit-btn" bindtap="onSubmit">保存</button>
+</view>
+

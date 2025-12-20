@@ -1,0 +1,53 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/learner/list/list",
+    "pages/learner/edit/edit",
+    "pages/enrollment/select/select",
+    "pages/registration/list/list",
+    "pages/registration/edit/edit",
+    "pages/registration/detail/detail",
+    "pages/me/me",
+    "pages/teacher/roster/roster",
+    "pages/teacher/review/review",
+    "pages/admin/batches/batches",
+    "pages/admin/batch-detail/batch-detail",
+    "pages/super/incoming/incoming",
+    "pages/super/batch/batch",
+    "pages/super/export/export"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#4A90D9",
+    "navigationBarTitleText": "考级助手",
+    "navigationBarTextStyle": "white"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#4A90D9",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "images/tabs/tab-home.png",
+        "selectedIconPath": "images/tabs/tab-home-active.png"
+      },
+      {
+        "pagePath": "pages/registration/list/list",
+        "text": "考级",
+        "iconPath": "images/tabs/tab-vault.png",
+        "selectedIconPath": "images/tabs/tab-vault-active.png"
+      },
+      {
+        "pagePath": "pages/me/me",
+        "text": "我的",
+        "iconPath": "images/tabs/tab-me.png",
+        "selectedIconPath": "images/tabs/tab-me-active.png"
+      }
+    ]
+  },
+  "cloud": true,
+  "sitemapLocation": "sitemap.json"
+}
+

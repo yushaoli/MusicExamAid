@@ -1,0 +1,25 @@
+<view class="container">
+  <view class="header">
+    <text class="title">考级助手</text>
+    <text class="subtitle">Music Exam Aid</text>
+  </view>
+
+  <view class="quick-actions" wx:if="{{!loading}}">
+    <view class="action-card" bindtap="goToLearners">
+      <text class="action-icon">👨‍👩‍👧</text>
+      <text class="action-title">学员管理</text>
+      <text class="action-desc">添加/编辑学员信息</text>
+    </view>
+    
+    <view class="action-card" bindtap="goToRegistrations">
+      <text class="action-icon">📝</text>
+      <text class="action-title">考级报名</text>
+      <text class="action-desc">创建/查看报名</text>
+    </view>
+  </view>
+
+  <view class="loading" wx:if="{{loading}}">
+    <text>加载中...</text>
+  </view>
+</view>
+
