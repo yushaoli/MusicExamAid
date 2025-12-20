@@ -45,5 +45,9 @@
     "ignore": [],
     "include": []
   },
-  "editorSetting": {}
+  "editorSetting": {
+    "tabIndent": "insertSpaces",
+    "tabSize": 2
+  },
+  "srcMiniprogramRoot": "miniprogram/"
 }
