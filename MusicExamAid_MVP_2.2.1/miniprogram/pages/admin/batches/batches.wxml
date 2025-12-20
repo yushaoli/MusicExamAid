@@ -1,2 +1,31 @@
-<view class="container"><text>机构批次列表 (待实现)</text></view>
+<view class="container">
+  <view class="title">机构批次（Admin）</view>
 
+  <view class="filters">
+    <view class="field">
+      <text class="label">机构</text>
+      <picker mode="selector" range="{{classOptions}}" range-key="label" value="{{classIndex}}" bindchange="onClassChange">
+        <view class="picker">{{classOptions.length ? classOptions[classIndex].label : '无权限机构'}}</view>
+      </picker>
+    </view>
+
+    <view class="field">
+      <text class="label">考期</text>
+      <picker mode="selector" range="{{cycles}}" range-key="display_name" value="{{cycleIndex}}" bindchange="onCycleChange">
+        <view class="picker">{{cycles.length ? cycles[cycleIndex].display_name : '无考期数据'}}</view>
+      </picker>
+    </view>
+
+    <button class="primary" bindtap="onCreate">创建批次</button>
+  </view>
+
+  <view wx:if="{{loading}}">加载中...</view>
+
+  <view wx:else class="list">
+    <view class="item" wx:for="{{batches}}" wx:key="_id" data-id="{{item._id}}" bindtap="goDetail">
+      <view class="row"><text class="bold">{{item._id}}</text><text class="status">{{item.inst_batch_status}}</text></view>
+      <view class="sub">{{item.class_id}} · {{item.cycle_id}}</view>
+    </view>
+    <view class="empty" wx:if="{{batches.length === 0}}">暂无批次</view>
+  </view>
+</view>

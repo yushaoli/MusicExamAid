@@ -22,6 +22,10 @@ Page({
     wx.navigateTo({ url: '/pages/learner/list/list' });
   },
 
+  goToEnrollment() {
+    wx.navigateTo({ url: '/pages/enrollment/select/select' });
+  },
+
   // Teacher entry
   goToTeacherRoster() {
     if (!this.data.showTeacherMenu) return;
@@ -39,10 +43,4 @@ Page({
     if (!this.data.showSuperMenu) return;
     wx.navigateTo({ url: '/pages/super/incoming/incoming' });
   },
-
-  goToSuperBatch() {
-    if (!this.data.showSuperMenu) return;
-    wx.navigateTo({ url: '/pages/super/batch/batch' });
-  },
 });
-

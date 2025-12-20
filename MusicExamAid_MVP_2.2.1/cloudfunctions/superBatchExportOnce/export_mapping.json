@@ -1,0 +1,166 @@
+{
+  "报名机构ID": {
+    "path": "legacy_org_id",
+    "required": true,
+    "formatter": "asTextInt",
+    "default": ""
+  },
+  "报名点ID": {
+    "path": "exam_site_id_optional",
+    "required": false,
+    "formatter": "asTextInt",
+    "default": ""
+  },
+  "姓名": {
+    "path": "name_cn",
+    "required": true,
+    "formatter": "asTrimmed",
+    "default": ""
+  },
+  "拼音或英文": {
+    "path": "name_en_optional",
+    "required": false,
+    "formatter": "asTrimmed",
+    "default": ""
+  },
+  "性别": {
+    "path": "gender",
+    "required": true,
+    "formatter": "asEnum",
+    "enum": [
+      "男",
+      "女"
+    ],
+    "default": ""
+  },
+  "国籍": {
+    "path": "nationality",
+    "required": true,
+    "formatter": "asTrimmedOrDefault",
+    "default": "中国"
+  },
+  "民族": {
+    "path": "ethnicity_optional",
+    "required": false,
+    "formatter": "asTrimmed",
+    "default": ""
+  },
+  "证件类型": {
+    "path": "id_type",
+    "required": true,
+    "formatter": "asTrimmed",
+    "default": ""
+  },
+  "证件号码": {
+    "path": "id_number_plaintext",
+    "required": true,
+    "formatter": "asText",
+    "default": ""
+  },
+  "联系电话": {
+    "path": "guardian_phone",
+    "required": true,
+    "formatter": "asText",
+    "default": ""
+  },
+  "出生日期": {
+    "path": "dob",
+    "required": true,
+    "formatter": "asDateText_YYYY_MM_DD",
+    "default": ""
+  },
+  "邮寄地址": {
+    "path": "mailing_address_optional",
+    "required": false,
+    "formatter": "asTrimmed",
+    "default": ""
+  },
+  "收件人": {
+    "path": "recipient_name_optional",
+    "required": false,
+    "formatter": "asTrimmed",
+    "default": ""
+  },
+  "收件电话": {
+    "path": "recipient_phone_optional",
+    "required": false,
+    "formatter": "asText",
+    "default": ""
+  },
+  "报考专业": {
+    "path": "instrument",
+    "required": true,
+    "formatter": "asTrimmed",
+    "default": ""
+  },
+  "报考级别": {
+    "path": "level",
+    "required": true,
+    "formatter": "asTextInt",
+    "default": ""
+  },
+  "考试曲目1": {
+    "path": "repertoire.0",
+    "required": false,
+    "formatter": "asTrimmed",
+    "default": ""
+  },
+  "考试曲目2": {
+    "path": "repertoire.1",
+    "required": false,
+    "formatter": "asTrimmed",
+    "default": ""
+  },
+  "考试曲目3": {
+    "path": "repertoire.2",
+    "required": false,
+    "formatter": "asTrimmed",
+    "default": ""
+  },
+  "考试曲目4": {
+    "path": "repertoire.3",
+    "required": false,
+    "formatter": "asTrimmed",
+    "default": ""
+  },
+  "集体老师姓名": {
+    "path": "teacher_name_optional",
+    "required": false,
+    "formatter": "asTrimmed",
+    "default": ""
+  },
+  "集体老师联系电话": {
+    "path": "teacher_phone_optional",
+    "required": false,
+    "formatter": "asText",
+    "default": ""
+  },
+  "考试方式": {
+    "path": "exam_mode",
+    "required": true,
+    "formatter": "asEnum",
+    "enum": [
+      "现场",
+      "视频",
+      "音基"
+    ],
+    "default": ""
+  },
+  "报考状态": {
+    "path": "application_status",
+    "required": true,
+    "formatter": "asEnumOrDefault",
+    "enum": [
+      "未申请",
+      "审核中",
+      "审核通过"
+    ],
+    "default": "审核通过"
+  },
+  "考期": {
+    "path": "cycle_id",
+    "required": false,
+    "formatter": "asTrimmed",
+    "default": ""
+  }
+}

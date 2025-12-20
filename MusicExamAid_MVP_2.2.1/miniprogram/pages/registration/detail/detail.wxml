@@ -1,2 +1,22 @@
-<view class="container"><text>报名详情页面 (待实现)</text></view>
+<view class="container" wx:if="{{!loading && reg}}">
+  <view class="title">报名详情</view>
 
+  <view class="card">
+    <view class="row"><text class="label">状态</text><text class="value">{{reg.workflow_status}}</text></view>
+    <view class="row"><text class="label">专业</text><text class="value">{{reg.subject_id}}</text></view>
+    <view class="row"><text class="label">级别</text><text class="value">{{reg.level}}</text></view>
+    <view class="row"><text class="label">考期</text><text class="value">{{reg.cycle_id}}</text></view>
+    <view class="row"><text class="label">机构</text><text class="value">{{reg.class_id}}</text></view>
+    <view class="row"><text class="label">交接</text><text class="value">{{reg.handoff_status}}</text></view>
+  </view>
+
+  <view class="actions">
+    <button bindtap="onUploadPortrait">上传证件照</button>
+    <button wx:if="{{reg.workflow_status === 'Draft' || reg.workflow_status === 'NeedsChanges'}}" bindtap="goEdit">编辑</button>
+    <button class="primary" wx:if="{{reg.workflow_status === 'Draft' || reg.workflow_status === 'NeedsChanges'}}" bindtap="onSubmit">提交老师审核</button>
+  </view>
+
+  <view class="hint">提交后不可编辑；如老师退回修改，将显示为 NeedsChanges。</view>
+</view>
+
+<view class="container" wx:elif="{{loading}}">加载中...</view>

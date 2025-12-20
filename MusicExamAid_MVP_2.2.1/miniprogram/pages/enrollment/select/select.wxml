@@ -1,2 +1,27 @@
-<view class="container"><text>选择机构 (待实现)</text></view>
+<view class="container">
+  <view class="title">选择报名机构</view>
 
+  <view wx:if="{{loading}}">加载中...</view>
+
+  <view wx:else>
+    <view class="field">
+      <text class="label">考生</text>
+      <picker mode="selector" range="{{learners}}" range-key="name_cn" value="{{selectedLearnerIndex}}" bindchange="onLearnerChange">
+        <view class="picker">{{learners.length ? learners[selectedLearnerIndex].name_cn : '请先添加考生'}}</view>
+      </picker>
+    </view>
+
+    <view class="field">
+      <text class="label">机构</text>
+      <picker mode="selector" range="{{institutions}}" range-key="name" value="{{selectedInstitutionIndex}}" bindchange="onInstitutionChange">
+        <view class="picker">{{institutions.length ? institutions[selectedInstitutionIndex].name : '请先配置机构'}}</view>
+      </picker>
+    </view>
+
+    <button class="primary" bindtap="onSubmit">保存绑定</button>
+
+    <view class="hint">
+      若机构列表为空，请在云开发控制台创建 institutions 集合并添加机构记录。
+    </view>
+  </view>
+</view>

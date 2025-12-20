@@ -186,3 +186,54 @@ Set in Cloud Console for each function:
 - [x] Client never receives plaintext ID (only last4)
 - [x] Audit logs for sensitive operations (lock/unlock)
 
+
+
+---
+
+## Quick start: make MVP runnable end-to-end (DevTools)
+
+### 1) Deploy / initialize
+1. Open the project in **WeChat DevTools**.
+2. Ensure **Cloud Development** is enabled and the env ID matches `miniprogram/app.js`.
+3. Deploy all cloud functions under `cloudfunctions/` (including the newly added ones):
+   - `institutionList`, `getDictSubjects`, `getDictCycles`
+   - `registrationCreate`, `registrationGet`, `registrationSubmit`
+   - `teacherRegistrationGetDetail`, `teacherConfirm`
+   - `instBatchList`, `instBatchGet`, `instBatchRemoveItems`, `instBatchPreflight`
+   - `superIncomingInstBatchesList`, `superBatchGet`, `superBatchResolveConflict`, `superBatchPreflight`, `superBatchIngestInstitutionBatches`
+4. Run cloud function **`dbSetup`** once to seed dictionaries (`dict_subjects`, `dict_cycles`).
+
+### 2) Seed minimum data in DB
+#### A. Institutions
+Create `institutions` collection with at least one document:
+- `name` (string)
+- `legacy_org_id` (optional)
+
+> Note: institution `_id` is used as `class_id` across enrollments / registrations / batches.
+
+#### B. Roles (teacher_profiles)
+To test teacher/admin/super flows, create `teacher_profiles` documents:
+- `openid` (string)
+- `class_id` (must equal an `institutions._id` for Teacher/Admin; Super can be any value)
+- `role` in `Teacher | Admin | Super`
+
+### 3) End-to-end test path
+#### Parent
+1. 我的 → 学员管理：创建学员
+2. 我的 → 选择报名机构：为学员绑定机构（创建 enrollment）
+3. 考级：新建报名 → 保存 → 上传证件照 → 提交老师审核
+
+#### Teacher
+1. 我的 → 报名审核：找到 `Submitted` 报名
+2. 进入详情：Lock（缺项检查）→ Confirm（确认无误）→ SubmitToInstitution（提交机构）
+
+#### Admin (Institution)
+1. 我的 → 机构批次：创建批次
+2. 批次详情：加载可入批报名（Locked + SubmittedToInstitution）→ 加入批次
+3. Preflight → 提交到考区（SubmitToSuper）
+
+#### Super (Exam region)
+1. 我的 → 收件箱：创建汇总批次
+2. 选择机构批次 → 导入
+3. 汇总批次：Dedup → Preflight → ExportOnce
+

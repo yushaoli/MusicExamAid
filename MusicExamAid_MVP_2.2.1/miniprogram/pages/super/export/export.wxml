@@ -1,2 +1,4 @@
-<view class="container"><text>导出 (待实现)</text></view>
-
+<view class="container">
+  <view class="title">导出</view>
+  <view class="hint">导出操作在“汇总批次”页面完成。此页面保留占位。</view>
+</view>

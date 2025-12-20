@@ -48,8 +48,6 @@ exports.main = async (event, context) => {
       nationality: nationality || '中国',
       ethnicity_optional: ethnicity_optional || '',
       id_type,
-      id_number_encrypted: encrypt(id_number),
-      id_last4: getLast4(id_number),
       guardian_phone,
       mailing_address_optional: mailing_address_optional || '',
       recipient_name_optional: recipient_name_optional || '',
@@ -57,16 +55,31 @@ exports.main = async (event, context) => {
       updated_at: db.serverDate(),
     };
 
+    // IMPORTANT: UI does not preload id_number on edit for privacy.
+    // Do NOT overwrite encrypted ID unless user provides id_number.
+    if (id_number) {
+      data.id_number_encrypted = encrypt(id_number);
+      data.id_last4 = getLast4(id_number);
+    }
+
     if (learner_id) {
       // Update - verify ownership
       const existing = await db.collection('learners').doc(learner_id).get();
       if (existing.data.household_id !== household._id) {
         return fail('Not your learner', 'FORBIDDEN');
       }
+      // If id_number not provided, keep existing encrypted ID and last4
+      if (!id_number) {
+        delete data.id_number_encrypted;
+        delete data.id_last4;
+      }
       await db.collection('learners').doc(learner_id).update({ data });
       return success({ _id: learner_id });
     } else {
       // Create
+      if (!id_number) return fail('id_number required', 'MISSING_ID_NUMBER');
+      data.id_number_encrypted = encrypt(id_number);
+      data.id_last4 = getLast4(id_number);
       data.household_id = household._id;
       data.created_at = db.serverDate();
       const res = await db.collection('learners').add({ data });

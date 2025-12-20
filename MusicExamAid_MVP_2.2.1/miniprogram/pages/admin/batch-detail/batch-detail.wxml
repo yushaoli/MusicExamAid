@@ -1,2 +1,58 @@
-<view class="container"><text>批次详情 (待实现)</text></view>
+<view class="container" wx:if="{{!loading && batch}}">
+  <view class="title">批次详情</view>
+  <view class="meta">
+    <view>批次：{{batch._id}}</view>
+    <view>机构：{{batch.class_id}}</view>
+    <view>考期：{{batch.cycle_id}}</view>
+    <view>状态：{{batch.inst_batch_status}}</view>
+  </view>
 
+  <view class="section">
+    <view class="section-title">1) 添加可入批报名（Locked + SubmittedToInstitution）</view>
+    <button bindtap="loadEligible">加载可入批列表</button>
+
+    <checkbox-group bindchange="onSelectAdd">
+      <view class="list">
+        <view class="item" wx:for="{{eligible}}" wx:key="_id">
+          <label class="checkbox-item">
+            <checkbox value="{{item._id}}" />
+            <text>{{item.learner_name}} · {{item.subject_id}} · Lv{{item.level}}</text>
+          </label>
+        </view>
+      </view>
+    </checkbox-group>
+
+    <button class="primary" bindtap="onAdd">加入批次</button>
+  </view>
+
+  <view class="section">
+    <view class="section-title">2) 当前批次条目</view>
+    <checkbox-group bindchange="onSelectRemove">
+      <view class="list">
+        <view class="item" wx:for="{{items}}" wx:key="_id">
+          <label class="checkbox-item">
+            <checkbox value="{{item._id}}" />
+            <text>{{item.reg ? (item.reg.subject_id + ' Lv' + item.reg.level) : item.reg_id}}</text>
+          </label>
+        </view>
+      </view>
+    </checkbox-group>
+
+    <button bindtap="onRemove">移除选中条目</button>
+  </view>
+
+  <view class="section">
+    <view class="section-title">3) 校验与提交</view>
+    <button bindtap="onPreflight">运行 Preflight</button>
+    <view wx:if="{{preflight}}" class="preflight">
+      <view>OK：{{preflight.ok}}</view>
+      <view>Item Count：{{preflight.item_count}}</view>
+      <view wx:if="{{preflight.blocking.length}}">Blocking：{{preflight.blocking.length}}</view>
+      <view wx:if="{{preflight.warnings.length}}">Warnings：{{preflight.warnings.length}}</view>
+    </view>
+
+    <button class="primary" wx:if="{{batch.inst_batch_status === 'Draft'}}" bindtap="onSubmitToSuper">提交到考区</button>
+  </view>
+</view>
+
+<view class="container" wx:elif="{{loading}}">加载中...</view>

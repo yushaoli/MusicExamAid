@@ -1,2 +1,41 @@
-<view class="container"><text>导出批次 (待实现)</text></view>
+<view class="container" wx:if="{{!loading && batch}}">
+  <view class="title">汇总批次</view>
+  <view class="meta">
+    <view>批次：{{batch._id}}</view>
+    <view>考期：{{batch.cycle_id}}</view>
+    <view>状态：{{batch.super_batch_status}}</view>
+  </view>
 
+  <view class="section">
+    <button bindtap="onDedup">运行 Dedup</button>
+    <button bindtap="onPreflight">运行 Preflight</button>
+    <button class="primary" bindtap="onExport">导出一次（ExportOnce）</button>
+
+    <view wx:if="{{preflight}}" class="hint">Preflight OK：{{preflight.ok}} · conflicts {{preflight.conflicts.length || 0}}</view>
+    <view wx:if="{{exportResult}}" class="hint">导出记录：{{exportResult.record_count}} 条；临时链接已生成（见返回值 tempFileURL）</view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">条目列表</view>
+    <checkbox-group bindchange="onSelectItems">
+      <view class="list">
+        <view class="item" wx:for="{{items}}" wx:key="_id">
+          <label class="checkbox-item">
+            <checkbox value="{{item._id}}" />
+            <view>
+              <view class="bold">{{item.include_status}} · {{item.reg ? (item.reg.subject_id + ' Lv' + item.reg.level) : item.reg_id}}</view>
+              <view class="sub">dedup {{item.dedup_key}}</view>
+            </view>
+          </label>
+        </view>
+      </view>
+    </checkbox-group>
+
+    <view class="row-actions">
+      <button bindtap="onIncludeSelected">包含</button>
+      <button bindtap="onExcludeSelected">排除</button>
+    </view>
+  </view>
+</view>
+
+<view class="container" wx:elif="{{loading}}">加载中...</view>

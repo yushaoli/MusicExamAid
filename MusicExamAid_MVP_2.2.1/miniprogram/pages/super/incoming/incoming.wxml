@@ -1,2 +1,36 @@
-<view class="container"><text>待接收批次 (待实现)</text></view>
+<view class="container">
+  <view class="title">考区收件箱（Super）</view>
 
+  <view class="filters">
+    <view class="field">
+      <text class="label">考期</text>
+      <picker mode="selector" range="{{cycles}}" range-key="display_name" value="{{cycleIndex}}" bindchange="onCycleChange">
+        <view class="picker">{{cycles.length ? cycles[cycleIndex].display_name : '无考期数据'}}</view>
+      </picker>
+    </view>
+
+    <button bindtap="onCreateSuperBatch">创建汇总批次</button>
+    <view class="hint">当前汇总批次：{{superBatchId || '未创建'}}</view>
+  </view>
+
+  <view wx:if="{{loading}}">加载中...</view>
+
+  <view wx:else>
+    <view class="section-title">待导入的机构批次（SubmittedToSuper）</view>
+    <checkbox-group bindchange="onSelectIncoming">
+      <view class="list">
+        <view class="item" wx:for="{{incoming}}" wx:key="_id">
+          <label class="checkbox-item">
+            <checkbox value="{{item._id}}" />
+            <view>
+              <view class="bold">{{item.institution_name || item.class_id}} · {{item._id}}</view>
+              <view class="sub">{{item.cycle_id}} · items {{item.item_count}}</view>
+            </view>
+          </label>
+        </view>
+      </view>
+    </checkbox-group>
+
+    <button class="primary" bindtap="onIngest">导入到汇总批次</button>
+  </view>
+</view>

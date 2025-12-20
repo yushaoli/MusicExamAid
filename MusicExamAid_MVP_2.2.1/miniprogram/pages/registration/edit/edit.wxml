@@ -1,2 +1,49 @@
-<view class="container"><text>报名编辑页面 (待实现)</text></view>
+<view class="container" wx:if="{{!loading}}">
+  <view class="title">{{id ? '编辑报名' : '新建报名'}}</view>
 
+  <view class="field">
+    <text class="label">考生</text>
+    <picker mode="selector" range="{{learners}}" range-key="name_cn" value="{{learnerIndex}}" bindchange="onLearnerChange">
+      <view class="picker">{{learners.length ? learners[learnerIndex].name_cn : '请先添加考生'}}</view>
+    </picker>
+  </view>
+
+  <view class="field">
+    <text class="label">考期</text>
+    <picker mode="selector" range="{{cycles}}" range-key="display_name" value="{{cycleIndex}}" bindchange="onCycleChange">
+      <view class="picker">{{cycles.length ? cycles[cycleIndex].display_name : '请先初始化考期'}}</view>
+    </picker>
+  </view>
+
+  <view class="field">
+    <text class="label">专业</text>
+    <picker mode="selector" range="{{subjects}}" range-key="subject_name" value="{{subjectIndex}}" bindchange="onSubjectChange">
+      <view class="picker">{{subjects.length ? subjects[subjectIndex].subject_name : '请先初始化专业'}}</view>
+    </picker>
+  </view>
+
+  <view class="field">
+    <text class="label">级别</text>
+    <input class="input" placeholder="例如：5" value="{{form.level}}" data-field="level" bindinput="onInput" />
+  </view>
+
+  <view class="field">
+    <text class="label">考试方式</text>
+    <picker mode="selector" range="{{examModeOptions}}" value="{{examModeIndex}}" bindchange="onExamModeChange">
+      <view class="picker">{{examModeOptions[examModeIndex]}}</view>
+    </picker>
+  </view>
+
+  <view class="field">
+    <text class="label">曲目 1（可选）</text>
+    <input class="input" placeholder="曲目名称" value="{{form.repertoire0}}" data-field="repertoire0" bindinput="onInput" />
+  </view>
+
+  <view class="field">
+    <text class="label">曲目 2（可选）</text>
+    <input class="input" placeholder="曲目名称" value="{{form.repertoire1}}" data-field="repertoire1" bindinput="onInput" />
+  </view>
+
+  <button class="primary" bindtap="onSave">保存</button>
+  <view class="hint">提示：首次新建报名需要先在“选择报名机构”里为考生绑定机构。</view>
+</view>

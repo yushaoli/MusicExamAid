@@ -1,2 +1,4 @@
-Page({ data: {}, onLoad() {} });
-
+Page({
+  data: {},
+  onLoad() {},
+});
