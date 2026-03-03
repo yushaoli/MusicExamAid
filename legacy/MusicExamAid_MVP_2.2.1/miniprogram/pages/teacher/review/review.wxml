@@ -1,0 +1,13 @@
+<view class="container" wx:if="{{reg}}">
+  <view class="info-card">
+    <view class="row"><text class="label">状态</text><text>{{reg.workflow_status}}</text></view>
+    <view class="row"><text class="label">专业</text><text>{{reg.subject_id}}</text></view>
+    <view class="row"><text class="label">级别</text><text>{{reg.level}}</text></view>
+  </view>
+  <view class="actions">
+    <button wx:if="{{reg.workflow_status === 'Submitted'}}" bindtap="onConfirm">确认</button>
+    <button wx:if="{{reg.workflow_status === 'Confirmed'}}" bindtap="onLock">锁定</button>
+    <button wx:if="{{reg.workflow_status === 'Locked' && reg.handoff_status === 'None'}}" bindtap="onSubmitToInst">提交机构</button>
+  </view>
+</view>
+

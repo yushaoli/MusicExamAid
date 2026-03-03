@@ -1,0 +1,17 @@
+<view class="container">
+  <view class="header">
+    <text class="title">学员列表</text>
+    <button class="add-btn" bindtap="goToAdd">+ 添加</button>
+  </view>
+
+  <view class="list" wx:if="{{!loading}}">
+    <view class="item" wx:for="{{learners}}" wx:key="_id" data-id="{{item._id}}" bindtap="goToEdit">
+      <view class="name">{{item.name_cn}}</view>
+      <view class="info">{{item.gender}} · 证件尾号 {{item.id_last4}}</view>
+    </view>
+    <view class="empty" wx:if="{{learners.length === 0}}">暂无学员，点击添加</view>
+  </view>
+
+  <view class="loading" wx:if="{{loading}}">加载中...</view>
+</view>
+
