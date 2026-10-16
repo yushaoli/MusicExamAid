@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MusicExamAid v2.3 — PM & Architecture Interactive Overview</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-2: #334155;
+      --border: #475569;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --brand: #38bdf8;
+      --brand-dark: #0284c7;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --purple: #a855f7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 24px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 22px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    header p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .status-pills {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(34, 197, 94, 0.15);
+      color: #4ade80;
+      border: 1px solid rgba(34, 197, 94, 0.35);
+      text-decoration: none;
+    }
+    .pill.blue {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      padding: 14px 32px 0;
+      background: #131c31;
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+    }
+    .tab-btn {
+      padding: 10px 18px;
+      border: 1px solid transparent;
+      border-bottom: none;
+      border-radius: 8px 8px 0 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .tab-btn.active {
+      background: var(--bg);
+      color: var(--brand);
+      border-color: var(--border);
+    }
+    main {
+      max-width: 1260px;
+      margin: 0 auto;
+      padding: 28px 32px 64px;
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 22px;
+      margin-bottom: 20px;
+    }
+    .card h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      color: var(--brand);
+    }
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 18px;
+    }
+    /* Stepper flow */
+    .flow-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+    @media (max-width: 980px) {
+      .flow-grid { grid-template-columns: 1fr; }
+    }
+    .flow-step {
+      background: #162033;
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+    .flow-step:hover, .flow-step.selected {
+      border-color: var(--brand);
+      background: #1e2d4a;
+      transform: translateY(-2px);
+    }
+    .step-num {
+      display: inline-block;
+      background: var(--brand-dark);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 99px;
+      margin-bottom: 8px;
+    }
+    .actor-tag {
+      float: right;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--surface-2);
+      color: #e2e8f0;
+    }
+    .detail-box {
+      margin-top: 18px;
+      background: #0b1324;
+      border: 1px solid var(--brand-dark);
+      border-radius: 10px;
+      padding: 20px;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 860px) {
+      .detail-box { grid-template-columns: 1fr; }
+    }
+    pre {
+      background: #060b16;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      color: #38bdf8;
+      overflow-x: auto;
+      margin: 8px 0 0;
+    }
+    /* Architecture zones */
+    .arch-zones {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.2fr;
+      gap: 16px;
+      align-items: stretch;
+    }
+    @media (max-width: 980px) {
+      .arch-zones { grid-template-columns: 1fr; }
+    }
+    .zone {
+      background: #141e33;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .zone-header {
+      font-weight: 700;
+      font-size: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .node-box {
+      background: var(--surface);
+      border-left: 4px solid var(--brand);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+    .node-box.green { border-left-color: var(--green); }
+    .node-box.amber { border-left-color: var(--amber); }
+    .node-box.purple { border-left-color: var(--purple); }
+    .node-box code {
+      color: #7dd3fc;
+      font-size: 12px;
+    }
+    /* State machine */
+    .state-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 14px 0;
+    }
+    .state-pill {
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 13px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+    }
+    .state-pill.highlight {
+      background: rgba(34, 197, 94, 0.2);
+      border-color: var(--green);
+      color: #4ade80;
+    }
+    .state-pill.warn {
+      background: rgba(245, 158, 11, 0.2);
+      border-color: var(--amber);
+      color: #fbbf24;
+    }
+    .arrow { color: var(--brand); font-weight: 700; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    th { color: var(--brand); font-weight: 600; background: #141e33; }
+    .badge-done {
+      background: rgba(34, 197, 94, 0.2);
+      color: #4ade80;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-next {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>🎵 MusicExamAid (音乐考级助推器 v2.3) — PM & Architecture Overview</h1>
+      <p>End-to-End Business Flow, xgar.com.cn Infrastructure Topology, Data Encryption Lifecycle & Live Cutover Status</p>
+    </div>
+    <div class="status-pills">
+      <a class="pill" href="https://mea.xgar.com.cn/app" target="_blank">🟢 Live H5 Tool: mea.xgar.com.cn/app</a>
+      <a class="pill blue" href="https://mea.xgar.com.cn/health?live=1" target="_blank">⚡ Live Health Probe (:55432 / :63790 / :9010)</a>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" onclick="switchTab('flow', this)">1. 业务全景流程 (How It Works)</button>
+    <button class="tab-btn" onclick="switchTab('arch', this)">2. 服务器与网络架构 (xgar.com.cn Topology)</button>
+    <button class="tab-btn" onclick="switchTab('data', this)">3. 数据安全与状态机 (Encryption & Dedup)</button>
+    <button class="tab-btn" onclick="switchTab('status', this)">4. PM 进度与上线清单 (Milestone & Cutover)</button>
+  </nav>
+
+  <main>
+    <!-- TAB 1: BUSINESS FLOW -->
+    <section id="tab-flow" class="panel active">
+      <div class="card">
+        <h2>一句话看懂 MusicExamAid 解决什么问题</h2>
+        <p class="sub">
+          传统考级报名依赖家长微信发文字/照片、老师手动汇总 Excel，经常出现<strong>身份证号被 Excel 变成科学计数法 (`4.401E+17`)、二寸证件照命名混乱、同一考生跨机构重复报名</strong>。
+          MusicExamAid 把「家长填报 → 企微通知老师 → 老师一键锁档 → 自动去重并打包 标准Excel+命名证件照ZIP」变成一条闭环流水线。
+        </p>
+
+        <div class="flow-grid">
+          <div class="flow-step selected" onclick="selectStep(0, this)">
+            <span class="step-num">STEP 1</span>
+            <span class="actor-tag">家长 (微信服务号/小程序)</span>
+            <h3>📝 家长填报 + 传二寸照</h3>
+            <p class="sub" style="margin:0">在服务号菜单打开 H5 (`/app?tab=parent`) 或小程序填写考生档案、上传二寸照并提交报名。</p>
+          </div>
+          <div class="flow-step" onclick="selectStep(1, this)">
+            <span class="step-num">STEP 2</span>
+            <span class="actor-tag">系统 → 企业微信</span>
+            <h3>🔔 企微实时推送给老师</h3>
+            <p class="sub" style="margin:0">状态变为 <code>submitted</code>，通过 <code>wecom.xgar.com.cn</code> 推送 Markdown 卡片到老师企业微信。</p>
+          </div>
+          <div class="flow-step" onclick="selectStep(2, this)">
+            <span class="step-num">STEP 3</span>
+            <span class="actor-tag">老师/教务 (工作台)</span>
+            <h3>🔒 老师一键确认并锁档</h3>
+            <p class="sub" style="margin:0">老师核对曲目与级别，支持<strong>一键确认并锁定 (<code>submitted → locked</code>)</strong> 或退回家长修改。</p>
+          </div>
+          <div class="flow-step" onclick="selectStep(3, this)">
+            <span class="step-num">STEP 4</span>
+            <span class="actor-tag">教务管理员 (导出中心)</span>
+            <h3>📦 自动去重 + 导出 ZIP 包</h3>
+            <p class="sub" style="margin:0">SuperBatch 自动去重，一键下载 <code>bundle.zip</code>（含官方25列报名表 CSV + 自动命名的二寸照文件夹）。</p>
+          </div>
+        </div>
+
+        <div id="step-detail" class="detail-box">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>双端入口设计：为什么同时支持「微信服务号 H5」和「小程序」？</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>渠道入口</th>
+              <th>访问方式与地址</th>
+              <th>核心价值</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>1. 微信服务号 H5 工具 (主力推荐)</strong></td>
+              <td><code>https://mea.xgar.com.cn/app</code><br><span class="sub">挂载在服务号底部自定义菜单（考生填报 / 考级档案 / 教务工作台）</span></td>
+              <td>无需单独审核发布小程序版本；支持服务号模板消息主动推送给家长（如「退回修改提醒」、「锁档成功通知」）。</td>
+            </tr>
+            <tr>
+              <td><strong>2. 微信小程序 (零改造平滑切换)</strong></td>
+              <td>AppID: <code>wxaf3466a310a8bd07</code><br>RPC 桥接: <code>POST https://mea.xgar.com.cn/rpc/:action</code></td>
+              <td>保留原有 16 个小程序页面不变，仅将底层 <code>wx.cloud</code> 替换为 <code>/rpc/:action</code>，立省微信云开发按量费用。</td>
+            </tr>
+            <tr>
+              <td><strong>3. 企业微信 (内部教务协同)</strong></td>
+              <td>CorpID: <code>wwdf0a37a3059d0f1c</code> (AgentId <code>1000004</code>)<br>Relay: <code>https://wecom.xgar.com.cn/send/&lt;token&gt;</code></td>
+              <td>家长每次提交报名或教务导出批次时，老师在企业微信实时收到通知卡片，点击直达工作台审批。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 2: ARCHITECTURE -->
+    <section id="tab-arch" class="panel">
+      <div class="card">
+        <h2>xgar.com.cn 混合云拓扑图 (Public Edge + Home Cluster Tailnet)</h2>
+        <p class="sub">
+          由于家长手机与微信服务器在公网，而数据库与对象存储在内网主力机 <code>ubtxiaomi (100.64.0.4)</code>，系统采用 <strong>新加坡静态公网节点 <code>derp-sgr (47.130.165.104)</code> 作为公网入口与企微可信 IP 出口</strong>，通过 Headscale Tailnet (<code>ts.xgar.com.cn</code>) 转发至 <code>ubtxiaomi:3100</code>。
+        </p>
+
+        <div class="arch-zones">
+          <!-- Zone 1 -->
+          <div class="zone">
+            <div class="zone-header">
+              <span>🌐 公网用户与微信云 (Public Internet)</span>
+              <span class="badge-done">Public</span>
+            </div>
+            <div class="node-box">
+              <strong>👨‍👩‍👧 家长与考生 (微信端)</strong><br>
+              • 服务号菜单打开 <code>https://mea.xgar.com.cn/app</code><br>
+              • 小程序调用 <code>https://mea.xgar.com.cn/rpc/*</code>
+            </div>
+            <div class="node-box amber">
+              <strong>💬 微信公众平台 / 企业微信服务器</strong><br>
+              • 服务号回调: <code>/webhooks/wechat-mp</code><br>
+              • 企微回调: <code>/webhooks/wecom</code><br>
+              • 企微消息接收: 仅信任静态 IP <code>47.130.165.104</code>
+            </div>
+            <div class="node-box purple">
+              <strong>☁️ Cloudflare DNS (xgar.com.cn)</strong><br>
+              • <code>mea.xgar.com.cn</code> → A <code>47.130.165.104</code><br>
+              • <code>wecom.xgar.com.cn</code> → A <code>47.130.165.104</code>
+            </div>
+          </div>
+
+          <!-- Zone 2 -->
+          <div class="zone">
+            <div class="zone-header">
+              <span>🛡️ 公网边缘网关 derp-sgr</span>
+              <span class="badge-done">47.130.165.104 / 100.64.0.1</span>
+            </div>
+            <div class="node-box green">
+              <strong>🔒 Caddy 2 (自动 Let's Encrypt HTTPS)</strong><br>
+              • 终结 <code>mea.xgar.com.cn</code> 与 <code>wecom.xgar.com.cn</code> TLS<br>
+              • 静态托管微信域名校验文件 <code>/MP_verify_*.txt</code>
+            </div>
+            <div class="node-box">
+              <strong>🔀 mea-tailnet-proxy (container:tailscale)</strong><br>
+              • 共享 Tailscale 容器网络命名空间<br>
+              • 将 <code>tailscale:3100</code> 转发至内网 <code>100.64.0.4:3100</code>
+            </div>
+            <div class="node-box amber">
+              <strong>📨 kuma-wecom-relay (:9118)</strong><br>
+              • 绑定企业微信可信静态 IP (<code>47.130.165.104</code>)<br>
+              • 暴露 <code>POST https://wecom.xgar.com.cn/send/&lt;token&gt;</code>
+            </div>
+          </div>
+
+          <!-- Zone 3 -->
+          <div class="zone">
+            <div class="zone-header">
+              <span>🏠 核心计算与存储节点 ubtxiaomi</span>
+              <span class="badge-done">Tailnet 100.64.0.4</span>
+            </div>
+            <div class="node-box green">
+              <strong>🚀 musicexamaid-api 容器 (Port :3100)</strong><br>
+              • Fastify 5 + TypeScript (<code>/opt/stacks/musicexamaid</code>)<br>
+              • 提供 H5 页面、REST API、<code>/rpc/:action</code>、ZIP 打包器
+            </div>
+            <div class="node-box">
+              <strong>🐘 devhub-postgres (Port :55432)</strong><br>
+              • Database: <code>musicexamaid_dev</code> (13 张核心表已迁移)<br>
+              • 存储 AES-256-GCM 加密身份证、报名快照、状态历史
+            </div>
+            <div class="node-box purple">
+              <strong>🗄️ devhub-minio S3 (Port :9010)</strong><br>
+              • Bucket: <code>musicexamaid-dev</code><br>
+              • 存储考生二寸照 <code>photos/*.jpg</code> 与导出包 <code>exports/*.zip</code>
+            </div>
+            <div class="node-box amber">
+              <strong>⚡ devhub-redis (Port :63790)</strong><br>
+              • 缓存与异步导出队列就绪
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: DATA SECURITY & STATE MACHINE -->
+    <section id="tab-data" class="panel">
+      <div class="card">
+        <h2>1. 报名状态机（含 v2.3 一键确认锁档优化）</h2>
+        <p class="sub">老师既可以先点 <code>confirmed</code> 再点 <code>locked</code>，也可以直接点击「一键确认并锁定」从 <code>submitted → locked</code>，减少 50% 点击次数。</p>
+        <div class="state-row">
+          <span class="state-pill">draft (草稿)</span>
+          <span class="arrow">──家长提交──▶</span>
+          <span class="state-pill">submitted (待审核)</span>
+          <span class="arrow">──⚡一键确认并锁定──▶</span>
+          <span class="state-pill highlight">locked (已锁档 + 生成加密快照)</span>
+        </div>
+        <div class="state-row">
+          <span class="state-pill">submitted (待审核)</span>
+          <span class="arrow">──老师退回──▶</span>
+          <span class="state-pill warn">needs_change (需修改 + 微信通知家长)</span>
+          <span class="arrow">──家长重提──▶</span>
+          <span class="state-pill">submitted (待审核)</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2. 身份证号全链路 AES-256-GCM 加密（导出时仅在内存解密）</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>阶段</th>
+              <th>存储位置</th>
+              <th>身份证字段形态</th>
+              <th>专业名称字段形态</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>1. 考生建档</strong></td>
+              <td>PostgreSQL <code>learners</code> 表</td>
+              <td><code>id_number_encrypted</code>: <code>v2:iv:tag:ciphertext</code> (AES-256-GCM)<br><code>id_last4</code>: <code>"9876"</code> (供列表脱敏展示)</td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td><strong>2. 老师锁档快照</strong></td>
+              <td>PostgreSQL <code>registrations.snapshot_json</code></td>
+              <td><strong>保持加密!</strong> <code>snapshot_json.id_number_encrypted</code> 绝不落盘明文身份证</td>
+              <td>自动将字典代码 <code>"piano"</code> 映射为中文 <code>"钢琴"</code></td>
+            </tr>
+            <tr>
+              <td><strong>3. 教务导出 ZIP/CSV</strong></td>
+              <td>仅在 API 内存构建 <code>bundle.zip</code></td>
+              <td>内存解密为 <code>"\t440101201503159876"</code>（带 <code>\t</code> 防止 Excel 科学计数法）<br>照片自动命名为 <code>photos/440101201503159876_陈小乐.jpg</code></td>
+              <td>官方模板 v2.1 第 9 列输出 <code>"钢琴"</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>3. SuperBatch 跨机构汇总去重规则 (`POST /exports/dedup-preflight`)</h2>
+        <p class="sub">汇总多个分校区/老师提交的锁定报名时，按 <code>(learner_id, cycle_id, subject_id)</code> 分组检查：</p>
+        <ul>
+          <li><strong>同机构 + 同级别重复提交：</strong> 自动保留最新 <code>locked_at</code> 的一条记录，旧记录归入 <code>auto_dropped</code>。</li>
+          <li><strong>跨机构或不同级别冲突（例如同一考生在 A 校区报钢琴 5 级、在 B 校区报钢琴 6 级）：</strong> 自动拦截并标记到 <code>conflicts</code> 列表，要求管理员处理后再导出。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- TAB 4: PM STATUS & CUTOVER -->
+    <section id="tab-status" class="panel">
+      <div class="card">
+        <h2>当前里程碑完成度与上线清单</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>模块 / 任务</th>
+              <th>状态</th>
+              <th>验证证据 / 地址</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>PostgreSQL 数据库建表与写穿透</strong></td>
+              <td><span class="badge-done">已上线 (LIVE)</span></td>
+              <td><code>100.64.0.4:55432/musicexamaid_dev</code> (13 张表已迁移并通过读写测试)</td>
+            </tr>
+            <tr>
+              <td><strong>MinIO S3 二寸照与导出包存储</strong></td>
+              <td><span class="badge-done">已上线 (LIVE)</span></td>
+              <td><code>http://100.64.0.4:9010/musicexamaid-dev</code> (AWS SigV4 零依赖客户端)</td>
+            </tr>
+            <tr>
+              <td><strong>musicexamaid-api 生产容器</strong></td>
+              <td><span class="badge-done">已运行 (LIVE)</span></td>
+              <td><code>ubtxiaomi:/opt/stacks/musicexamaid</code> (端口 <code>:3100</code>, 29/29 测试全绿)</td>
+            </tr>
+            <tr>
+              <td><strong>公网 HTTPS 与 Cloudflare DNS</strong></td>
+              <td><span class="badge-done">已打通 (LIVE)</span></td>
+              <td><code>https://mea.xgar.com.cn/app</code> → <code>derp-sgr (47.130.165.104)</code> → <code>ubtxiaomi:3100</code></td>
+            </tr>
+            <tr>
+              <td><strong>微信服务号 AppID / 菜单发布</strong></td>
+              <td><span class="badge-next">待填公众号密钥</span></td>
+              <td>在 <code>infra/.env.shared</code> 填入 <code>WECHAT_MP_APPID</code> 与 <code>WECHAT_MP_SECRET</code> 后运行 <code>./scripts/apply-wechat-menu.sh</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const stepDetails = [
+      {
+        title: "Step 1: 家长在微信服务号 H5 或小程序填报",
+        bullets: [
+          "家长点击微信服务号底部菜单「考生填报」，打开 https://mea.xgar.com.cn/app?tab=parent。",
+          "填写考生姓名、性别、出生日期、身份证号，并选择报考专业（如：钢琴）与级别（1-10级），上传标准二寸证件照。",
+          "API 收到请求后，立即使用 AES-256-GCM 加密身份证号存入 PostgreSQL (learners)，并将二寸照存入 MinIO S3 (photos/{id_last4}_{name_cn}.jpg)。"
+        ],
+        code: `POST /learners\n{\n  "name_cn": "陈小乐",\n  "gender": "女",\n  "dob": "2015-03-15",\n  "id_type": "身份证",\n  "id_number": "440101201503159876"\n}\n// 响应仅返回脱敏尾号: { "id_last4": "9876", "has_portrait_photo": true }`
+      },
+      {
+        title: "Step 2: 家长提交报名 → 企业微信实时通知老师",
+        bullets: [
+          "家长点击「提交老师审核」，报名状态从 draft 变为 submitted。",
+          "后端生成 Markdown 通知卡片，调用 https://wecom.xgar.com.cn/send/<token>。",
+          "新加坡节点 derp-sgr (47.130.165.104，已配置为企业微信可信静态 IP) 将消息推送到老师的企业微信 App，附带工作台直达链接。"
+        ],
+        code: `POST https://wecom.xgar.com.cn/send/<RELAY_TOKEN>\n{\n  "msg": "🎵 **新考级报名待审核**\\n> 考生：陈小乐\\n> 专业：钢琴 5级\\n> [点击进入教务工作台](https://mea.xgar.com.cn/app?tab=console)"\n}`
+      },
+      {
+        title: "Step 3: 老师在教务工作台一键确认并锁档",
+        bullets: [
+          "老师点开 https://mea.xgar.com.cn/app?tab=console 查看待审核列表。",
+          "若信息有误，点击「退回修改 (needs_change)」，系统通过微信服务号模板消息通知家长修改。",
+          "若核对无误，点击「⚡ 一键确认并锁定 (submitted -> locked)」，系统立即冻结报名快照 snapshot_json（身份证依然保持 AES-256-GCM 加密态）。"
+        ],
+        code: `PATCH /registrations/:id/status\n{\n  "to_status": "locked",\n  "teacher_notes": "曲目与二寸照核对无误"\n}\n// 自动冻结 snapshot_json，将 "piano" 解析为 "钢琴"`
+      },
+      {
+        title: "Step 4: 教务 SuperBatch 去重预检 + 一键导出官方 ZIP 包",
+        bullets: [
+          "考期截止时，教务点击「导出 ZIP 包（报名表 + 照片）」。",
+          "系统先执行 SuperBatch 去重 (POST /exports/dedup-preflight)，过滤同考生同科目重复锁档，拦截跨校区级别冲突。",
+          "仅在内存中解密身份证号，生成 25 列官方模板《报名汇总表.csv》+ 自动命名的《photos/440101201503159876_陈小乐.jpg》+《manifest.json》，打包成单个 ZIP 下载并归档至 MinIO S3。"
+        ],
+        code: `GET /exports/:job_id/bundle.zip\n├── 报名汇总表.csv                  (UTF-8 BOM, 25列标准模板 v2.1)\n├── photos/\n│   └── 440101201503159876_陈小乐.jpg (自动按 证件号_姓名 命名)\n└── manifest.json                   (批次统计与缺照核查清单)`
+      }
+    ];
+
+    function selectStep(idx, el) {
+      document.querySelectorAll('.flow-step').forEach(s => s.classList.remove('selected'));
+      if (el) el.classList.add('selected');
+      const d = stepDetails[idx];
+      document.getElementById('step-detail').innerHTML = `
+        <div>
+          <h3 style="color:#38bdf8;margin-top:0">${d.title}</h3>
+          <ul style="margin:0;padding-left:18px;font-size:13.5px;color:#e2e8f0">
+            ${d.bullets.map(b => `<li style="margin-bottom:8px">${b}</li>`).join('')}
+          </ul>
+        </div>
+        <div>
+          <div style="font-size:12px;color:#94a3b8;font-weight:600">底层接口与数据载荷示例：</div>
+          <pre>${d.code}</pre>
+        </div>
+      `;
+    }
+
+    function switchTab(tabId, btn) {
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('tab-' + tabId).classList.add('active');
+      btn.classList.add('active');
+    }
+
+    selectStep(0);
+  </script>
+</body>
+</html>
