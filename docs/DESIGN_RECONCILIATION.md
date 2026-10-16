@@ -1,0 +1,31 @@
+# MusicExamAid — Design Reconciliation & Optimization Record (v2.2.1 → v2.3)
+
+## 1. Executive Summary
+This document records the architectural reconciliation and design optimizations applied when migrating from the imported WeChat CloudBase prototype (`legacy/MusicExamAid_MVP_2.2.1` and `legacy/Music_Exam_Aid_MVP_DesignPack_v2.2.1_refactored`) to the standalone TypeScript monorepo hosted on the `xgar.com.cn` infrastructure (`ubtxiaomi.ts.xgar.com.cn` + `derp-sgr`) and integrated with the **WeChat Service Account (微信服务号)** and **WeCom (企业微信)**.
+
+---
+
+## 2. Preserved Core Invariants (From MVP v2.2.1)
+1. **Immutable Snapshot on Lock (`snapshot_json`):**
+   - Locking a registration freezes learner, registration, institution, and teacher fields into `registrations.snapshot_json`.
+   - All downstream exports read exclusively from `snapshot_json` rather than live mutable tables.
+2. **Strict Header-Driven Template v2.1 Export:**
+   - The 25-column Template v2.1 header contract (`报名机构ID` through `考期`) is strictly preserved.
+   - Numeric strings (`证件号码`, `联系电话`, `报名机构ID`, `出生日期`) are formatted as text to prevent Excel scientific-notation corruption.
+3. **Deduplication Key (`learner_id + cycle_id + subject_id`):**
+   - Same-level duplicates auto-keep the newest `locked_at`; cross-level or cross-institution collisions require operator resolution.
+
+---
+
+## 3. Reconciled Design Optimizations (v2.3)
+
+| Area | Legacy v2.2.1 Design | Reconciled v2.3 Design | Rationale & Evidence |
+| :--- | :--- | :--- | :--- |
+| **1. Primary User Delivery & Entry** | Standalone WeChat Mini Program only (`wxaf3466a310a8bd07`). | **Dual-channel delivery:** WeChat Service Account H5 Web Tool (`GET /app` at `https://mea.xgar.com.cn/app`) as the primary entry for Parents, Archive, and Teacher/Admin PC/mobile console, plus the Mini Program via `/rpc/:action`. | Service Account custom menus (`GET /webhooks/wechat-mp/menu-config`) require zero DevTools release audit, work natively on PC for Excel/ZIP downloads, and keep the tool permanently visible in the parent's chat list. |
+| **2. Parent & Teacher Notifications** | No push channel (Mini Program one-shot subscription limits blocked multi-round review feedback). | **Closed-loop notifications:**<br>• **Teacher/Admin:** Instant WeCom markdown push via `https://wecom.xgar.com.cn/send/<token>` (`derp-sgr` static IP `47.130.165.104`, corp `wwdf0a37a3059d0f1c`).<br>• **Parent:** WeChat Service Account Template Messages (`POST /notifications/wechat-mp`) deep-linking to both H5 (`/app?tab=parent&reg_id=...`) and Mini Program. | Solves the #1 operational bottleneck: reaching parents immediately when a photo or repertoire needs correction (`needs_change`) or when registration is locked (`locked`). |
+| **3. Workflow State Machine Simplification** | 8 sequential states requiring 3 separate clicks per student by a teacher (`Submitted → Confirmed → Locked → SubmittedToInstitution`). | **1-Click Teacher Confirm & Lock (`submitted → locked`)** plus direct return from `confirmed/locked → needs_change` (`packages/shared/src/registration-status.ts`). | Cuts teacher review taps by 66% while retaining `confirmed` as an optional intermediate state when awaiting a portrait photo. |
+| **4. PII Encryption at Rest in `snapshot_json`** | Legacy `teacherLock` decrypted `id_number_encrypted` (AES-256-CBC) and stored plaintext `id_number_plaintext` in `snapshot_json` in the DB. | **Authenticated AES-256-GCM (`gcm:<iv>:<tag>:<ct>`) kept encrypted inside `snapshot_json`** (`packages/shared/src/snapshot-crypto.ts`). Plaintext ID is decrypted **only in memory** at export time (`mapSnapshotToExportRow`, `formatPortraitPhotoZipPath`). | Eliminates plaintext child ID exposure in database backups and `registrations` JSONB rows while preserving legacy CBC decrypt compatibility. |
+| **5. Subject Dictionary Resolution** | `buildSnapshot` copied raw `subject_id` (`"piano"`) into `instrument`, leaving English slugs in exported `报考专业`. | **`resolveSubjectName` (`SUBJECT_NAME_MAP`)** deterministically resolves `"piano" → "钢琴"`, `"music_theory" → "音乐基础知识"`, etc. | Guarantees exported `报考专业` values pass institutional import validation. |
+| **6. Export Completeness (Roster + Portrait Photos ZIP)** | Legacy exporter produced only an `.xlsx` file without packaging learner portrait photos (`彩照`). | **Unified ZIP Bundle (`GET /exports/:job_id/bundle.zip`)** built by `packages/shared/src/zip-bundle.ts` containing:<br>• `报名汇总表.csv` (UTF-8 BOM, Template v2.1 headers)<br>• `photos/{证件号码}_{姓名}.jpg`<br>• `manifest.json` (SHA-256 audit hashes). | Matches real exam-center upload requirements where both the roster spreadsheet and standardized portrait photos (`身份证号_姓名.jpg`) are submitted together. |
+| **7. Zero-Rewrite Mini Program Cutover** | 15 Mini Program pages coupled to 29 `wx.cloud.callFunction` cloud functions. | **`POST /rpc/:action` bridge (`services/api/src/routes/rpc.ts`)** + updated `apps/wechat-mini/miniprogram/utils/api.js` using `wx.request` to `https://mea.xgar.com.cn/rpc/:action`. | Preserves all existing Mini Program WXML/WXSS/JS screens with zero page-level code changes. |
+| **8. Infrastructure & Tailnet Alignment** | Stale `ubt-xiaomi.taild37a9f.ts.net` hostnames. | **Live `ts.xgar.com.cn` tailnet (`ubtxiaomi.ts.xgar.com.cn` / `100.64.0.4`)** for Postgres (`:55432`), Redis (`:63790`), and MinIO (`:9010`), with live TCP probes at `GET /health?live=1` and Caddy ingress snippet `infra/Caddyfile.xgar.snippet`. | Aligns with the current Headscale control plane and homelab topology. |

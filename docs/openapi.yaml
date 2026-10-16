@@ -1,22 +1,42 @@
 openapi: 3.0.3
 info:
-  title: Music Exam Aid - MVP API
-  version: "2.2.1"
-  description: Baseline OpenAPI specification for the MusicExamAid Fastify API.
+  title: Music Exam Aid - API & Service Account H5 Tool
+  version: "2.3.0"
+  description: OpenAPI specification for the MusicExamAid Fastify API, WeChat Service Account H5 Web Tool, WeCom notifications, ZIP bundle exporter, and Mini Program RPC bridge.
 servers:
+  - url: https://mea.xgar.com.cn
   - url: http://localhost:3000
 paths:
+  /app:
+    get:
+      summary: WeChat Service Account & WeCom H5 Web Tool (?tab=parent|archive|console)
+      parameters:
+        - in: query
+          name: tab
+          schema:
+            type: string
+            enum: [parent, archive, console]
+      responses:
+        "200":
+          description: HTML application
   /health:
     get:
-      summary: Service health and dependency status check
+      summary: Service health and dependency status check (?live=1 for live TCP probe)
+      parameters:
+        - in: query
+          name: live
+          schema: { type: string, enum: ["0", "1"] }
       responses:
         "200":
           description: Service health status
   /learners:
+    get:
+      summary: List learner profiles with masked IDs (id_last4)
+      responses:
+        "200":
+          description: Learner list
     post:
-      summary: Create learner profile with masked ID response
-      security:
-        - bearerAuth: []
+      summary: Create learner profile with AES-256-GCM encrypted ID at rest
       requestBody:
         required: true
         content:
@@ -33,12 +53,10 @@ paths:
                 guardian_phone: { type: string }
       responses:
         "201":
-          description: Learner created
+          description: Learner created (returns id_last4 only)
   /learners/{id}:
     get:
       summary: Get learner profile (masked ID)
-      security:
-        - bearerAuth: []
       parameters:
         - in: path
           name: id
@@ -48,10 +66,13 @@ paths:
         "200":
           description: Learner profile
   /registrations:
+    get:
+      summary: List registrations with resolved Chinese subject names
+      responses:
+        "200":
+          description: Registration list
     post:
       summary: Create draft registration record for an exam cycle
-      security:
-        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -72,11 +93,20 @@ paths:
       responses:
         "201":
           description: Draft registration created
+  /registrations/{id}:
+    get:
+      summary: Get registration detail and status transition history
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Registration detail
   /registrations/{id}/status:
     patch:
-      summary: Transition registration status (submit / teacher review / confirm / lock)
-      security:
-        - bearerAuth: []
+      summary: Transition registration status (supports 1-click submitted -> locked, writes encrypted snapshot, triggers WeCom/WeChat MP notifications)
       parameters:
         - in: path
           name: id
@@ -104,18 +134,19 @@ paths:
         "409":
           description: Invalid status transition
   /archives:
+    get:
+      summary: List learner exam archive records
+      responses:
+        "200":
+          description: Archive list
     post:
       summary: Save exam result/certificate record to learner archive
-      security:
-        - bearerAuth: []
       responses:
         "201":
           description: Archive record created
   /exports:
     post:
-      summary: Queue an Excel export job for a batch of locked registrations
-      security:
-        - bearerAuth: []
+      summary: Queue an export batch for locked registrations (generates Template v2.1 preview rows and portrait photo paths)
       requestBody:
         required: true
         content:
@@ -132,7 +163,80 @@ paths:
                   items: { type: string }
       responses:
         "202":
-          description: Export job queued
+          description: Export job queued with download_csv_url and download_zip_url
+  /exports/{job_id}/csv:
+    get:
+      summary: Download Excel-compatible UTF-8 BOM CSV in strict Template v2.1 column order
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: CSV attachment
+  /exports/{job_id}/bundle.zip:
+    get:
+      summary: Download complete ZIP bundle (报名汇总表.csv + photos/{id_number}_{name_cn}.jpg + manifest.json)
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ZIP archive attachment
+  /rpc/{action}:
+    post:
+      summary: Zero-rewrite RPC bridge for WeChat Mini Program (apps/wechat-mini)
+      parameters:
+        - in: path
+          name: action
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: RPC result ({ success, data })
+  /webhooks/wechat-mp:
+    get:
+      summary: WeChat Service Account server URL verification (echostr)
+      responses:
+        "200":
+          description: Verified echostr
+    post:
+      summary: WeChat Service Account inbound event/message webhook
+      responses:
+        "200":
+          description: Literal "success"
+  /webhooks/wechat-mp/menu-config:
+    get:
+      summary: Generate WeChat Service Account custom menu JSON mounting /app tabs
+      responses:
+        "200":
+          description: Menu JSON payload
+  /webhooks/wecom:
+    get:
+      summary: WeCom callback URL verification
+      responses:
+        "200":
+          description: Verified echostr
+    post:
+      summary: WeCom inbound event webhook
+      responses:
+        "200":
+          description: Literal "success"
+  /notifications/wecom:
+    post:
+      summary: Dispatch markdown alert via wecom.xgar.com.cn relay
+      responses:
+        "200":
+          description: Dispatch status
+  /notifications/wechat-mp:
+    post:
+      summary: Build/send WeChat Service Account template message to parent
+      responses:
+        "200":
+          description: Template payload and dispatch status
 components:
   securitySchemes:
     bearerAuth:

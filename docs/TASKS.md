@@ -1,49 +1,22 @@
-# MusicExamAid Tasks (Sprint 0)
+# MusicExamAid Tasks
 
-## Setup
-- [x] Create clean runtime codebase skeleton
-  - `package.json` (npm workspaces: `packages/*`, `services/*`)
-  - `tsconfig.json` (composite project references)
-- [x] Wire `.env.shared` into runtime config loader
-  - `packages/shared/src/env-config.ts` — Zod-validated `loadConfig(envFilePath?)`
-- [x] Add local `make check-shared`
-  - `scripts/check-shared.sh` wired into root `Makefile`
+## Completed (Sprint 0 & Design Reconciliation v2.3)
+- [x] Create clean runtime codebase skeleton (`packages/shared`, `services/api`, `apps/wechat-mini`)
+- [x] Wire `infra/.env.shared` (`ubtxiaomi.ts.xgar.com.cn`) into Zod-validated `loadConfig(envFilePath?)`
+- [x] Add root `Makefile` (`build`, `test`, `typecheck`, `check-shared`, `migrate`) and `scripts/migrate.sh`
+- [x] Remove duplicate root legacy files and keep canonical reference packs under `legacy/`
+- [x] Define PostgreSQL schema baseline in `infra/migrations/001_initial_schema.sql` (including `users` fields for `unionid`, `mp_openid`, `wecom_userid`, and `notification_logs`)
+- [x] Implement `GET /health` with both fast stub mode and live TCP connectivity probes (`GET /health?live=1`) against `ubtxiaomi.ts.xgar.com.cn` (`:55432`, `:63790`, `:9010`)
+- [x] Optimize registration status state machine (`packages/shared/src/registration-status.ts`) with **1-click `submitted → locked`** and `locked → needs_change`
+- [x] Upgrade ID encryption to **AES-256-GCM** (`packages/shared/src/snapshot-crypto.ts`), keep `id_number_encrypted` encrypted at rest inside `snapshot_json` (decrypting only in memory at export), and resolve `subject_id → 中文专业名称` (`"piano" → "钢琴"`)
+- [x] Build Template v2.1 CSV serializer (`GET /exports/:job_id/csv`) and **Roster + Portrait Photo ZIP bundle builder** (`GET /exports/:job_id/bundle.zip` in `packages/shared/src/zip-bundle.ts`)
+- [x] Add **WeChat Service Account & WeCom H5 Web Tool** (`GET /app` in `services/api/src/routes/web-app.ts`), custom menu config generator (`GET /webhooks/wechat-mp/menu-config`), Service Account/WeCom webhooks, and `wecom.xgar.com.cn` alert dispatcher
+- [x] Add zero-rewrite Mini Program RPC bridge (`POST /rpc/:action` in `services/api/src/routes/rpc.ts`) and migrate `apps/wechat-mini/miniprogram/utils/api.js` from `wx.cloud` to `https://mea.xgar.com.cn/rpc/:action`
+- [x] Document full design reconciliation in `docs/DESIGN_RECONCILIATION.md`, `docs/ARCH.md`, `docs/PRD.md`, and `docs/openapi.yaml`
+- [x] Pass all 27 unit & E2E tests (`npm test`, `npm run typecheck`, `npm run build`)
 
-## Backend foundation
-- [x] Implement `GET /health`
-  - `services/api/src/routes/health.ts` — returns `status`, `timestamp`, `version`,
-    and stub dependency statuses for `postgres`, `redis`, `s3`
-  - Wired in `services/api/src/app.ts` and `services/api/src/index.ts` (Fastify, port from `cfg.PORT`)
-- [x] Define DB migration baseline (users/learners/registrations)
-  - `infra/migrations/001_initial_schema.sql`
-- [x] Add OpenAPI starter from spec subset
-  - `docs/openapi.yaml`
-
-## Workflow foundation
-- [x] Registration status state-machine constants
-  - `packages/shared/src/registration-status.ts`
-  - States: `draft | submitted | needs_change | confirmed | locked`
-  - Exports: `RegistrationStatus`, `VALID_TRANSITIONS`, `canTransition`, `assertTransition`
-  - 17 passing unit tests in `packages/shared/src/__tests__/registration-status.test.ts`
-- [x] Teacher review endpoint stub
-  - `PATCH /registrations/:id/status` in `services/api/src/routes/registrations.ts`
-- [x] Export job queue stub
-  - `POST /exports` in `services/api/src/routes/exports.ts`
-
-## Data import/organization
-- [x] Move imported design packs under `legacy/` and remove root duplicates
-- [x] Keep canonical docs in `docs/`
-- [x] Link old spec -> new implementation decisions (`docs/ARCH.md`)
-
-## Quality gates
-- [x] Lint + typecheck + test scripts
-  - `npm run typecheck --workspaces --if-present`
-  - `npm test` → 22 tests (17 shared + 5 api), 0 failures
-  - `npm run build` → `packages/shared` then `services/api`, zero errors
-- [ ] CI workflow checks passing
-
-## Next Up (Sprint 1)
-- [ ] Connect `pg` pool, Redis client, and S3 client in `services/api` and wire live `/health` probes
-- [ ] Port AES-256 ID encryption & snapshot builder (`buildSnapshot`, `computeMissingFlags`) into `@musicexamaid/shared`
-- [ ] Persist `learners`, `registrations`, and `registration_status_history` to PostgreSQL
-- [ ] Implement worker consumer for `export_batches` using Template v2.1 header mapping (`export_mapping_spec.json`)
+## Next Up (Live Cutover & Sprint 2)
+- [ ] Run `make migrate` on `ubtxiaomi.ts.xgar.com.cn` (`musicexamaid_dev`) and add SQL-backed persistence adapter alongside `DomainRepository`
+- [ ] Configure `mea.xgar.com.cn` Caddy vhost (`infra/Caddyfile.xgar.snippet`) and add `WECOM_RELAY_TOKEN` on `derp-sgr`
+- [ ] Bind WeChat Service Account + Mini Program (`wxaf3466a310a8bd07`) on WeChat Open Platform and apply `/webhooks/wechat-mp/menu-config`
+- [ ] Connect real S3/MinIO presigned portrait photo uploads into `buildExportZipBundle`
