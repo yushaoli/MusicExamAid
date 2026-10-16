@@ -259,4 +259,89 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     assert.equal(res.body, echostr);
     await app.close();
   });
+
+  it('Persists learner, portrait photo, registration, and export ZIP to live Postgres & MinIO S3 (100.64.0.4)', async () => {
+    const app = buildApp();
+    const healthRes = await app.inject({
+      method: 'GET',
+      url: '/health?live=1',
+    });
+    const deps = healthRes.json().dependencies;
+    if (deps.postgres.status !== 'ok' || deps.s3.status !== 'ok') {
+      await app.close();
+      return;
+    }
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/learners',
+      payload: {
+        name_cn: '周星辰',
+        gender: '男',
+        dob: '2016-09-10',
+        id_type: '身份证',
+        id_number: '310101201609108888',
+        guardian_phone: '13900139000',
+        persist_db: true,
+      },
+    });
+    assert.equal(createRes.statusCode, 201);
+    assert.equal(createRes.json().pg_synced, true);
+    const learnerId = createRes.json().id;
+
+    const photoRes = await app.inject({
+      method: 'POST',
+      url: `/learners/${learnerId}/photo`,
+      payload: {
+        photo_base64: Buffer.from('\xff\xd8\xff\xe0LIVE_S3_JPEG\xff\xd9').toString(
+          'base64',
+        ),
+        persist_s3: true,
+        persist_db: true,
+      },
+    });
+    assert.equal(photoRes.statusCode, 200);
+    assert.ok(String(photoRes.json().s3_uri).startsWith('s3://'));
+
+    const regRes = await app.inject({
+      method: 'POST',
+      url: '/registrations',
+      payload: {
+        learner_id: learnerId,
+        cycle_id: '2025-summer',
+        subject_id: 'guzheng',
+        level: 7,
+      },
+    });
+    const regId = regRes.json().id;
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/registrations/${regId}/status`,
+      payload: { to_status: 'submitted' },
+    });
+    await app.inject({
+      method: 'PATCH',
+      url: `/registrations/${regId}/status`,
+      payload: { to_status: 'locked' },
+    });
+
+    const expRes = await app.inject({
+      method: 'POST',
+      url: '/exports',
+      payload: {
+        cycle_id: '2025-summer',
+        registration_ids: [regId],
+        persist_db: true,
+        persist_s3: true,
+      },
+    });
+    assert.equal(expRes.statusCode, 202);
+    assert.equal(expRes.json().pg_synced, true);
+    assert.ok(String(expRes.json().s3_export_uri).endsWith('.zip'));
+
+    const { closePool } = await import('../store/postgres.js');
+    await closePool();
+    await app.close();
+  });
 });

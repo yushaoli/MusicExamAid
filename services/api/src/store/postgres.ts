@@ -25,6 +25,15 @@ export function getPostgresPool(connectionString?: string): Pool {
   return sharedPool;
 }
 
+export const getPool = getPostgresPool;
+
+export async function closePool(): Promise<void> {
+  if (sharedPool) {
+    await sharedPool.end();
+    sharedPool = null;
+  }
+}
+
 export async function runSqlMigrations(
   pool: Pool = getPostgresPool(),
   migrationsDir = path.resolve(__dirname, '../../../../infra/migrations'),

@@ -9,6 +9,11 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { StoredLearner } from '../store/repository';
+import { minioClient } from '../store/minio';
+import {
+  persistLearnerToPostgres,
+  persistAttachmentToPostgres,
+} from '../store/sql-sync';
 
 interface CreateLearnerBody {
   name_cn?: string;
@@ -24,10 +29,13 @@ interface CreateLearnerBody {
   recipient_name_optional?: string;
   recipient_phone_optional?: string;
   has_portrait_photo?: boolean;
+  persist_db?: boolean;
 }
 
 interface UploadPhotoBody {
   photo_base64?: string;
+  persist_s3?: boolean;
+  persist_db?: boolean;
 }
 
 function toPublicLearner(learner: StoredLearner) {
@@ -91,7 +99,18 @@ export async function learnerRoutes(app: FastifyInstance): Promise<void> {
         has_portrait_photo: body.has_portrait_photo,
       });
 
-      return reply.code(201).send(toPublicLearner(learner));
+      const liveStorage =
+        body.persist_db === true || process.env['ENABLE_LIVE_STORAGE'] === '1';
+      let pgSynced = false;
+      if (liveStorage) {
+        await persistLearnerToPostgres(learner);
+        pgSynced = true;
+      }
+
+      return reply.code(201).send({
+        ...toPublicLearner(learner),
+        ...(pgSynced ? { pg_synced: true } : {}),
+      });
     },
   );
 
@@ -141,10 +160,37 @@ export async function learnerRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      const s3Key = `photos/${updated.id_last4}_${updated.name_cn}.jpg`;
+      let s3Uri: string | undefined;
+      if (
+        req.body?.persist_s3 === true ||
+        process.env['ENABLE_LIVE_STORAGE'] === '1'
+      ) {
+        const uploaded = await minioClient.putObject(s3Key, buf, 'image/jpeg');
+        s3Uri = uploaded.s3_uri;
+      }
+
+      if (
+        req.body?.persist_db === true ||
+        process.env['ENABLE_LIVE_STORAGE'] === '1'
+      ) {
+        await persistLearnerToPostgres(updated);
+        await persistAttachmentToPostgres({
+          ownerType: 'learner',
+          ownerId: updated.id,
+          fileType: 'portrait_photo',
+          s3Key,
+          contentType: 'image/jpeg',
+          sizeBytes: buf.length,
+        });
+      }
+
       return reply.code(200).send({
         learner_id: updated.id,
         has_portrait_photo: true,
         size_bytes: buf.length,
+        s3_key: s3Key,
+        ...(s3Uri ? { s3_uri: s3Uri } : {}),
         updated_at: updated.updated_at,
       });
     },

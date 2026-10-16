@@ -16,12 +16,20 @@ import {
   evaluateBatchDedup,
 } from '@musicexamaid/shared';
 import { dispatchWeComAlert } from './integrations';
+import { minioClient } from '../store/minio';
+import {
+  persistLearnerToPostgres,
+  persistRegistrationToPostgres,
+  persistExportBatchToPostgres,
+} from '../store/sql-sync';
 
 interface CreateExportBody {
   cycle_id?: string;
   institution_id?: string;
   batch_type?: 'institution' | 'super';
   registration_ids?: string[];
+  persist_db?: boolean;
+  persist_s3?: boolean;
 }
 
 interface DedupPreflightBody {
@@ -85,6 +93,51 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
         registration_ids: body.registration_ids,
       });
 
+      const liveDb =
+        body.persist_db === true || process.env['ENABLE_LIVE_STORAGE'] === '1';
+      const liveS3 =
+        body.persist_s3 === true || process.env['ENABLE_LIVE_STORAGE'] === '1';
+
+      let s3ExportUri: string | undefined;
+      if (liveS3) {
+        const photosByKey = { ...app.store.getPortraitPhotosByLast4() };
+        for (const snap of batch.snapshots) {
+          if (!photosByKey[snap.id_last4]) {
+            const fromS3 = await minioClient
+              .getObject(`photos/${snap.id_last4}_${snap.name_cn}.jpg`)
+              .catch(() => null);
+            if (fromS3) photosByKey[snap.id_last4] = fromS3;
+          }
+        }
+        const { zipBuffer } = buildExportZipBundle({
+          jobId: batch.job_id,
+          cycleId: batch.cycle_id,
+          snapshots: batch.snapshots,
+          photosByKey,
+        });
+        const uploaded = await minioClient.putObject(
+          `exports/${batch.cycle_id}/${batch.job_id}.zip`,
+          zipBuffer,
+          'application/zip',
+        );
+        s3ExportUri = uploaded.s3_uri;
+      }
+
+      if (liveDb) {
+        for (const regId of batch.registration_ids) {
+          const reg = app.store.getRegistration(regId);
+          if (reg) {
+            const learner = app.store.getLearner(reg.learner_id);
+            if (learner) await persistLearnerToPostgres(learner);
+            await persistRegistrationToPostgres(reg);
+          }
+        }
+        await persistExportBatchToPostgres(
+          batch,
+          s3ExportUri ?? `exports/${batch.cycle_id}/${batch.job_id}.zip`,
+        );
+      }
+
       const wecomMsg = formatWeComExportAlert({
         jobId: batch.job_id,
         cycleId: batch.cycle_id,
@@ -105,6 +158,8 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
         photo_paths: batch.photo_paths,
         download_csv_url: `/exports/${batch.job_id}/csv`,
         download_zip_url: `/exports/${batch.job_id}/bundle.zip`,
+        ...(s3ExportUri ? { s3_export_uri: s3ExportUri } : {}),
+        ...(liveDb ? { pg_synced: true } : {}),
         notifications: {
           wecom: wecomDispatch.status,
         },
@@ -142,7 +197,10 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     '/exports/:job_id/bundle.zip',
     async (
-      req: FastifyRequest<{ Params: { job_id: string } }>,
+      req: FastifyRequest<{
+        Params: { job_id: string };
+        Querystring: { hydrate_s3?: string };
+      }>,
       reply: FastifyReply,
     ) => {
       const batch = app.store.getExportBatch(req.params.job_id);
@@ -153,11 +211,26 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      const photosByKey = { ...app.store.getPortraitPhotosByLast4() };
+      if (
+        req.query?.hydrate_s3 === '1' ||
+        process.env['ENABLE_LIVE_STORAGE'] === '1'
+      ) {
+        for (const snap of batch.snapshots) {
+          if (!photosByKey[snap.id_last4]) {
+            const fromS3 = await minioClient
+              .getObject(`photos/${snap.id_last4}_${snap.name_cn}.jpg`)
+              .catch(() => null);
+            if (fromS3) photosByKey[snap.id_last4] = fromS3;
+          }
+        }
+      }
+
       const { zipBuffer } = buildExportZipBundle({
         jobId: batch.job_id,
         cycleId: batch.cycle_id,
         snapshots: batch.snapshots,
-        photosByKey: app.store.getPortraitPhotosByLast4(),
+        photosByKey,
       });
 
       return reply

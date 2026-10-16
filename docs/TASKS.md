@@ -15,10 +15,12 @@
 - [x] Document full design reconciliation in `docs/DESIGN_RECONCILIATION.md`, `docs/ARCH.md`, `docs/PRD.md`, and `docs/openapi.yaml`
 - [x] Add SuperBatch deduplication & conflict resolution engine (`packages/shared/src/dedup.ts` and `POST /exports/dedup-preflight`)
 - [x] Add portrait photo upload (`POST /learners/:id/photo`) and wire uploaded photo bytes into `GET /exports/:job_id/bundle.zip`
-- [x] Add PostgreSQL pool & migration runner (`services/api/src/store/postgres.ts`) and apply `001_initial_schema.sql` to live `musicexamaid_dev` on `ubtxiaomi` (`100.64.0.4:55432`)
-- [x] Pass all 28 unit & E2E tests (`make migrate`, `npm test`, `npm run typecheck`, `npm run build`)
+- [x] Add PostgreSQL pool, migration runner (`services/api/src/store/postgres.ts`), and live write-through persistence (`services/api/src/store/sql-sync.ts`) on `ubtxiaomi` (`100.64.0.4:55432/musicexamaid_dev`)
+- [x] Add zero-dependency S3/MinIO SigV4 storage client (`services/api/src/store/minio.ts`) and wire portrait photo + ZIP bundle uploads to `100.64.0.4:9010/musicexamaid-dev`
+- [x] Add production `Dockerfile`, `infra/docker-compose.prod.yml`, and WeChat Service Account menu publisher (`scripts/apply-wechat-menu.sh`)
+- [x] Reuse `GQJV_Operations` agent orchestration & task-based model balancing in `CLAUDE.md`, `AGENTS.md`, `docs/agent-coordination.md`, and `/Users/flintstone/.agents/COLLABORATION.md`
+- [x] Pass all 29 unit & live E2E tests (`make migrate`, `npm test`, `npm run typecheck`, `npm run build`)
 
 ## Next Up (External Console Cutover)
 - [ ] Configure `mea.xgar.com.cn` Caddy vhost (`infra/Caddyfile.xgar.snippet`) and add `WECOM_RELAY_TOKEN` on `derp-sgr` (`47.130.165.104`)
-- [ ] Bind WeChat Service Account + Mini Program (`wxaf3466a310a8bd07`) on WeChat Open Platform and apply `/webhooks/wechat-mp/menu-config`
-- [ ] Switch portrait photo buffer persistence to S3/MinIO (`100.64.0.4:9010/musicexamaid-assets`) for multi-replica production
+- [ ] Bind WeChat Service Account + Mini Program (`wxaf3466a310a8bd07`) on WeChat Open Platform and run `scripts/apply-wechat-menu.sh`
