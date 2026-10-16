@@ -569,7 +569,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // 7. List all 200 Partner Teachers/Agents with exam & upgrade counts (`GET /official-sync/partner-agents`)
+  // 7. List all Partner Teachers/Agents with invite_token, parent_referral_code & WeChat binding status (`GET /official-sync/partner-agents`)
   app.get('/official-sync/partner-agents', async (_req, reply) => {
     const pool = getPostgresPool();
     const { rows } = await pool.query(`
@@ -580,12 +580,17 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         a.manager,
         a.phone,
         a.addr,
+        a.invite_token,
+        a.parent_referral_code,
+        a.wx_openid,
+        a.wx_nickname,
+        a.bound_at,
         COUNT(e.exam_id)::int AS total_exams,
         COUNT(DISTINCT e.student_id)::int AS distinct_students
       FROM kjzx_partner_agents a
       LEFT JOIN kjzx_historical_exams e ON e.agent_id = a.agent_id
-      GROUP BY a.agent_id, a.code, a.name, a.manager, a.phone, a.addr
-      ORDER BY total_exams DESC, a.agent_id ASC
+      GROUP BY a.agent_id, a.code, a.name, a.manager, a.phone, a.addr, a.invite_token, a.parent_referral_code, a.wx_openid, a.wx_nickname, a.bound_at
+      ORDER BY (CASE WHEN a.agent_id = 999 THEN 0 ELSE 1 END) ASC, total_exams DESC, a.agent_id ASC
     `);
     return reply.code(200).send({
       total: rows.length,
@@ -626,7 +631,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         FROM kjzx_historical_students s
         WHERE ($1::text = '' OR s.name_cn ILIKE '%' || $1 || '%' OR s.pinyin ILIKE '%' || $1 || '%' OR s.parent_phone_masked ILIKE '%' || $1 || '%' OR s.id_card_masked ILIKE '%' || $1 || '%')
           AND ($2::int IS NULL OR s.agent_id = $2::int)
-        ORDER BY s.all_exams DESC, s.student_id DESC
+        ORDER BY (CASE WHEN s.agent_id = 999 THEN 0 ELSE 1 END) ASC, s.all_exams DESC, s.student_id DESC
         LIMIT $3::int
         `,
         [q, agentId, limit],
@@ -697,6 +702,145 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         query: q,
         count: items.length,
         items,
+      });
+    },
+  );
+
+  // 9. Resolve Role & Locked Partner Teacher Session (`GET /official-sync/resolve-session`)
+  app.get(
+    '/official-sync/resolve-session',
+    async (
+      req: FastifyRequest<{
+        Querystring: {
+          invite_token?: string;
+          ref?: string;
+          wx_openid?: string;
+          role?: string;
+        };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const pool = getPostgresPool();
+      const { invite_token, ref, wx_openid, role } = req.query ?? {};
+
+      if (invite_token || wx_openid) {
+        const { rows } = await pool.query(
+          `
+          SELECT agent_id, code, name, manager, phone, addr,
+                 invite_token, parent_referral_code, wx_openid, wx_nickname, bound_at
+          FROM kjzx_partner_agents
+          WHERE ($1::text IS NOT NULL AND invite_token = $1::text)
+             OR ($2::text IS NOT NULL AND wx_openid = $2::text)
+          LIMIT 1
+          `,
+          [invite_token || null, wx_openid || null],
+        );
+        if (rows[0]) {
+          return reply.code(200).send({
+            role: 'teacher',
+            is_isolated: true,
+            locked_agent: rows[0],
+          });
+        }
+      }
+
+      if (ref) {
+        const numericId = /^\d+$/.test(ref) ? Number(ref) : null;
+        const { rows } = await pool.query(
+          `
+          SELECT agent_id, code, name, manager, phone,
+                 parent_referral_code
+          FROM kjzx_partner_agents
+          WHERE parent_referral_code = $1::text
+             OR ($2::int IS NOT NULL AND agent_id = $2::int)
+          LIMIT 1
+          `,
+          [ref, numericId],
+        );
+        if (rows[0]) {
+          return reply.code(200).send({
+            role: 'parent',
+            is_isolated: true,
+            locked_agent: rows[0],
+          });
+        }
+      }
+
+      return reply.code(200).send({
+        role: role === 'parent' ? 'parent' : 'admin',
+        is_isolated: role === 'parent',
+        locked_agent: null,
+      });
+    },
+  );
+
+  // 10. Bind Partner Teacher's WeChat Account (`POST /official-sync/bind-teacher-wechat`)
+  app.post(
+    '/official-sync/bind-teacher-wechat',
+    async (
+      req: FastifyRequest<{
+        Body: {
+          invite_token?: string;
+          agent_id?: number;
+          wx_openid?: string;
+          wx_nickname?: string;
+          unbind?: boolean;
+        };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const pool = getPostgresPool();
+      const body = req.body ?? {};
+      if (!body.invite_token && !body.agent_id) {
+        return reply.code(400).send({
+          error: 'VALIDATION_ERROR',
+          message: 'invite_token or agent_id is required',
+        });
+      }
+
+      if (body.unbind) {
+        const { rows } = await pool.query(
+          `
+          UPDATE kjzx_partner_agents
+          SET wx_openid = NULL, wx_nickname = NULL, bound_at = NULL
+          WHERE ($1::text IS NOT NULL AND invite_token = $1::text)
+             OR ($2::int IS NOT NULL AND agent_id = $2::int)
+          RETURNING agent_id, code, name, manager, invite_token, parent_referral_code, wx_openid, wx_nickname, bound_at
+          `,
+          [body.invite_token || null, body.agent_id ?? null],
+        );
+        return reply.code(200).send({
+          bound: false,
+          agent: rows[0] || null,
+        });
+      }
+
+      const wxOpenId = body.wx_openid || `wx_oid_${Date.now().toString(36)}`;
+      const wxNickname = body.wx_nickname || '微信实名绑定老师';
+
+      const { rows } = await pool.query(
+        `
+        UPDATE kjzx_partner_agents
+        SET wx_openid = $3::text,
+            wx_nickname = $4::text,
+            bound_at = NOW()
+        WHERE ($1::text IS NOT NULL AND invite_token = $1::text)
+           OR ($2::int IS NOT NULL AND agent_id = $2::int)
+        RETURNING agent_id, code, name, manager, invite_token, parent_referral_code, wx_openid, wx_nickname, bound_at
+        `,
+        [body.invite_token || null, body.agent_id ?? null, wxOpenId, wxNickname],
+      );
+
+      if (!rows[0]) {
+        return reply.code(404).send({
+          error: 'NOT_FOUND',
+          message: 'Invalid invite_token or agent_id',
+        });
+      }
+
+      return reply.code(200).send({
+        bound: true,
+        agent: rows[0],
       });
     },
   );
