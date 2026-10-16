@@ -16,7 +16,36 @@ import {
   type ChannelRegistrationInput,
 } from '@musicexamaid/shared';
 
+// Server-side cached official portal session (`PHPSESSID`) so subsequent "Sync" clicks
+// reuse the authenticated session without re-prompting WeChat confirmation until expiry.
+interface CachedOfficialSession {
+  php_sess_id: string;
+  wxauth_token: string;
+  authenticated_at: string;
+}
+
+let cachedOfficialSession: CachedOfficialSession | null = null;
+
 export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
+  // 0. Check whether ubtxiaomi already holds an active authenticated PHPSESSID session
+  app.get('/official-sync/session-status', async (_req, reply) => {
+    return reply.code(200).send({
+      has_active_session: Boolean(cachedOfficialSession),
+      session: cachedOfficialSession
+        ? {
+            php_sess_id_masked: `${cachedOfficialSession.php_sess_id.slice(0, 6)}...`,
+            authenticated_at: cachedOfficialSession.authenticated_at,
+          }
+        : null,
+      oauth_mechanism: {
+        qr_payload_pattern:
+          'https://gzh.zgyyxykj.com/wx_qrcode/?time=<time>&token=<wxauth_token>&sign=<md5>',
+        wechat_redirect:
+          'https://open.weixin.qq.com/connect/oauth2/authorize?appid=wxe12eca6f457eafe1&redirect_uri=https://gzh.zgyyxykj.com/wx_qrcode/login&response_type=code&scope=snsapi_base#wechat_redirect',
+      },
+    });
+  });
+
   // 1. Fetch a live WeChat Scan Login QR code & PHPSESSID from https://kjzx002120.kj5.zgyyxykj.com/admins
   app.post(
     '/official-sync/qr-session',
@@ -94,10 +123,16 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           },
         );
         const confirmJson = await confirmRes.json();
+        cachedOfficialSession = {
+          php_sess_id,
+          wxauth_token,
+          authenticated_at: new Date().toISOString(),
+        };
         return reply.code(200).send({
           authenticated: true,
           php_sess_id,
           scan_status: 4,
+          session_cached: true,
           confirm: confirmJson,
         });
       }

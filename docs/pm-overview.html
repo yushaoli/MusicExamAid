@@ -734,6 +734,46 @@
         </div>
       </div>
 
+      <div class="card" style="border-color:rgba(74,222,128,.45)">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px">
+          <div>
+            <h2 style="margin:0">📱 微信内一键「🔄 Sync」免摄像头确认体验（`snsapi_base` 跳转 + `PHPSESSID` 保活）</h2>
+            <p class="sub" style="margin:4px 0 0">
+              通过对官网二维码底层的解码，我们发现该二维码本质是一个微信静默授权链接：<br>
+              <code>https://gzh.zgyyxykj.com/wx_qrcode/?time=1gqTe0&amp;token=w0EQTWW-Ro&amp;sign=...</code> → <code>302 Redirect</code> → <code>open.weixin.qq.com/...?appid=wxe12eca6f457eafe1&amp;scope=snsapi_base</code>
+            </p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span id="wx-sync-session-badge" class="badge-next">未缓存会话 (需首次微信确认)</span>
+            <button onclick="triggerWeChatOneTapSync()" style="background:#16a34a;color:#fff;border:none;padding:10px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px">
+              🔄 Sync (一键同步考级办官网)
+            </button>
+            <button onclick="resetWeChatSyncSession()" style="background:#334155;color:#cbd5e1;border:none;padding:10px 12px;border-radius:8px;cursor:pointer;font-size:12px">
+              重置会话
+            </button>
+          </div>
+        </div>
+
+        <div id="wx-sync-modal" style="display:none;background:#0f172a;border:1px solid #38bdf8;border-radius:12px;padding:16px;margin-top:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="font-weight:700;color:#38bdf8;font-size:15px">💬 微信内静默身份确认 (`scope=snsapi_base`)</div>
+              <div style="font-size:13px;color:#cbd5e1;margin-top:4px">
+                后端 (`ubtxiaomi`) 已获取官网会话 <code>PHPSESSID=sess_kjzx_89a1</code> 与授权令牌 <code>token=w0EQTWW-Ro</code>。<br>
+                在微信内点击下方确认按钮（无需第二部手机或摄像头扫码），微信将自动通过 <code>snsapi_base</code> 向考级办公众号 (<code>wxe12eca6f457eafe1</code>) 完成身份核验，随后上海服务器自动接管拉取全部历年数据并保活会话！
+              </div>
+            </div>
+            <button onclick="confirmWeChatIdentityShare()" style="background:#0284c7;color:#fff;border:none;padding:10px 16px;border-radius:8px;font-weight:700;cursor:pointer;white-space:nowrap">
+              ✅ 确认使用当前微信身份授权登录
+            </button>
+          </div>
+        </div>
+
+        <div id="wx-sync-log" style="margin-top:10px;font-size:13px;color:#94a3b8;background:#0f172a;padding:12px;border-radius:8px;border:1px solid #334155">
+          💡 点击右上角 <strong>「🔄 Sync (一键同步考级办官网)」</strong> 体验：首次点击弹出微信一键确认；确认后 <code>ubtxiaomi</code> 自动缓存并保活 <code>PHPSESSID</code>，后续再次点击 <strong>「🔄 Sync」</strong> 将直接免确认秒级静默同步！
+        </div>
+      </div>
+
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:10px">
           <div>
@@ -1069,6 +1109,40 @@
       navigator.clipboard.writeText(code).then(() => {
         alert('✅ 已复制！请打开 https://kjzx002120.kj5.zgyyxykj.com/admins 考级办后台列表页，按 F12 打开 Console 粘贴回车即可一键拉取全部历年数据。');
       });
+    }
+
+    let wxSessionCached = false;
+
+    function triggerWeChatOneTapSync() {
+      const modal = document.getElementById('wx-sync-modal');
+      const log = document.getElementById('wx-sync-log');
+      if (wxSessionCached) {
+        modal.style.display = 'none';
+        log.innerHTML = `<span style="color:#4ade80;font-weight:700">⚡ [静默秒级同步完成]</span> 检测到上海主机 <code>ubtxiaomi</code> 已持有保活中的 <code>PHPSESSID=sess_kjzx_89a1</code>，<strong>无需再次弹窗或确认</strong>！已直接通过 <code>limit=10000</code> 增量同步最新考生数据与二寸照，并自动完成双端去重与老师返佣计提。`;
+        return;
+      }
+      modal.style.display = 'block';
+      log.innerHTML = `<span style="color:#38bdf8;font-weight:700">⏳ [等待微信内一键确认]</span> 已由 <code>POST /official-sync/qr-session</code> 获取官网登录令牌 <code>token=w0EQTWW-Ro</code> 并解析出静默授权链接 <code>https://gzh.zgyyxykj.com/wx_qrcode/?time=1gqTe0&amp;token=w0EQTWW-Ro&amp;sign=...</code>，请点击上方蓝色按钮模拟微信内一键确认。`;
+    }
+
+    function confirmWeChatIdentityShare() {
+      const modal = document.getElementById('wx-sync-modal');
+      const badge = document.getElementById('wx-sync-session-badge');
+      const log = document.getElementById('wx-sync-log');
+      wxSessionCached = true;
+      modal.style.display = 'none';
+      badge.className = 'badge-done';
+      badge.textContent = '🟢 PHPSESSID 已授权保活 (下次免确认)';
+      log.innerHTML = `<span style="color:#4ade80;font-weight:700">✅ [微信 snsapi_base 身份确认成功 + 全量同步完成]</span> 微信客户端已向考级办公众号 (<code>wxe12eca6f457eafe1</code>) 完成 <code>snsapi_base</code> 核验 → <code>ubtxiaomi</code> 捕获 <code>scan_status === 4</code> 并执行 <code>wxauth_confirm</code> → 已缓存 <code>PHPSESSID=sess_kjzx_89a1</code> 并拉取合并全部考生数据！<strong>现在再次点击「🔄 Sync」将直接免确认秒级同步！</strong>`;
+    }
+
+    function resetWeChatSyncSession() {
+      wxSessionCached = false;
+      document.getElementById('wx-sync-modal').style.display = 'none';
+      const badge = document.getElementById('wx-sync-session-badge');
+      badge.className = 'badge-next';
+      badge.textContent = '未缓存会话 (需首次微信确认)';
+      document.getElementById('wx-sync-log').innerHTML = `💡 会话已重置。点击右上角 <strong>「🔄 Sync (一键同步考级办官网)」</strong> 重新体验首次微信确认流程。`;
     }
 
     selectStep(0);
