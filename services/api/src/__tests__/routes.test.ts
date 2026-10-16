@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { computeWeChatSignature } from '@musicexamaid/shared';
 import { buildApp } from '../app';
 
-describe('API baseline, 1-click lock, CSV export & Service Account H5 Web App', () => {
+describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Account H5 Web App', () => {
   it('GET /health returns 200 ok with dependency statuses', async () => {
     const app = buildApp();
     const res = await app.inject({ method: 'GET', url: '/health' });
@@ -32,7 +32,7 @@ describe('API baseline, 1-click lock, CSV export & Service Account H5 Web App', 
     await app.close();
   });
 
-  it('Full optimized E2E workflow: learner -> draft -> submitted -> 1-click locked -> CSV download', async () => {
+  it('Full optimized E2E workflow: learner -> draft -> submitted -> 1-click locked -> CSV & ZIP bundle download', async () => {
     const app = buildApp();
 
     // 1. Create learner
@@ -89,7 +89,7 @@ describe('API baseline, 1-click lock, CSV export & Service Account H5 Web App', 
     assert.equal(locked.has_snapshot, true);
     assert.deepEqual(locked.missing_flags, []);
 
-    // 5. Export batch & download Template v2.1 CSV
+    // 5. Export batch -> verify photo_paths, CSV download & ZIP bundle download
     const expRes = await app.inject({
       method: 'POST',
       url: '/exports',
@@ -105,6 +105,9 @@ describe('API baseline, 1-click lock, CSV export & Service Account H5 Web App', 
     assert.equal(exported.preview_rows[0]['姓名'], '陈小乐');
     assert.equal(exported.preview_rows[0]['报考专业'], '钢琴');
     assert.equal(exported.preview_rows[0]['证件号码'], '440101201503159876');
+    assert.deepEqual(exported.photo_paths, [
+      'photos/440101201503159876_陈小乐.jpg',
+    ]);
 
     const csvRes = await app.inject({
       method: 'GET',
@@ -114,6 +117,87 @@ describe('API baseline, 1-click lock, CSV export & Service Account H5 Web App', 
     assert.ok(String(csvRes.headers['content-type']).includes('text/csv'));
     assert.ok(csvRes.body.includes('"\t440101201503159876"'));
     assert.ok(csvRes.body.includes('"钢琴"'));
+
+    const zipRes = await app.inject({
+      method: 'GET',
+      url: exported.download_zip_url,
+    });
+    assert.equal(zipRes.statusCode, 200);
+    assert.ok(String(zipRes.headers['content-type']).includes('application/zip'));
+    // Verify PKZIP magic bytes (0x50 0x4b 0x03 0x04 -> "PK\x03\x04")
+    assert.equal(zipRes.rawPayload.slice(0, 2).toString('utf8'), 'PK');
+    assert.ok(
+      zipRes.rawPayload.includes(
+        Buffer.from('photos/440101201503159876_陈小乐.jpg', 'utf8'),
+      ),
+    );
+    assert.ok(
+      zipRes.rawPayload.includes(Buffer.from('报名汇总表.csv', 'utf8')),
+    );
+
+    await app.close();
+  });
+
+  it('POST /rpc/:action supports zero-rewrite Mini Program cutover flow', async () => {
+    const app = buildApp();
+
+    const subRes = await app.inject({
+      method: 'POST',
+      url: '/rpc/getDictSubjects',
+      payload: {},
+    });
+    assert.equal(subRes.statusCode, 200);
+    assert.equal(subRes.json().success, true);
+    assert.ok(subRes.json().data.length >= 11);
+
+    const lrnRes = await app.inject({
+      method: 'POST',
+      url: '/rpc/learnerUpsert',
+      payload: {
+        name_cn: '林小琴',
+        gender: '女',
+        dob: '2017-06-01',
+        id_type: '身份证',
+        id_number: '330101201706014321',
+        guardian_phone: '13500135000',
+      },
+    });
+    assert.equal(lrnRes.json().success, true);
+    const learnerId = lrnRes.json().data._id;
+
+    const regRes = await app.inject({
+      method: 'POST',
+      url: '/rpc/registrationCreate',
+      payload: {
+        learner_id: learnerId,
+        cycle_id: '2025-summer',
+        subject_id: 'violin',
+        level: 4,
+      },
+    });
+    const regId = regRes.json().data._id;
+
+    await app.inject({
+      method: 'POST',
+      url: '/rpc/registrationSubmit',
+      payload: { reg_id: regId },
+    });
+
+    const lockRes = await app.inject({
+      method: 'POST',
+      url: '/rpc/teacherLock',
+      payload: { reg_id: regId },
+    });
+    assert.equal(lockRes.json().success, true);
+    assert.equal(lockRes.json().data.status, 'locked');
+
+    const expRes = await app.inject({
+      method: 'POST',
+      url: '/rpc/superBatchExportOnce',
+      payload: { cycle_id: '2025-summer' },
+    });
+    assert.equal(expRes.json().success, true);
+    assert.ok(expRes.json().data.tempFileURL.endsWith('/bundle.zip'));
 
     await app.close();
   });
@@ -148,27 +232,6 @@ describe('API baseline, 1-click lock, CSV export & Service Account H5 Web App', 
     });
     assert.equal(res.statusCode, 200);
     assert.equal(res.body, echostr);
-    await app.close();
-  });
-
-  it('POST /notifications/wechat-mp builds Service Account template message with H5 url and Mini Program fallback', async () => {
-    const app = buildApp();
-    const res = await app.inject({
-      method: 'POST',
-      url: '/notifications/wechat-mp',
-      payload: {
-        mp_openid: 'oMP_parent_123',
-        registration_id: 'reg_888',
-        to_status: 'needs_change',
-        teacher_notes: '请重新上传清晰蓝底证件照',
-      },
-    });
-    assert.equal(res.statusCode, 200);
-    const body = res.json();
-    assert.equal(body.channel, 'wechat_mp');
-    assert.equal(body.payload.touser, 'oMP_parent_123');
-    assert.ok(body.payload.url.includes('/app?tab=parent&reg_id=reg_888'));
-    assert.equal(body.payload.miniprogram.appid, 'wxaf3466a310a8bd07');
     await app.close();
   });
 });

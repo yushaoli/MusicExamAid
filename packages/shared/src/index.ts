@@ -43,3 +43,11 @@ export type {
   SnapshotTeacherInput,
   RegistrationSnapshot,
 } from './snapshot-crypto';
+
+export {
+  crc32,
+  buildZipArchive,
+  formatPortraitPhotoZipPath,
+  buildExportZipBundle,
+} from './zip-bundle';
+export type { ZipEntryInput, PortraitPhotoAsset } from './zip-bundle';

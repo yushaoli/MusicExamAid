@@ -15,6 +15,7 @@ import {
   buildRegistrationSnapshot,
   computeMissingFlags,
   mapSnapshotToExportRow,
+  formatPortraitPhotoZipPath,
 } from '@musicexamaid/shared';
 import type {
   RegistrationStatusType,
@@ -89,6 +90,8 @@ export interface StoredExportBatch {
   item_count: number;
   status: 'queued' | 'exported';
   preview_rows: Array<Record<string, string>>;
+  photo_paths: string[];
+  snapshots: RegistrationSnapshot[];
   queued_at: string;
 }
 
@@ -316,11 +319,15 @@ export class DomainRepository {
     const now = new Date().toISOString();
     const jobId = `exp_job_${crypto.randomUUID()}`;
     const previewRows: Array<Record<string, string>> = [];
+    const photoPaths: string[] = [];
+    const snapshots: RegistrationSnapshot[] = [];
 
     for (const regId of input.registration_ids) {
       const reg = this.registrations.get(regId);
       if (reg?.snapshot_json) {
+        snapshots.push(reg.snapshot_json);
         previewRows.push(mapSnapshotToExportRow(reg.snapshot_json));
+        photoPaths.push(formatPortraitPhotoZipPath(reg.snapshot_json));
       }
     }
 
@@ -333,6 +340,8 @@ export class DomainRepository {
       item_count: input.registration_ids.length,
       status: 'queued',
       preview_rows: previewRows,
+      photo_paths: photoPaths,
+      snapshots,
       queued_at: now,
     };
     this.exportBatches.set(jobId, batch);

@@ -1,14 +1,16 @@
 /**
- * Export job queue & Template v2.1 Excel CSV download routes.
+ * Export job queue, Template v2.1 Excel CSV download & Portrait Photo ZIP bundle routes.
  *
  * - POST /exports
  * - GET  /exports/:job_id/csv
+ * - GET  /exports/:job_id/bundle.zip
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   formatWeComExportAlert,
   serializeExportRowsToCsv,
+  buildExportZipBundle,
 } from '@musicexamaid/shared';
 import { dispatchWeComAlert } from './integrations';
 
@@ -54,11 +56,21 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
       const wecomDispatch = await dispatchWeComAlert(wecomMsg);
 
       return reply.code(202).send({
-        ...batch,
+        job_id: batch.job_id,
+        cycle_id: batch.cycle_id,
+        institution_id: batch.institution_id,
+        batch_type: batch.batch_type,
+        registration_ids: batch.registration_ids,
+        item_count: batch.item_count,
+        status: batch.status,
+        preview_rows: batch.preview_rows,
+        photo_paths: batch.photo_paths,
         download_csv_url: `/exports/${batch.job_id}/csv`,
+        download_zip_url: `/exports/${batch.job_id}/bundle.zip`,
         notifications: {
           wecom: wecomDispatch.status,
         },
+        queued_at: batch.queued_at,
       });
     },
   );
@@ -86,6 +98,37 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
         )
         .code(200)
         .send(csv);
+    },
+  );
+
+  app.get(
+    '/exports/:job_id/bundle.zip',
+    async (
+      req: FastifyRequest<{ Params: { job_id: string } }>,
+      reply: FastifyReply,
+    ) => {
+      const batch = app.store.getExportBatch(req.params.job_id);
+      if (!batch) {
+        return reply.code(404).send({
+          error: 'NOT_FOUND',
+          message: `Export job "${req.params.job_id}" not found`,
+        });
+      }
+
+      const { zipBuffer } = buildExportZipBundle({
+        jobId: batch.job_id,
+        cycleId: batch.cycle_id,
+        snapshots: batch.snapshots,
+      });
+
+      return reply
+        .header('Content-Type', 'application/zip')
+        .header(
+          'Content-Disposition',
+          `attachment; filename="music_exam_bundle_${batch.cycle_id}_${batch.job_id}.zip"`,
+        )
+        .code(200)
+        .send(zipBuffer);
     },
   );
 }

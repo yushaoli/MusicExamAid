@@ -1,0 +1,7 @@
+.container { padding: 30rpx; background: #f5f5f5; min-height: 100vh; }
+.form-group { background: #fff; padding: 24rpx 30rpx; margin-bottom: 2rpx; }
+.label { display: block; font-size: 26rpx; color: #666; margin-bottom: 10rpx; }
+.input, .picker { font-size: 30rpx; padding: 10rpx 0; }
+.picker { color: #333; }
+.submit-btn { margin-top: 40rpx; background: #4A90D9; color: #fff; border-radius: 40rpx; }
+

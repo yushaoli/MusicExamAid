@@ -210,7 +210,10 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       <div class="card">
         <h2>
           <span>老师审核与机构汇总台</span>
-          <button class="btn-wecom btn-sm" onclick="exportAllLocked()">📥 一键导出已锁定报名表 (Template v2.1 CSV)</button>
+          <span style="display:flex;gap:8px">
+            <button class="btn-wecom btn-sm" onclick="exportAllLocked('zip')">📦 导出报名表+证件照ZIP包</button>
+            <button class="btn-primary btn-sm" onclick="exportAllLocked('csv')">📥 仅导出Excel CSV</button>
+          </span>
         </h2>
         <p style="font-size:13px;color:var(--muted);margin-top:0">
           支持「一键确认并锁定」（自动生成加密快照并推送企业微信/服务号通知）。
@@ -376,7 +379,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       }
     }
 
-    async function exportAllLocked() {
+    async function exportAllLocked(mode) {
       const rRes = await fetch('/registrations').then(r => r.json());
       const lockedIds = (rRes.items || []).filter(r => r.status === 'locked').map(r => r.id);
       if (lockedIds.length === 0) return showToast('当前没有已锁定 (locked) 的报名记录可导出');
@@ -391,7 +394,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       });
       if (!expRes.ok) return showToast('导出任务创建失败');
       const job = await expRes.json();
-      window.location.href = job.download_csv_url;
+      window.location.href = mode === 'csv' ? job.download_csv_url : job.download_zip_url;
     }
 
     const params = new URLSearchParams(window.location.search);

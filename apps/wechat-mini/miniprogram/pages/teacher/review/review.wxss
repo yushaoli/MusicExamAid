@@ -1,0 +1,6 @@
+.container { padding: 20rpx; }
+.info-card { background: #fff; border-radius: 16rpx; padding: 30rpx; margin-bottom: 30rpx; }
+.row { display: flex; justify-content: space-between; padding: 16rpx 0; border-bottom: 1rpx solid #eee; }
+.label { color: #666; }
+.actions button { margin-bottom: 20rpx; background: #4A90D9; color: #fff; }
+
