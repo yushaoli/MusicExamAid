@@ -344,4 +344,122 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     await closePool();
     await app.close();
   });
+
+  it('WeChat Pay checkout -> Teacher lock accrues concession -> Admin adjusts & confirms -> Teacher withdraws -> Admin pays out', async () => {
+    const app = buildApp();
+
+    const learnerRes = await app.inject({
+      method: 'POST',
+      url: '/learners',
+      payload: {
+        name_cn: '林小音',
+        gender: '女',
+        dob: '2017-04-12',
+        id_type: '身份证',
+        id_number: '310101201704126666',
+        guardian_phone: '13700137000',
+      },
+    });
+    const learnerId = learnerRes.json().id;
+
+    const regRes = await app.inject({
+      method: 'POST',
+      url: '/registrations',
+      payload: {
+        learner_id: learnerId,
+        cycle_id: '2025-summer',
+        subject_id: 'piano',
+        level: 5,
+      },
+    });
+    const regId = regRes.json().id;
+
+    // 1. Parent pays ¥480 via WeChat Pay
+    const payRes = await app.inject({
+      method: 'POST',
+      url: '/payments/checkout',
+      payload: {
+        registration_id: regId,
+        teacher_id: 'tch_zhang',
+      },
+    });
+    assert.equal(payRes.statusCode, 201);
+    assert.equal(payRes.json().order.amount_fen, 48000);
+    assert.equal(payRes.json().order.amount_yuan, '¥480.00');
+
+    // 2. Teacher submits & 1-click locks -> automatically accrues ¥50 (5000 fen)
+    await app.inject({
+      method: 'PATCH',
+      url: `/registrations/${regId}/status`,
+      payload: { to_status: 'submitted' },
+    });
+    await app.inject({
+      method: 'PATCH',
+      url: `/registrations/${regId}/status`,
+      payload: { to_status: 'locked' },
+    });
+
+    const walletRes1 = await app.inject({
+      method: 'GET',
+      url: '/concessions/wallet?teacher_id=tch_zhang',
+    });
+    assert.equal(walletRes1.statusCode, 200);
+    const w1 = walletRes1.json();
+    assert.equal(w1.summary.accrued_fen, 5000);
+    assert.equal(w1.summary.available_fen, 0);
+    const ledgerId = w1.ledger[0].id;
+
+    // 3. Admin confirms and adjusts concession on the fly from ¥50 -> ¥65 (6500 fen)
+    const confirmRes = await app.inject({
+      method: 'PATCH',
+      url: `/concessions/${ledgerId}/confirm`,
+      payload: {
+        adjusted_amount_fen: 6500,
+        adjustment_note: '优秀指导老师阶梯奖励 +¥15',
+        confirmed_by: 'admin_flintstone',
+      },
+    });
+    assert.equal(confirmRes.statusCode, 200);
+    assert.equal(confirmRes.json().status, 'confirmed');
+    assert.equal(confirmRes.json().adjusted_amount_yuan, '¥65.00');
+
+    // 4. Teacher requests withdrawal of confirmed balance (¥65.00)
+    const wdRes = await app.inject({
+      method: 'POST',
+      url: '/concessions/withdrawals',
+      payload: {
+        teacher_id: 'tch_zhang',
+        teacher_note: '2025暑期考级第一批提现',
+      },
+    });
+    assert.equal(wdRes.statusCode, 201);
+    assert.equal(wdRes.json().withdrawal.total_amount_fen, 6500);
+    assert.equal(wdRes.json().withdrawal.total_amount_yuan, '¥65.00');
+    const withdrawalId = wdRes.json().withdrawal.id;
+
+    // 5. Admin approves & marks withdrawal paid out
+    const payoutRes = await app.inject({
+      method: 'PATCH',
+      url: `/concessions/withdrawals/${withdrawalId}/payout`,
+      payload: {
+        admin_note: '已通过微信转账打款',
+        payout_ref: 'wx_payout_20261016',
+      },
+    });
+    assert.equal(payoutRes.statusCode, 200);
+    assert.equal(payoutRes.json().status, 'approved_paid');
+
+    const walletRes2 = await app.inject({
+      method: 'GET',
+      url: '/concessions/wallet?teacher_id=tch_zhang',
+    });
+    const w2 = walletRes2.json();
+    assert.equal(w2.summary.available_fen, 0);
+    assert.equal(w2.summary.withdrawing_fen, 0);
+    assert.equal(w2.summary.paid_out_fen, 6500);
+    assert.equal(w2.summary.paid_out_yuan, '¥65.00');
+
+    await app.close();
+  });
 });
+

@@ -300,7 +300,8 @@
     <button class="tab-btn active" onclick="switchTab('flow', this)">1. 业务全景流程 (How It Works)</button>
     <button class="tab-btn" onclick="switchTab('arch', this)">2. 服务器与网络架构 (xgar.com.cn Topology)</button>
     <button class="tab-btn" onclick="switchTab('data', this)">3. 数据安全与状态机 (Encryption & Dedup)</button>
-    <button class="tab-btn" onclick="switchTab('status', this)">4. PM 进度与上线清单 (Milestone & Cutover)</button>
+    <button class="tab-btn" onclick="switchTab('concessions', this)">4. 💰 微信支付与老师返佣提现 (Concessions)</button>
+    <button class="tab-btn" onclick="switchTab('status', this)">5. PM 进度与上线清单 (Milestone & Cutover)</button>
   </nav>
 
   <main>
@@ -553,7 +554,97 @@
               <td><span class="badge-done">已就绪 (READY)</span></td>
               <td><code>apps/wechat-mini/miniprogram/utils/api.js</code> 支持境内 <code>mea.xgar.com.cn</code> 直连 + 腾讯境内 <code>wx.cloud</code> 自动回退，无需额外购买境内公网服务器</td>
             </tr>
+            <tr>
+              <td><strong>微信支付 + 老师累计返佣与提现账本</strong></td>
+              <td><span class="badge-done">已上线 (LIVE)</span></td>
+              <td><code>POST /payments/checkout</code> → <code>PATCH /concessions/:id/confirm</code> (支持管理员动态调额) → <code>POST /concessions/withdrawals</code> → <code>PATCH /concessions/withdrawals/:id/payout</code></td>
+            </tr>
           </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 5: WECHAT PAY & TEACHER ACCUMULATED CONCESSIONS -->
+    <section id="tab-concessions" class="panel">
+      <div class="card">
+        <h2>💰 家长微信支付 + 老师返佣「累计 → 管理员调额确认 → 老师申请提现」闭环</h2>
+        <p class="sub">
+          无需受限于微信自动分账的 30% 比例上限，也无需担心学生中途退考引发资金纠纷：家长通过微信支付缴纳考级费后，当老师<strong>确认并锁定报名 (<code>locked</code>)</strong> 时，系统按级别标准自动记入老师的<strong>「待核算返佣 (<code>accrued</code>)」</strong>；管理员可随时在后台<strong>按需调整金额并确认入账 (<code>confirmed</code>)</strong>，老师即可一键申请提现。
+        </p>
+
+        <div class="state-row">
+          <span class="state-pill">1. 家长微信支付 (paid) + 老师锁档 (locked)</span>
+          <span class="arrow">──自动记账──▶</span>
+          <span class="state-pill warn">2. 待管理员核算 (accrued)</span>
+          <span class="arrow">──管理员改价/确认──▶</span>
+          <span class="state-pill highlight">3. 可提现余额 (confirmed)</span>
+          <span class="arrow">──老师申请提现──▶</span>
+          <span class="state-pill">4. 提现打款结清 (paid_out)</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px">
+          <div>
+            <h2 style="margin:0">🎛️ 交互式模拟器：老师返佣累计、管理员动态改价与提现审批</h2>
+            <p class="sub" style="margin:4px 0 0">点击下方按钮直接体验完整的「报名缴费 → 管理员动态调额确认 → 老师一键提现 → 管理员打款」账本流转：</p>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button onclick="simAddStudentPayment()" style="background:#0284c7;color:#fff;border:none;padding:9px 14px;border-radius:8px;font-weight:700;cursor:pointer">
+              ➕ 1. 模拟学生微信缴费 + 老师锁档
+            </button>
+            <button onclick="simTeacherWithdraw()" style="background:#16a34a;color:#fff;border:none;padding:9px 14px;border-radius:8px;font-weight:700;cursor:pointer">
+              💸 3. 老师一键申请提现 (全部可提现余额)
+            </button>
+          </div>
+        </div>
+
+        <div class="flow-grid" style="margin-bottom:18px">
+          <div class="node-box amber">
+            <div style="font-size:12px;color:#94a3b8">⏳ 待管理员确认 (accrued)</div>
+            <div id="sim-accrued" style="font-size:24px;font-weight:800;color:#fbbf24;margin-top:4px">¥100.00</div>
+          </div>
+          <div class="node-box green">
+            <div style="font-size:12px;color:#94a3b8">✅ 可提现余额 (confirmed)</div>
+            <div id="sim-available" style="font-size:24px;font-weight:800;color:#4ade80;margin-top:4px">¥65.00</div>
+          </div>
+          <div class="node-box">
+            <div style="font-size:12px;color:#94a3b8">🔄 提现申请中 (withdrawing)</div>
+            <div id="sim-withdrawing" style="font-size:24px;font-weight:800;color:#38bdf8;margin-top:4px">¥0.00</div>
+          </div>
+          <div class="node-box purple">
+            <div style="font-size:12px;color:#94a3b8">🏦 累计已打款 (paid_out)</div>
+            <div id="sim-paidout" style="font-size:24px;font-weight:800;color:#c084fc;margin-top:4px">¥0.00</div>
+          </div>
+        </div>
+
+        <h3 style="margin-bottom:8px">📋 老师名下报名返佣明细（管理员可在此直接修改金额并确认入账）</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>报名单号 / 考生</th>
+              <th>报考级别 / 实缴考级费</th>
+              <th>默认返佣标准</th>
+              <th>管理员核定金额 (元) & 备注</th>
+              <th>状态</th>
+              <th>管理员操作 (步骤 2)</th>
+            </tr>
+          </thead>
+          <tbody id="sim-ledger-body"></tbody>
+        </table>
+
+        <h3 style="margin:20px 0 8px">🧾 老师提现申请单（管理员步骤 4：确认打款）</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>提现单号</th>
+              <th>包含笔数</th>
+              <th>提现总金额</th>
+              <th>状态</th>
+              <th>管理员打款操作</th>
+            </tr>
+          </thead>
+          <tbody id="sim-wd-body"></tbody>
         </table>
       </div>
     </section>
@@ -562,13 +653,13 @@
   <script>
     const stepDetails = [
       {
-        title: "Step 1: 家长在微信小程序（腾讯境内）或校区 H5 填报",
+        title: "Step 1: 家长在微信小程序（腾讯境内）或校区 H5 填报并微信支付",
         bullets: [
-          "外网家长打开微信小程序（走腾讯境内云开发 wx.cloud）或校区内打开 https://mea.xgar.com.cn/app?tab=parent（直连上海 ubtxiaomi 100.64.0.4），全程 100% 在中国境内传输，无需额外购买境内公网 VPS。",
-          "填写考生姓名、性别、出生日期、身份证号，并选择报考专业（如：钢琴）与级别（1-10级），上传标准二寸证件照。",
+          "外网家长打开微信小程序（走腾讯境内云开发 wx.cloud + 微信支付）或校区内打开 https://mea.xgar.com.cn/app?tab=parent（直连上海 ubtxiaomi 100.64.0.4），全程 100% 在中国境内传输。",
+          "填写考生姓名、性别、出生日期、身份证号，选择报考专业与级别（如钢琴 5 级 = ¥480），上传标准二寸证件照并完成微信支付 (POST /payments/checkout)。",
           "上海主机 ubtxiaomi 使用 AES-256-GCM 加密身份证号存入本地 PostgreSQL (learners)，并将二寸照存入本地 MinIO S3 (photos/{id_last4}_{name_cn}.jpg)。"
         ],
-        code: `POST /learners (100% 境内链路)\n{\n  "name_cn": "陈小乐",\n  "gender": "女",\n  "dob": "2015-03-15",\n  "id_type": "身份证",\n  "id_number": "440101201503159876"\n}\n// 响应仅返回脱敏尾号: { "id_last4": "9876", "has_portrait_photo": true }`
+        code: `POST /payments/checkout\n{\n  "registration_id": "reg_9508",\n  "teacher_id": "tch_zhang"\n}\n// 订单金额: ¥480.00 (48000分)，锁档后自动生成老师待确认返佣 ¥50.00`
       },
       {
         title: "Step 2: 家长提交报名 → 企微发送「零隐私脱敏」工单提醒",
@@ -580,13 +671,13 @@
         code: `POST https://wecom.xgar.com.cn/send/<RELAY_TOKEN>\n{\n  "msg": "**[考级助手] 报名状态变更**\\n> 报名单号: \`reg_9508\`\\n> 状态流转: 草稿 (Draft) → **待老师审核 (Submitted)**"\n}\n// 严禁包含姓名、身份证号或照片 URL (PIPL 合规)`
       },
       {
-        title: "Step 3: 老师在境内教务工作台一键确认并锁档",
+        title: "Step 3: 老师一键确认锁档 → 自动累计老师待审返佣",
         bullets: [
           "老师在境内环境点开 https://mea.xgar.com.cn/app?tab=console (100.64.0.4) 查看待审核列表。",
-          "若信息有误，点击「退回修改 (needs_change)」，系统通知家长修改。",
-          "若核对无误，点击「⚡ 一键确认并锁定 (submitted -> locked)」，系统立即在上海本地 PostgreSQL 冻结报名快照 snapshot_json（身份证依然保持 AES-256-GCM 加密态）。"
+          "核对无误后点击「⚡ 一键确认并锁定 (submitted -> locked)」，系统冻结报名快照 snapshot_json，并自动在 teacher_concession_ledger 中为该老师累计一笔待确认返佣 (accrued)。",
+          "管理员可在后台按需调整返佣金额（如阶梯奖励 +¥15）并点击确认 (PATCH /concessions/:id/confirm)，老师即可申请提现。"
         ],
-        code: `PATCH /registrations/:id/status\n{\n  "to_status": "locked",\n  "teacher_notes": "曲目与二寸照核对无误"\n}\n// 自动冻结 snapshot_json，将 "piano" 解析为 "钢琴"`
+        code: `PATCH /concessions/cns_01/confirm\n{\n  "adjusted_amount_fen": 6500,\n  "adjustment_note": "满10人阶梯奖励 +¥15"\n}\n// 状态变为 confirmed (可提现余额 +¥65.00)`
       },
       {
         title: "Step 4: 教务 SuperBatch 去重预检 + 一键导出官方 ZIP 包",
@@ -624,7 +715,133 @@
       btn.classList.add('active');
     }
 
+    // Interactive Concession Wallet Simulator
+    let simLedger = [
+      { id: 'cns_101', reg: 'reg_9501 (陈小乐)', level: '钢琴 5级', fee: 480, defAmt: 50, adjAmt: 65, note: '满10人阶梯奖励+15元', status: 'confirmed' },
+      { id: 'cns_102', reg: 'reg_9502 (周星辰)', level: '古筝 7级', fee: 580, defAmt: 70, adjAmt: 70, note: '标准返佣', status: 'accrued' },
+      { id: 'cns_103', reg: 'reg_9503 (林小音)', level: '钢琴 3级', fee: 300, defAmt: 30, adjAmt: 30, note: '标准返佣', status: 'accrued' }
+    ];
+    let simWithdrawals = [];
+    let simSeq = 104;
+
+    function renderSimWallet() {
+      let accrued = 0, avail = 0, withdrawing = 0, paid = 0;
+      simLedger.forEach(item => {
+        if (item.status === 'accrued') accrued += item.adjAmt;
+        if (item.status === 'confirmed') avail += item.adjAmt;
+        if (item.status === 'withdrawing') withdrawing += item.adjAmt;
+        if (item.status === 'paid_out') paid += item.adjAmt;
+      });
+      document.getElementById('sim-accrued').textContent = '¥' + accrued.toFixed(2);
+      document.getElementById('sim-available').textContent = '¥' + avail.toFixed(2);
+      document.getElementById('sim-withdrawing').textContent = '¥' + withdrawing.toFixed(2);
+      document.getElementById('sim-paidout').textContent = '¥' + paid.toFixed(2);
+
+      const statusBadge = (s) => {
+        if (s === 'accrued') return '<span class="badge-next">待管理员核算 (accrued)</span>';
+        if (s === 'confirmed') return '<span class="badge-done">已确认可提现 (confirmed)</span>';
+        if (s === 'withdrawing') return '<span class="badge-next">提现申请中 (withdrawing)</span>';
+        return '<span class="badge-done">已打款结清 (paid_out)</span>';
+      };
+
+      document.getElementById('sim-ledger-body').innerHTML = simLedger.map((item, i) => `
+        <tr>
+          <td><code>${item.id}</code><br>${item.reg}</td>
+          <td>${item.level}<br><span style="color:#94a3b8">实缴 ¥${item.fee}.00</span></td>
+          <td>¥${item.defAmt}.00</td>
+          <td>
+            ${item.status === 'accrued' || item.status === 'confirmed'
+              ? `<input id="adj-amt-${i}" type="number" value="${item.adjAmt}" style="width:70px;background:#0f172a;color:#38bdf8;border:1px solid #334155;border-radius:4px;padding:4px"> 元
+                 <input id="adj-note-${i}" type="text" value="${item.note}" style="width:140px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px">`
+              : `<strong>¥${item.adjAmt}.00</strong> (${item.note})`
+            }
+          </td>
+          <td>${statusBadge(item.status)}</td>
+          <td>
+            ${item.status === 'accrued' || item.status === 'confirmed'
+              ? `<button onclick="simAdminConfirm(${i})" style="background:#2563eb;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:12px">
+                   ✅ ${item.status === 'accrued' ? '确认并改价入账' : '更新核定金额'}
+                 </button>`
+              : '—'}
+          </td>
+        </tr>
+      `).join('');
+
+      document.getElementById('sim-wd-body').innerHTML = simWithdrawals.length === 0
+        ? '<tr><td colspan="5" style="color:#94a3b8;text-align:center">暂无提现申请，点击上方「💸 3. 老师一键申请提现」体验</td></tr>'
+        : simWithdrawals.map((w, wi) => `
+          <tr>
+            <td><code>${w.id}</code></td>
+            <td>${w.count} 笔报名</td>
+            <td><strong style="color:#4ade80">¥${w.total.toFixed(2)}</strong></td>
+            <td>${w.status === 'requested' ? '<span class="badge-next">待管理员打款 (requested)</span>' : '<span class="badge-done">已微信转账打款 (approved_paid)</span>'}</td>
+            <td>
+              ${w.status === 'requested'
+                ? `<button onclick="simAdminPayout(${wi})" style="background:#9333ea;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:12px">🏦 4. 确认已微信打款</button>`
+                : `已结清 (${w.ref})`}
+            </td>
+          </tr>
+        `).join('');
+    }
+
+    function simAddStudentPayment() {
+      const names = ['王小羽', '赵小溪', '孙小朗', '李小茉'];
+      const levels = [
+        { name: '钢琴 5级', fee: 480, def: 50 },
+        { name: '小提琴 8级', fee: 580, def: 70 },
+        { name: '古筝 10级', fee: 680, def: 90 }
+      ];
+      const pick = levels[simSeq % levels.length];
+      const student = names[simSeq % names.length];
+      simLedger.unshift({
+        id: 'cns_' + simSeq,
+        reg: `reg_9${simSeq} (${student})`,
+        level: pick.name,
+        fee: pick.fee,
+        defAmt: pick.def,
+        adjAmt: pick.def,
+        note: '系统按级别自动累计',
+        status: 'accrued'
+      });
+      simSeq++;
+      renderSimWallet();
+    }
+
+    function simAdminConfirm(idx) {
+      const amtInput = document.getElementById('adj-amt-' + idx);
+      const noteInput = document.getElementById('adj-note-' + idx);
+      if (amtInput) simLedger[idx].adjAmt = Math.max(0, Number(amtInput.value) || 0);
+      if (noteInput) simLedger[idx].note = noteInput.value;
+      simLedger[idx].status = 'confirmed';
+      renderSimWallet();
+    }
+
+    function simTeacherWithdraw() {
+      const eligible = simLedger.filter(i => i.status === 'confirmed' && i.adjAmt > 0);
+      if (eligible.length === 0) {
+        alert('当前没有「已确认可提现 (confirmed)」的返佣记录，请先由管理员点击「确认并改价入账」！');
+        return;
+      }
+      const total = eligible.reduce((s, i) => s + i.adjAmt, 0);
+      const wdId = 'wd_' + Date.now().toString().slice(-5);
+      eligible.forEach(i => { i.status = 'withdrawing'; i.wdId = wdId; });
+      simWithdrawals.unshift({ id: wdId, count: eligible.length, total, status: 'requested', ref: '' });
+      renderSimWallet();
+    }
+
+    function simAdminPayout(wi) {
+      const w = simWithdrawals[wi];
+      w.status = 'approved_paid';
+      w.ref = 'wx_transfer_' + w.id;
+      simLedger.forEach(i => {
+        if (i.wdId === w.id) i.status = 'paid_out';
+      });
+      renderSimWallet();
+    }
+
     selectStep(0);
+    renderSimWallet();
   </script>
 </body>
 </html>
+

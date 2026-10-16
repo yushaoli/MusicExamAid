@@ -12,6 +12,7 @@ export type { RegistrationStatus as RegistrationStatusType } from './registratio
 export {
   computeWeChatSignature,
   verifyWeChatSignature,
+  redactPii,
   formatWeComStatusAlert,
   formatWeComExportAlert,
   buildServiceAccountTemplatePayload,
@@ -59,3 +60,20 @@ export type {
   DedupConflictReason,
   DedupEvaluatedItem,
 } from './dedup';
+
+export {
+  getDefaultFeeRuleForLevel,
+  formatRmbYuan,
+  summarizeTeacherWallet,
+} from './concession-ledger';
+export type {
+  PaymentOrderStatus,
+  ConcessionLedgerStatus,
+  WithdrawalStatus,
+  ExamFeeRule,
+  PaymentOrderRecord,
+  ConcessionLedgerRecord,
+  TeacherWithdrawalRecord,
+  TeacherWalletSummary,
+} from './concession-ledger';
+

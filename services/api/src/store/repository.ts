@@ -16,10 +16,16 @@ import {
   computeMissingFlags,
   mapSnapshotToExportRow,
   formatPortraitPhotoZipPath,
+  getDefaultFeeRuleForLevel,
+  summarizeTeacherWallet,
 } from '@musicexamaid/shared';
 import type {
   RegistrationStatusType,
   RegistrationSnapshot,
+  PaymentOrderRecord,
+  ConcessionLedgerRecord,
+  TeacherWithdrawalRecord,
+  TeacherWalletSummary,
 } from '@musicexamaid/shared';
 
 export interface StoredLearner {
@@ -46,6 +52,7 @@ export interface StoredRegistration {
   id: string;
   learner_id: string;
   institution_id: string | null;
+  teacher_id?: string;
   cycle_id: string;
   subject_id: string;
   level: number;
@@ -102,6 +109,9 @@ export class DomainRepository {
   private statusHistory: StoredStatusHistory[] = [];
   private archives = new Map<string, StoredArchive>();
   private exportBatches = new Map<string, StoredExportBatch>();
+  private paymentOrders = new Map<string, PaymentOrderRecord>();
+  private concessionLedger = new Map<string, ConcessionLedgerRecord>();
+  private teacherWithdrawals = new Map<string, TeacherWithdrawalRecord>();
 
   createLearner(input: {
     id?: string;
@@ -169,6 +179,7 @@ export class DomainRepository {
     id?: string;
     learner_id: string;
     institution_id?: string | null;
+    teacher_id?: string;
     cycle_id: string;
     subject_id: string;
     level: number;
@@ -182,6 +193,7 @@ export class DomainRepository {
       id,
       learner_id: input.learner_id,
       institution_id: input.institution_id ?? null,
+      teacher_id: input.teacher_id || 'tch_default',
       cycle_id: input.cycle_id,
       subject_id: input.subject_id,
       level: input.level,
@@ -238,6 +250,7 @@ export class DomainRepository {
       id: params.id,
       learner_id: 'lrn_stub',
       institution_id: 'inst_default',
+      teacher_id: 'tch_default',
       cycle_id: '2025-summer',
       subject_id: 'piano',
       level: 5,
@@ -293,7 +306,236 @@ export class DomainRepository {
       notes: params.teacher_notes ?? '',
       created_at: now,
     });
+
+    if (params.to_status === RegistrationStatus.LOCKED) {
+      this.ensureConcessionAccrued(reg.id);
+    } else if (fromStatus === RegistrationStatus.LOCKED) {
+      this.voidConcessionIfUnlocked(reg.id);
+    }
+
     return reg;
+  }
+
+  /**
+   * Create and mark a WeChat Pay order paid for a registration.
+   * If the registration is already locked, immediately accrues the teacher's concession.
+   */
+  payRegistrationOrder(input: {
+    registration_id: string;
+    teacher_id?: string;
+    wx_transaction_id?: string;
+  }): { order: PaymentOrderRecord; concession?: ConcessionLedgerRecord } {
+    const now = new Date().toISOString();
+    const reg = this.registrations.get(input.registration_id);
+    const levelStr = String(reg?.level ?? 5);
+    const feeRule = getDefaultFeeRuleForLevel(levelStr);
+    const teacherId = input.teacher_id || reg?.teacher_id || 'tch_default';
+    if (reg && input.teacher_id) {
+      reg.teacher_id = input.teacher_id;
+    }
+
+    const existingOrder = Array.from(this.paymentOrders.values()).find(
+      o => o.registration_id === input.registration_id,
+    );
+
+    const order: PaymentOrderRecord = existingOrder
+      ? {
+          ...existingOrder,
+          teacher_id: teacherId,
+          status: 'paid',
+          wx_transaction_id: input.wx_transaction_id || existingOrder.wx_transaction_id || `wx_tx_${crypto.randomUUID().slice(0, 12)}`,
+          paid_at: now,
+          updated_at: now,
+        }
+      : {
+          id: `pay_${crypto.randomUUID()}`,
+          registration_id: input.registration_id,
+          learner_id: reg?.learner_id || 'lrn_stub',
+          teacher_id: teacherId,
+          amount_fen: feeRule.feeFen,
+          status: 'paid',
+          wx_transaction_id: input.wx_transaction_id || `wx_tx_${crypto.randomUUID().slice(0, 12)}`,
+          paid_at: now,
+          created_at: now,
+          updated_at: now,
+        };
+
+    this.paymentOrders.set(order.id, order);
+
+    let concession: ConcessionLedgerRecord | undefined;
+    if (reg?.status === RegistrationStatus.LOCKED) {
+      concession = this.ensureConcessionAccrued(input.registration_id);
+    }
+    return { order, concession };
+  }
+
+  /**
+   * Ensure a teacher concession ledger item is accrued once a registration is LOCKED.
+   * Even if the parent paid earlier or pays upon lock, this creates a single accrued entry
+   * per registration so Admin can confirm/adjust it before teacher withdrawal.
+   */
+  ensureConcessionAccrued(registrationId: string): ConcessionLedgerRecord | undefined {
+    const reg = this.registrations.get(registrationId);
+    if (!reg || reg.status !== RegistrationStatus.LOCKED) return undefined;
+
+    const existing = Array.from(this.concessionLedger.values()).find(
+      c => c.registration_id === registrationId,
+    );
+    if (existing && existing.status !== 'voided') {
+      return existing;
+    }
+
+    const now = new Date().toISOString();
+    const rule = getDefaultFeeRuleForLevel(String(reg.level));
+    const paidOrder = Array.from(this.paymentOrders.values()).find(
+      o => o.registration_id === registrationId && o.status === 'paid',
+    );
+    const teacherId = paidOrder?.teacher_id || reg.teacher_id || 'tch_default';
+
+    const record: ConcessionLedgerRecord = {
+      id: existing?.id || `cns_${crypto.randomUUID()}`,
+      teacher_id: teacherId,
+      registration_id: registrationId,
+      payment_order_id: paidOrder?.id || `pay_auto_${registrationId}`,
+      subject_id: reg.subject_id,
+      level: String(reg.level),
+      exam_fee_fen: paidOrder?.amount_fen ?? rule.feeFen,
+      default_amount_fen: rule.defaultConcessionFen,
+      adjusted_amount_fen: rule.defaultConcessionFen,
+      status: 'accrued',
+      created_at: existing?.created_at || now,
+      updated_at: now,
+    };
+    this.concessionLedger.set(record.id, record);
+    return record;
+  }
+
+  private voidConcessionIfUnlocked(registrationId: string): void {
+    const existing = Array.from(this.concessionLedger.values()).find(
+      c => c.registration_id === registrationId,
+    );
+    if (existing && (existing.status === 'accrued' || existing.status === 'confirmed')) {
+      existing.status = 'voided';
+      existing.updated_at = new Date().toISOString();
+    }
+  }
+
+  /**
+   * Admin confirms (and optionally adjusts on the fly) an accrued teacher concession.
+   */
+  confirmAndAdjustConcession(input: {
+    ledger_id: string;
+    adjusted_amount_fen?: number;
+    adjustment_note?: string;
+    confirmed_by?: string;
+  }): ConcessionLedgerRecord {
+    const item = this.concessionLedger.get(input.ledger_id);
+    if (!item) {
+      throw new Error(`Concession ledger item "${input.ledger_id}" not found`);
+    }
+    if (item.status === 'withdrawing' || item.status === 'paid_out') {
+      throw new Error(`Cannot adjust concession "${input.ledger_id}" in status "${item.status}"`);
+    }
+    const now = new Date().toISOString();
+    if (input.adjusted_amount_fen !== undefined) {
+      if (input.adjusted_amount_fen < 0) {
+        throw new Error('adjusted_amount_fen must be >= 0');
+      }
+      item.adjusted_amount_fen = Math.round(input.adjusted_amount_fen);
+    }
+    if (input.adjustment_note !== undefined) {
+      item.adjustment_note = input.adjustment_note;
+    }
+    item.status = 'confirmed';
+    item.confirmed_by = input.confirmed_by || 'admin';
+    item.confirmed_at = now;
+    item.updated_at = now;
+    return item;
+  }
+
+  /**
+   * Teacher requests withdrawal of all currently `confirmed` concessions.
+   */
+  requestTeacherWithdrawal(input: {
+    teacher_id: string;
+    teacher_note?: string;
+    payout_channel?: 'wechat_transfer' | 'bank_transfer';
+  }): { withdrawal: TeacherWithdrawalRecord; items: ConcessionLedgerRecord[] } {
+    const eligible = Array.from(this.concessionLedger.values()).filter(
+      c => c.teacher_id === input.teacher_id && c.status === 'confirmed' && c.adjusted_amount_fen > 0,
+    );
+    if (eligible.length === 0) {
+      throw new Error(`No confirmed withdrawable concessions available for teacher "${input.teacher_id}"`);
+    }
+    const now = new Date().toISOString();
+    const totalFen = eligible.reduce((sum, item) => sum + item.adjusted_amount_fen, 0);
+    const withdrawal: TeacherWithdrawalRecord = {
+      id: `wd_${crypto.randomUUID()}`,
+      teacher_id: input.teacher_id,
+      total_amount_fen: totalFen,
+      item_count: eligible.length,
+      status: 'requested',
+      teacher_note: input.teacher_note,
+      payout_channel: input.payout_channel || 'wechat_transfer',
+      requested_at: now,
+    };
+    this.teacherWithdrawals.set(withdrawal.id, withdrawal);
+
+    for (const item of eligible) {
+      item.status = 'withdrawing';
+      item.withdrawal_id = withdrawal.id;
+      item.updated_at = now;
+    }
+
+    return { withdrawal, items: eligible };
+  }
+
+  /**
+   * Admin approves and marks a teacher withdrawal request as paid out.
+   */
+  payoutTeacherWithdrawal(input: {
+    withdrawal_id: string;
+    admin_note?: string;
+    payout_ref?: string;
+  }): TeacherWithdrawalRecord {
+    const wd = this.teacherWithdrawals.get(input.withdrawal_id);
+    if (!wd) {
+      throw new Error(`Withdrawal "${input.withdrawal_id}" not found`);
+    }
+    if (wd.status !== 'requested') {
+      throw new Error(`Withdrawal "${input.withdrawal_id}" is already in status "${wd.status}"`);
+    }
+    const now = new Date().toISOString();
+    wd.status = 'approved_paid';
+    wd.admin_note = input.admin_note;
+    wd.payout_ref = input.payout_ref || `wx_transfer_${crypto.randomUUID().slice(0, 10)}`;
+    wd.paid_at = now;
+
+    for (const item of this.concessionLedger.values()) {
+      if (item.withdrawal_id === wd.id) {
+        item.status = 'paid_out';
+        item.updated_at = now;
+      }
+    }
+    return wd;
+  }
+
+  getTeacherConcessionWallet(teacherId = 'tch_default'): {
+    summary: TeacherWalletSummary;
+    ledger: ConcessionLedgerRecord[];
+    withdrawals: TeacherWithdrawalRecord[];
+  } {
+    const allLedger = Array.from(this.concessionLedger.values()).filter(
+      c => c.teacher_id === teacherId,
+    );
+    const withdrawals = Array.from(this.teacherWithdrawals.values()).filter(
+      w => w.teacher_id === teacherId,
+    );
+    return {
+      summary: summarizeTeacherWallet(teacherId, allLedger),
+      ledger: allLedger,
+      withdrawals,
+    };
   }
 
   createArchive(input: {
@@ -366,3 +608,4 @@ export class DomainRepository {
     return this.exportBatches.get(jobId);
   }
 }
+

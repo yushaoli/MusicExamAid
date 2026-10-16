@@ -293,6 +293,53 @@ export async function rpcRoutes(app: FastifyInstance): Promise<void> {
             });
           }
 
+          case 'paymentCheckout': {
+            const regId = String(payload.reg_id || payload.registration_id || '');
+            const res = app.store.payRegistrationOrder({
+              registration_id: regId,
+              teacher_id: payload.teacher_id ? String(payload.teacher_id) : undefined,
+              wx_transaction_id: payload.wx_transaction_id ? String(payload.wx_transaction_id) : undefined,
+            });
+            return reply.send({ success: true, data: res });
+          }
+
+          case 'teacherConcessionWallet': {
+            const teacherId = String(payload.teacher_id || 'tch_default');
+            const wallet = app.store.getTeacherConcessionWallet(teacherId);
+            return reply.send({ success: true, data: wallet });
+          }
+
+          case 'adminConfirmConcession': {
+            const updated = app.store.confirmAndAdjustConcession({
+              ledger_id: String(payload.ledger_id || ''),
+              adjusted_amount_fen:
+                payload.adjusted_amount_fen !== undefined
+                  ? Number(payload.adjusted_amount_fen)
+                  : undefined,
+              adjustment_note: payload.adjustment_note ? String(payload.adjustment_note) : undefined,
+              confirmed_by: payload.confirmed_by ? String(payload.confirmed_by) : 'admin',
+            });
+            return reply.send({ success: true, data: updated });
+          }
+
+          case 'teacherRequestWithdrawal': {
+            const res = app.store.requestTeacherWithdrawal({
+              teacher_id: String(payload.teacher_id || 'tch_default'),
+              teacher_note: payload.teacher_note ? String(payload.teacher_note) : undefined,
+              payout_channel: payload.payout_channel === 'bank_transfer' ? 'bank_transfer' : 'wechat_transfer',
+            });
+            return reply.send({ success: true, data: res });
+          }
+
+          case 'adminPayoutWithdrawal': {
+            const paid = app.store.payoutTeacherWithdrawal({
+              withdrawal_id: String(payload.withdrawal_id || ''),
+              admin_note: payload.admin_note ? String(payload.admin_note) : undefined,
+              payout_ref: payload.payout_ref ? String(payload.payout_ref) : undefined,
+            });
+            return reply.send({ success: true, data: paid });
+          }
+
           default:
             return reply.send({
               success: true,
