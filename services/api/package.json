@@ -12,10 +12,12 @@
   },
   "dependencies": {
     "@musicexamaid/shared": "*",
-    "fastify": "^4.28.1"
+    "fastify": "^4.28.1",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "@types/node": "^18.19.0",
+    "@types/pg": "^8.23.1",
     "tsx": "^4.7.2",
     "typescript": "^5.4.5"
   }

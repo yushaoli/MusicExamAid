@@ -97,6 +97,7 @@ export interface StoredExportBatch {
 
 export class DomainRepository {
   private learners = new Map<string, StoredLearner>();
+  private portraitPhotos = new Map<string, Buffer>();
   private registrations = new Map<string, StoredRegistration>();
   private statusHistory: StoredStatusHistory[] = [];
   private archives = new Map<string, StoredArchive>();
@@ -149,6 +150,19 @@ export class DomainRepository {
 
   listLearners(): StoredLearner[] {
     return Array.from(this.learners.values());
+  }
+
+  setLearnerPhoto(learnerId: string, photoBuffer: Buffer): StoredLearner | undefined {
+    const learner = this.learners.get(learnerId);
+    if (!learner) return undefined;
+    learner.has_portrait_photo = true;
+    learner.updated_at = new Date().toISOString();
+    this.portraitPhotos.set(learner.id_last4, photoBuffer);
+    return learner;
+  }
+
+  getPortraitPhotosByLast4(): Record<string, Buffer> {
+    return Object.fromEntries(this.portraitPhotos.entries());
   }
 
   createRegistration(input: {

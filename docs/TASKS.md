@@ -13,10 +13,12 @@
 - [x] Add **WeChat Service Account & WeCom H5 Web Tool** (`GET /app` in `services/api/src/routes/web-app.ts`), custom menu config generator (`GET /webhooks/wechat-mp/menu-config`), Service Account/WeCom webhooks, and `wecom.xgar.com.cn` alert dispatcher
 - [x] Add zero-rewrite Mini Program RPC bridge (`POST /rpc/:action` in `services/api/src/routes/rpc.ts`) and migrate `apps/wechat-mini/miniprogram/utils/api.js` from `wx.cloud` to `https://mea.xgar.com.cn/rpc/:action`
 - [x] Document full design reconciliation in `docs/DESIGN_RECONCILIATION.md`, `docs/ARCH.md`, `docs/PRD.md`, and `docs/openapi.yaml`
-- [x] Pass all 27 unit & E2E tests (`npm test`, `npm run typecheck`, `npm run build`)
+- [x] Add SuperBatch deduplication & conflict resolution engine (`packages/shared/src/dedup.ts` and `POST /exports/dedup-preflight`)
+- [x] Add portrait photo upload (`POST /learners/:id/photo`) and wire uploaded photo bytes into `GET /exports/:job_id/bundle.zip`
+- [x] Add PostgreSQL pool & migration runner (`services/api/src/store/postgres.ts`) and apply `001_initial_schema.sql` to live `musicexamaid_dev` on `ubtxiaomi` (`100.64.0.4:55432`)
+- [x] Pass all 28 unit & E2E tests (`make migrate`, `npm test`, `npm run typecheck`, `npm run build`)
 
-## Next Up (Live Cutover & Sprint 2)
-- [ ] Run `make migrate` on `ubtxiaomi.ts.xgar.com.cn` (`musicexamaid_dev`) and add SQL-backed persistence adapter alongside `DomainRepository`
-- [ ] Configure `mea.xgar.com.cn` Caddy vhost (`infra/Caddyfile.xgar.snippet`) and add `WECOM_RELAY_TOKEN` on `derp-sgr`
+## Next Up (External Console Cutover)
+- [ ] Configure `mea.xgar.com.cn` Caddy vhost (`infra/Caddyfile.xgar.snippet`) and add `WECOM_RELAY_TOKEN` on `derp-sgr` (`47.130.165.104`)
 - [ ] Bind WeChat Service Account + Mini Program (`wxaf3466a310a8bd07`) on WeChat Open Platform and apply `/webhooks/wechat-mp/menu-config`
-- [ ] Connect real S3/MinIO presigned portrait photo uploads into `buildExportZipBundle`
+- [ ] Switch portrait photo buffer persistence to S3/MinIO (`100.64.0.4:9010/musicexamaid-assets`) for multi-replica production

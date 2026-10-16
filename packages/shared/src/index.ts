@@ -51,3 +51,11 @@ export {
   buildExportZipBundle,
 } from './zip-bundle';
 export type { ZipEntryInput, PortraitPhotoAsset } from './zip-bundle';
+
+export { computeDedupKey, evaluateBatchDedup } from './dedup';
+export type {
+  DedupRegistrationCandidate,
+  DedupResolutionStatus,
+  DedupConflictReason,
+  DedupEvaluatedItem,
+} from './dedup';

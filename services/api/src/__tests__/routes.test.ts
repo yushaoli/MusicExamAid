@@ -55,6 +55,16 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     });
     const learner = lrnRes.json();
 
+    // 1b. Upload portrait photo for learner
+    const customJpeg = Buffer.from('FFD8FFE000104A464946', 'hex');
+    const photoRes = await app.inject({
+      method: 'POST',
+      url: `/learners/${learner.id}/photo`,
+      payload: { photo_base64: customJpeg.toString('base64') },
+    });
+    assert.equal(photoRes.statusCode, 200);
+    assert.equal(photoRes.json().size_bytes, customJpeg.length);
+
     // 2. Create draft registration with subject_id="piano"
     const regRes = await app.inject({
       method: 'POST',
@@ -93,6 +103,16 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     assert.equal(locked.status, 'locked');
     assert.equal(locked.has_snapshot, true);
     assert.deepEqual(locked.missing_flags, []);
+
+    // 4b. Run SuperBatch dedup preflight
+    const preflightRes = await app.inject({
+      method: 'POST',
+      url: '/exports/dedup-preflight',
+      payload: { cycle_id: '2025-summer' },
+    });
+    assert.equal(preflightRes.statusCode, 200);
+    assert.equal(preflightRes.json().ready_to_export, true);
+    assert.deepEqual(preflightRes.json().included_ids, [reg.id]);
 
     // 5. Export batch -> verify photo_paths, CSV download & ZIP bundle download
     const expRes = await app.inject({

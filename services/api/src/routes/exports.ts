@@ -1,6 +1,7 @@
 /**
- * Export job queue, Template v2.1 Excel CSV download & Portrait Photo ZIP bundle routes.
+ * Export job queue, SuperBatch Dedup Preflight, Template v2.1 Excel CSV & Portrait Photo ZIP bundle routes.
  *
+ * - POST /exports/dedup-preflight
  * - POST /exports
  * - GET  /exports/:job_id/csv
  * - GET  /exports/:job_id/bundle.zip
@@ -8,9 +9,11 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  RegistrationStatus,
   formatWeComExportAlert,
   serializeExportRowsToCsv,
   buildExportZipBundle,
+  evaluateBatchDedup,
 } from '@musicexamaid/shared';
 import { dispatchWeComAlert } from './integrations';
 
@@ -21,7 +24,42 @@ interface CreateExportBody {
   registration_ids?: string[];
 }
 
+interface DedupPreflightBody {
+  cycle_id?: string;
+  registration_ids?: string[];
+}
+
 export async function exportRoutes(app: FastifyInstance): Promise<void> {
+  app.post(
+    '/exports/dedup-preflight',
+    async (
+      req: FastifyRequest<{ Body: DedupPreflightBody }>,
+      reply: FastifyReply,
+    ) => {
+      const cycleId = req.body?.cycle_id || '2025-summer';
+      const requestedIds = req.body?.registration_ids
+        ? new Set(req.body.registration_ids)
+        : null;
+
+      const candidates = app.store
+        .listRegistrations()
+        .filter(
+          r =>
+            r.status === RegistrationStatus.LOCKED &&
+            r.cycle_id === cycleId &&
+            (!requestedIds || requestedIds.has(r.id)),
+        );
+
+      const report = evaluateBatchDedup(candidates);
+      return reply.code(200).send({
+        cycle_id: cycleId,
+        candidate_count: candidates.length,
+        ready_to_export: report.conflict_ids.length === 0,
+        ...report,
+      });
+    },
+  );
+
   app.post(
     '/exports',
     async (
@@ -119,6 +157,7 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
         jobId: batch.job_id,
         cycleId: batch.cycle_id,
         snapshots: batch.snapshots,
+        photosByKey: app.store.getPortraitPhotosByLast4(),
       });
 
       return reply

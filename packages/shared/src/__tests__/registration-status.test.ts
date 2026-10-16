@@ -212,3 +212,57 @@ describe('snapshot-crypto & Template v2.1 mapping', () => {
     assert.ok(csv.includes('"\t310101201508085678"'));
   });
 });
+
+// ---------------------------------------------------------------------------
+// SuperBatch Deduplication & Conflict Resolution
+// ---------------------------------------------------------------------------
+
+import { evaluateBatchDedup } from '../dedup';
+
+describe('evaluateBatchDedup', () => {
+  it('auto-keeps newest locked_at for same-level duplicates and flags level/institution conflicts', () => {
+    const res = evaluateBatchDedup([
+      {
+        id: 'reg_old',
+        learner_id: 'lrn_1',
+        institution_id: 'inst_A',
+        cycle_id: '2025-summer',
+        subject_id: 'piano',
+        level: 5,
+        locked_at: '2025-05-01T10:00:00.000Z',
+      },
+      {
+        id: 'reg_new',
+        learner_id: 'lrn_1',
+        institution_id: 'inst_A',
+        cycle_id: '2025-summer',
+        subject_id: 'piano',
+        level: 5,
+        locked_at: '2025-05-02T10:00:00.000Z',
+      },
+      {
+        id: 'reg_conflict_a',
+        learner_id: 'lrn_2',
+        institution_id: 'inst_A',
+        cycle_id: '2025-summer',
+        subject_id: 'violin',
+        level: 4,
+        locked_at: '2025-05-01T10:00:00.000Z',
+      },
+      {
+        id: 'reg_conflict_b',
+        learner_id: 'lrn_2',
+        institution_id: 'inst_A',
+        cycle_id: '2025-summer',
+        subject_id: 'violin',
+        level: 6,
+        locked_at: '2025-05-02T10:00:00.000Z',
+      },
+    ]);
+
+    assert.deepEqual(res.included_ids, ['reg_new']);
+    assert.deepEqual(res.excluded_ids, ['reg_old']);
+    assert.deepEqual(res.conflict_ids, ['reg_conflict_a', 'reg_conflict_b']);
+  });
+});
+

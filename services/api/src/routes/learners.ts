@@ -4,6 +4,7 @@
  * - GET  /learners
  * - POST /learners
  * - GET  /learners/:id
+ * - POST /learners/:id/photo  (Upload 2-inch portrait photo as base64 JPEG)
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -23,6 +24,10 @@ interface CreateLearnerBody {
   recipient_name_optional?: string;
   recipient_phone_optional?: string;
   has_portrait_photo?: boolean;
+}
+
+interface UploadPhotoBody {
+  photo_base64?: string;
 }
 
 function toPublicLearner(learner: StoredLearner) {
@@ -105,6 +110,43 @@ export async function learnerRoutes(app: FastifyInstance): Promise<void> {
       }
 
       return reply.code(200).send(toPublicLearner(learner));
+    },
+  );
+
+  app.post(
+    '/learners/:id/photo',
+    async (
+      req: FastifyRequest<{
+        Params: { id: string };
+        Body: UploadPhotoBody;
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const rawBase64 = (req.body?.photo_base64 || '')
+        .replace(/^data:image\/\w+;base64,/, '')
+        .trim();
+      if (!rawBase64) {
+        return reply.code(400).send({
+          error: 'VALIDATION_ERROR',
+          message: 'photo_base64 is required',
+        });
+      }
+
+      const buf = Buffer.from(rawBase64, 'base64');
+      const updated = app.store.setLearnerPhoto(req.params.id, buf);
+      if (!updated) {
+        return reply.code(404).send({
+          error: 'NOT_FOUND',
+          message: `Learner "${req.params.id}" not found`,
+        });
+      }
+
+      return reply.code(200).send({
+        learner_id: updated.id,
+        has_portrait_photo: true,
+        size_bytes: buf.length,
+        updated_at: updated.updated_at,
+      });
     },
   );
 }

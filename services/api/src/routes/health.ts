@@ -84,15 +84,15 @@ async function handleHealth(
   if (runLive) {
     const [postgres, redis, s3] = await Promise.all([
       probeTcpUrl(
-        process.env.POSTGRES_URL || 'postgresql://ubtxiaomi.ts.xgar.com.cn:55432',
+        process.env.POSTGRES_URL || 'postgresql://100.64.0.4:55432',
         55432,
       ),
       probeTcpUrl(
-        process.env.REDIS_URL || 'redis://ubtxiaomi.ts.xgar.com.cn:63790',
+        process.env.REDIS_URL || 'redis://100.64.0.4:63790',
         63790,
       ),
       probeTcpUrl(
-        process.env.S3_ENDPOINT || 'http://ubtxiaomi.ts.xgar.com.cn:9010',
+        process.env.S3_ENDPOINT || 'http://100.64.0.4:9010',
         9010,
       ),
     ]);

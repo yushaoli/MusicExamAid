@@ -65,6 +65,26 @@ paths:
       responses:
         "200":
           description: Learner profile
+  /learners/{id}/photo:
+    post:
+      summary: Upload or replace learner portrait photo (base64 JPEG/PNG) for ZIP bundle export
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [photo_base64]
+              properties:
+                photo_base64: { type: string }
+      responses:
+        "200":
+          description: Portrait photo stored
   /registrations:
     get:
       summary: List registrations with resolved Chinese subject names
@@ -163,7 +183,25 @@ paths:
                   items: { type: string }
       responses:
         "202":
-          description: Export job queued with download_csv_url and download_zip_url
+          description: Export job queued with download_csv_url, download_zip_url, and dedup summary
+  /exports/dedup-preflight:
+    post:
+      summary: Preview SuperBatch deduplication and cross-institution/level conflicts before locking an export batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cycle_id, registration_ids]
+              properties:
+                cycle_id: { type: string }
+                registration_ids:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: Dedup report (kept, auto_dropped, conflicts)
   /exports/{job_id}/csv:
     get:
       summary: Download Excel-compatible UTF-8 BOM CSV in strict Template v2.1 column order
