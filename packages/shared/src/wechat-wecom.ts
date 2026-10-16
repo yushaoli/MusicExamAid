@@ -70,8 +70,20 @@ export interface WeComStatusAlertInput {
 }
 
 /**
+ * Redact any accidental Chinese 18/15-digit ID numbers or 11-digit mobile phone numbers
+ * before sending operational notifications to `wecom.xgar.com.cn` (PIPL Zero-PII Cross-Border Guard).
+ */
+export function redactPii(text: string): string {
+  return text
+    .replace(/\b\d{17}[\dXx]\b/g, '[ID_REDACTED]')
+    .replace(/\b\d{15}\b/g, '[ID_REDACTED]')
+    .replace(/\b1[3-9]\d{9}\b/g, '[PHONE_REDACTED]');
+}
+
+/**
  * Format a WeCom markdown alert for registration status changes.
  * Compatible with `POST https://wecom.xgar.com.cn/send/<PROJECT_TOKEN>`.
+ * Never includes learner names, ID card numbers, or portrait URLs (PIPL compliance).
  */
 export function formatWeComStatusAlert(input: WeComStatusAlertInput): string {
   const fromLabel = STATUS_LABELS_CN[input.fromStatus] ?? input.fromStatus;
@@ -82,7 +94,7 @@ export function formatWeComStatusAlert(input: WeComStatusAlertInput): string {
     `> 状态流转: ${fromLabel} → **${toLabel}**`,
   ];
   if (input.teacherNotes && input.teacherNotes.trim()) {
-    lines.push(`> 审核备注: ${input.teacherNotes.trim()}`);
+    lines.push(`> 审核备注: ${redactPii(input.teacherNotes.trim())}`);
   }
   return lines.join('\n');
 }

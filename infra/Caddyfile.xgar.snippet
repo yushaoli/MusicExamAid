@@ -14,18 +14,29 @@
 # - /learners, /registrations, /archives, /exports, /notifications/* -> REST API
 # - /MP_verify_*.txt, /WW_verify_*.txt -> Static domain verification files
 
+# Option A — On ubtxiaomi (/opt/stacks/caddy/Caddyfile, caddy-cloudflare DNS-01):
 mea.xgar.com.cn {
-	handle /MP_verify_*.txt {
-		root * /srv/mea-verify
-		file_server
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		propagation_delay 30s
+		propagation_timeout -1
 	}
-
-	handle /WW_verify_*.txt {
-		root * /srv/mea-verify
-		file_server
-	}
-
-	handle {
-		reverse_proxy 100.64.0.4:3100
-	}
+	reverse_proxy 100.64.0.4:3100
 }
+
+# Option B — On derp-sgr (/home/ubuntu/headscale-core/caddy/Caddyfile, public ingress):
+# Note: On derp-sgr, tailnet lives inside container:tailscale; proxy via tailscale:3100
+# (with a network_mode: service:tailscale forwarder to 100.64.0.4:3100).
+# mea.xgar.com.cn {
+# 	handle /MP_verify_*.txt {
+# 		root * /srv/mea-verify
+# 		file_server
+# 	}
+# 	handle /WW_verify_*.txt {
+# 		root * /srv/mea-verify
+# 		file_server
+# 	}
+# 	handle {
+# 		reverse_proxy tailscale:3100
+# 	}
+# }

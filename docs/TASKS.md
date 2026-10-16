@@ -20,7 +20,8 @@
 - [x] Add production `Dockerfile`, `infra/docker-compose.prod.yml`, and WeChat Service Account menu publisher (`scripts/apply-wechat-menu.sh`)
 - [x] Reuse `GQJV_Operations` agent orchestration & task-based model balancing in `CLAUDE.md`, `AGENTS.md`, `docs/agent-coordination.md`, and `/Users/flintstone/.agents/COLLABORATION.md`
 - [x] Pass all 29 unit & live E2E tests (`make migrate`, `npm test`, `npm run typecheck`, `npm run build`)
+- [x] Enforce **100% Mainland China PIPL data boundary** (removed Singapore `derp-sgr` proxy; pointed `mea.xgar.com.cn` to `100.64.0.4` with local Cloudflare DNS-01 TLS on `ubtxiaomi`; added `redactPii()` to strip all PII from WeCom alerts; added Tencent Mainland `wx.cloud` fallback in `apps/wechat-mini/miniprogram/utils/api.js`)
 
-## Next Up (External Console Cutover)
-- [ ] Configure `mea.xgar.com.cn` Caddy vhost (`infra/Caddyfile.xgar.snippet`) and add `WECOM_RELAY_TOKEN` on `derp-sgr` (`47.130.165.104`)
-- [ ] Bind WeChat Service Account + Mini Program (`wxaf3466a310a8bd07`) on WeChat Open Platform and run `scripts/apply-wechat-menu.sh`
+## Next Up (Optional External Console Cutover)
+- [ ] Add `WECOM_RELAY_TOKEN` to `/opt/stacks/musicexamaid/infra/.env.shared` on `ubtxiaomi` if anonymous WeCom push notifications are desired
+- [ ] Open `apps/wechat-mini` in WeChat DevTools to publish the dual-mode Mainland Mini Program (`wxaf3466a310a8bd07`)
