@@ -1,9 +1,10 @@
 /**
  * Registration & Teacher Review routes (backed by DomainRepository).
  *
- * - POST /registrations
- * - GET  /registrations/:id
- * - PATCH /registrations/:id/status  (Teacher review / snapshot lock + WeCom/WeChat MP notify)
+ * - GET   /registrations
+ * - POST  /registrations
+ * - GET   /registrations/:id
+ * - PATCH /registrations/:id/status  (Teacher review / 1-click lock + WeCom/WeChat MP notify)
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -12,6 +13,7 @@ import {
   canTransition,
   VALID_TRANSITIONS,
   formatWeComStatusAlert,
+  resolveSubjectName,
 } from '@musicexamaid/shared';
 import type { RegistrationStatusType } from '@musicexamaid/shared';
 import { dispatchWeComAlert } from './integrations';
@@ -44,6 +46,18 @@ function isRegistrationStatus(val: unknown): val is RegistrationStatusType {
 }
 
 export async function registrationRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/registrations', async (_req: FastifyRequest, reply: FastifyReply) => {
+    const items = app.store.listRegistrations().map(r => {
+      const learner = app.store.getLearner(r.learner_id);
+      return {
+        ...r,
+        learner_name_cn: learner?.name_cn ?? '未知学员',
+        subject_name: resolveSubjectName(r.subject_id),
+      };
+    });
+    return reply.code(200).send({ items });
+  });
+
   app.post(
     '/registrations',
     async (
@@ -63,7 +77,7 @@ export async function registrationRoutes(app: FastifyInstance): Promise<void> {
         institution_id: body.institution_id ?? null,
         cycle_id: body.cycle_id,
         subject_id: body.subject_id,
-        level: body.level,
+        level: Number(body.level),
         exam_mode: body.exam_mode ?? '现场',
         exam_site_id_optional: body.exam_site_id_optional,
         repertoire: body.repertoire ?? [],
@@ -88,6 +102,7 @@ export async function registrationRoutes(app: FastifyInstance): Promise<void> {
       }
       return reply.code(200).send({
         ...reg,
+        subject_name: resolveSubjectName(reg.subject_id),
         history: app.store.getStatusHistory(reg.id),
       });
     },

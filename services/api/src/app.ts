@@ -5,6 +5,7 @@ import { registrationRoutes } from './routes/registrations';
 import { archiveRoutes } from './routes/archives';
 import { exportRoutes } from './routes/exports';
 import { integrationRoutes } from './routes/integrations';
+import { webAppRoutes } from './routes/web-app';
 import { DomainRepository } from './store/repository';
 
 declare module 'fastify' {
@@ -31,6 +32,7 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
   app.register(archiveRoutes);
   app.register(exportRoutes);
   app.register(integrationRoutes);
+  app.register(webAppRoutes);
 
   return app;
 }

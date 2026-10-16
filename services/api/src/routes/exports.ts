@@ -1,11 +1,15 @@
 /**
- * Export job queue routes (backed by DomainRepository with Template v2.1 row preview).
+ * Export job queue & Template v2.1 Excel CSV download routes.
  *
  * - POST /exports
+ * - GET  /exports/:job_id/csv
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { formatWeComExportAlert } from '@musicexamaid/shared';
+import {
+  formatWeComExportAlert,
+  serializeExportRowsToCsv,
+} from '@musicexamaid/shared';
 import { dispatchWeComAlert } from './integrations';
 
 interface CreateExportBody {
@@ -51,10 +55,37 @@ export async function exportRoutes(app: FastifyInstance): Promise<void> {
 
       return reply.code(202).send({
         ...batch,
+        download_csv_url: `/exports/${batch.job_id}/csv`,
         notifications: {
           wecom: wecomDispatch.status,
         },
       });
+    },
+  );
+
+  app.get(
+    '/exports/:job_id/csv',
+    async (
+      req: FastifyRequest<{ Params: { job_id: string } }>,
+      reply: FastifyReply,
+    ) => {
+      const batch = app.store.getExportBatch(req.params.job_id);
+      if (!batch) {
+        return reply.code(404).send({
+          error: 'NOT_FOUND',
+          message: `Export job "${req.params.job_id}" not found`,
+        });
+      }
+
+      const csv = serializeExportRowsToCsv(batch.preview_rows);
+      return reply
+        .header('Content-Type', 'text/csv; charset=utf-8')
+        .header(
+          'Content-Disposition',
+          `attachment; filename="music_exam_export_${batch.cycle_id}_${batch.job_id}.csv"`,
+        )
+        .code(200)
+        .send(csv);
     },
   );
 }

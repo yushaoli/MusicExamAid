@@ -15,6 +15,7 @@ export {
   formatWeComStatusAlert,
   formatWeComExportAlert,
   buildServiceAccountTemplatePayload,
+  buildServiceAccountMenuConfig,
 } from './wechat-wecom';
 export type {
   WeComStatusAlertInput,
@@ -24,12 +25,16 @@ export type {
 } from './wechat-wecom';
 
 export {
+  SUBJECT_NAME_MAP,
+  resolveSubjectName,
   encryptIdNumber,
   decryptIdNumber,
   getIdLast4,
   buildRegistrationSnapshot,
   computeMissingFlags,
+  TEMPLATE_V2_1_HEADERS,
   mapSnapshotToExportRow,
+  serializeExportRowsToCsv,
 } from './snapshot-crypto';
 export type {
   SnapshotLearnerInput,

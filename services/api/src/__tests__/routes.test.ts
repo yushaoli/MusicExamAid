@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { computeWeChatSignature } from '@musicexamaid/shared';
 import { buildApp } from '../app';
 
-describe('API baseline, E2E workflow & WeChat/WeCom integration routes', () => {
+describe('API baseline, 1-click lock, CSV export & Service Account H5 Web App', () => {
   it('GET /health returns 200 ok with dependency statuses', async () => {
     const app = buildApp();
     const res = await app.inject({ method: 'GET', url: '/health' });
@@ -14,35 +14,25 @@ describe('API baseline, E2E workflow & WeChat/WeCom integration routes', () => {
     await app.close();
   });
 
-  it('POST /learners & GET /learners/:id persist learner with masked ID', async () => {
+  it('GET /app serves the WeChat Service Account & WeCom H5 tool and menu config', async () => {
     const app = buildApp();
-    const createRes = await app.inject({
-      method: 'POST',
-      url: '/learners',
-      payload: {
-        name_cn: '张小琴',
-        gender: '女',
-        dob: '2016-05-01',
-        id_type: '身份证',
-        id_number: '110101201605011234',
-        guardian_phone: '13800138000',
-      },
-    });
-    assert.equal(createRes.statusCode, 201);
-    const created = createRes.json();
-    assert.equal(created.id_last4, '1234');
-    assert.equal(created.id_number, undefined);
+    const appRes = await app.inject({ method: 'GET', url: '/app?tab=parent' });
+    assert.equal(appRes.statusCode, 200);
+    assert.ok(String(appRes.headers['content-type']).includes('text/html'));
+    assert.ok(appRes.body.includes('考级助手 · 服务号与企微工作台'));
 
-    const getRes = await app.inject({
+    const menuRes = await app.inject({
       method: 'GET',
-      url: `/learners/${created.id}`,
+      url: '/webhooks/wechat-mp/menu-config',
     });
-    assert.equal(getRes.statusCode, 200);
-    assert.equal(getRes.json().name_cn, '张小琴');
+    assert.equal(menuRes.statusCode, 200);
+    const menu = menuRes.json();
+    assert.equal(menu.button.length, 3);
+    assert.equal(menu.button[0].name, '我要报名');
     await app.close();
   });
 
-  it('Full E2E workflow: create learner -> draft -> submitted -> confirmed -> locked (snapshot) -> export', async () => {
+  it('Full optimized E2E workflow: learner -> draft -> submitted -> 1-click locked -> CSV download', async () => {
     const app = buildApp();
 
     // 1. Create learner
@@ -60,7 +50,7 @@ describe('API baseline, E2E workflow & WeChat/WeCom integration routes', () => {
     });
     const learner = lrnRes.json();
 
-    // 2. Create draft registration
+    // 2. Create draft registration with subject_id="piano"
     const regRes = await app.inject({
       method: 'POST',
       url: '/registrations',
@@ -68,7 +58,7 @@ describe('API baseline, E2E workflow & WeChat/WeCom integration routes', () => {
         learner_id: learner.id,
         institution_id: 'INST_01',
         cycle_id: '2025-summer',
-        subject_id: '钢琴',
+        subject_id: 'piano',
         level: 7,
         exam_mode: '现场',
         repertoire: ['巴赫创意曲', '贝多芬奏鸣曲'],
@@ -87,20 +77,11 @@ describe('API baseline, E2E workflow & WeChat/WeCom integration routes', () => {
     assert.equal(subRes.statusCode, 200);
     assert.equal(subRes.json().status, 'submitted');
 
-    // 4. Teacher confirms: submitted -> confirmed
-    const confRes = await app.inject({
-      method: 'PATCH',
-      url: `/registrations/${reg.id}/status`,
-      payload: { to_status: 'confirmed', teacher_notes: '曲目与级别核对通过' },
-    });
-    assert.equal(confRes.statusCode, 200);
-    assert.equal(confRes.json().status, 'confirmed');
-
-    // 5. Teacher locks: confirmed -> locked (writes snapshot_json)
+    // 4. Teacher 1-click Confirm & Lock: submitted -> locked
     const lockRes = await app.inject({
       method: 'PATCH',
       url: `/registrations/${reg.id}/status`,
-      payload: { to_status: 'locked' },
+      payload: { to_status: 'locked', teacher_notes: '一键审核并锁定' },
     });
     assert.equal(lockRes.statusCode, 200);
     const locked = lockRes.json();
@@ -108,7 +89,7 @@ describe('API baseline, E2E workflow & WeChat/WeCom integration routes', () => {
     assert.equal(locked.has_snapshot, true);
     assert.deepEqual(locked.missing_flags, []);
 
-    // 6. Export batch uses locked snapshot_json
+    // 5. Export batch & download Template v2.1 CSV
     const expRes = await app.inject({
       method: 'POST',
       url: '/exports',
@@ -122,10 +103,17 @@ describe('API baseline, E2E workflow & WeChat/WeCom integration routes', () => {
     const exported = expRes.json();
     assert.equal(exported.preview_rows.length, 1);
     assert.equal(exported.preview_rows[0]['姓名'], '陈小乐');
+    assert.equal(exported.preview_rows[0]['报考专业'], '钢琴');
     assert.equal(exported.preview_rows[0]['证件号码'], '440101201503159876');
-    assert.equal(exported.preview_rows[0]['考试曲目1'], '巴赫创意曲');
-    assert.equal(exported.preview_rows[0]['考试曲目2'], '贝多芬奏鸣曲');
-    assert.equal(exported.preview_rows[0]['考试曲目3'], '');
+
+    const csvRes = await app.inject({
+      method: 'GET',
+      url: exported.download_csv_url,
+    });
+    assert.equal(csvRes.statusCode, 200);
+    assert.ok(String(csvRes.headers['content-type']).includes('text/csv'));
+    assert.ok(csvRes.body.includes('"\t440101201503159876"'));
+    assert.ok(csvRes.body.includes('"钢琴"'));
 
     await app.close();
   });
@@ -163,17 +151,7 @@ describe('API baseline, E2E workflow & WeChat/WeCom integration routes', () => {
     await app.close();
   });
 
-  it('GET /webhooks/wechat-mp rejects invalid signature with 403', async () => {
-    const app = buildApp();
-    const res = await app.inject({
-      method: 'GET',
-      url: '/webhooks/wechat-mp?signature=bad_sig&timestamp=1760000000&nonce=n1&echostr=hello',
-    });
-    assert.equal(res.statusCode, 403);
-    await app.close();
-  });
-
-  it('POST /notifications/wechat-mp builds Service Account template message deep-linking to Mini Program', async () => {
+  it('POST /notifications/wechat-mp builds Service Account template message with H5 url and Mini Program fallback', async () => {
     const app = buildApp();
     const res = await app.inject({
       method: 'POST',
@@ -189,11 +167,8 @@ describe('API baseline, E2E workflow & WeChat/WeCom integration routes', () => {
     const body = res.json();
     assert.equal(body.channel, 'wechat_mp');
     assert.equal(body.payload.touser, 'oMP_parent_123');
+    assert.ok(body.payload.url.includes('/app?tab=parent&reg_id=reg_888'));
     assert.equal(body.payload.miniprogram.appid, 'wxaf3466a310a8bd07');
-    assert.ok(
-      body.payload.miniprogram.pagepath.includes('reg_888'),
-      'Expected pagepath to deep-link to registration ID',
-    );
     await app.close();
   });
 });

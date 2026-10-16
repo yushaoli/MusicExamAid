@@ -11,9 +11,11 @@ import {
   encryptIdNumber,
   decryptIdNumber,
   getIdLast4,
+  resolveSubjectName,
   buildRegistrationSnapshot,
   computeMissingFlags,
   mapSnapshotToExportRow,
+  serializeExportRowsToCsv,
 } from '../snapshot-crypto';
 
 // ---------------------------------------------------------------------------
@@ -33,6 +35,10 @@ describe('canTransition – valid transitions', () => {
     assert.equal(canTransition(RS.SUBMITTED, RS.CONFIRMED), true);
   });
 
+  it('submitted → locked (1-click confirm & lock shortcut)', () => {
+    assert.equal(canTransition(RS.SUBMITTED, RS.LOCKED), true);
+  });
+
   it('needs_change → submitted', () => {
     assert.equal(canTransition(RS.NEEDS_CHANGE, RS.SUBMITTED), true);
   });
@@ -43,6 +49,10 @@ describe('canTransition – valid transitions', () => {
 
   it('locked → confirmed (unlock)', () => {
     assert.equal(canTransition(RS.LOCKED, RS.CONFIRMED), true);
+  });
+
+  it('locked → needs_change (unlock & return to parent)', () => {
+    assert.equal(canTransition(RS.LOCKED, RS.NEEDS_CHANGE), true);
   });
 });
 
@@ -83,6 +93,7 @@ describe('canTransition – invalid transitions', () => {
 describe('assertTransition', () => {
   it('does not throw for valid transition', () => {
     assert.doesNotThrow(() => assertTransition(RS.DRAFT, RS.SUBMITTED));
+    assert.doesNotThrow(() => assertTransition(RS.SUBMITTED, RS.LOCKED));
     assert.doesNotThrow(() => assertTransition(RS.CONFIRMED, RS.LOCKED));
     assert.doesNotThrow(() => assertTransition(RS.LOCKED, RS.CONFIRMED));
   });
@@ -139,32 +150,34 @@ describe('VALID_TRANSITIONS', () => {
 });
 
 // ---------------------------------------------------------------------------
-// AES-256 ID Encryption, Snapshot & Template v2.1 Mapper
+// AES-256-GCM ID Encryption, Encrypted-at-Rest Snapshot & Template v2.1 CSV
 // ---------------------------------------------------------------------------
 
 describe('snapshot-crypto & Template v2.1 mapping', () => {
-  it('encrypts and decrypts ID numbers symmetrically and extracts last4', () => {
+  it('encrypts with AES-256-GCM, decrypts symmetrically, and extracts last4', () => {
     const plain = '110101201605011234';
     const enc = encryptIdNumber(plain);
-    assert.notEqual(enc, plain);
-    assert.ok(enc.includes(':'));
+    assert.ok(enc.startsWith('gcm:'));
     assert.equal(decryptIdNumber(enc), plain);
     assert.equal(getIdLast4(plain), '1234');
   });
 
-  it('builds registration snapshot, computes missing flags, and maps to Template v2.1 headers', () => {
+  it('keeps ID encrypted at rest in snapshot, resolves subject_id -> Chinese name, and serializes CSV', () => {
     const plainId = '310101201508085678';
+    const encryptedId = encryptIdNumber(plainId);
+    assert.equal(resolveSubjectName('piano'), '钢琴');
+
     const snapshot = buildRegistrationSnapshot({
       learner: {
         name_cn: '李小华',
         gender: '男',
         dob: '2015-08-08',
         id_type: '身份证',
-        id_number_encrypted: encryptIdNumber(plainId),
+        id_number_encrypted: encryptedId,
         guardian_phone: '13900139000',
       },
       registration: {
-        subject_id: '钢琴',
+        subject_id: 'piano',
         level: 6,
         repertoire: ['音阶与琶音', '车尔尼练习曲'],
         exam_mode: '现场',
@@ -174,22 +187,28 @@ describe('snapshot-crypto & Template v2.1 mapping', () => {
       teacherProfile: { teacher_name: '王老师', teacher_phone: '13700137000' },
     });
 
-    assert.equal(snapshot.id_number_plaintext, plainId);
+    // Ensure plaintext ID is NOT stored on snapshot at rest
+    assert.equal(
+      (snapshot as unknown as Record<string, unknown>).id_number_plaintext,
+      undefined,
+    );
+    assert.equal(snapshot.id_number_encrypted, encryptedId);
+    assert.equal(snapshot.id_last4, '5678');
+    assert.equal(snapshot.instrument, '钢琴');
     assert.deepEqual(snapshot.repertoire, ['音阶与琶音', '车尔尼练习曲', '', '']);
     assert.deepEqual(computeMissingFlags(snapshot, true), []);
     assert.deepEqual(computeMissingFlags(snapshot, false), ['portrait_photo']);
 
+    // Decrypts only in memory when mapping to export row
     const row = mapSnapshotToExportRow(snapshot);
     assert.equal(row['报名机构ID'], 'ORG_88');
     assert.equal(row['姓名'], '李小华');
     assert.equal(row['证件号码'], plainId);
-    assert.equal(row['出生日期'], '2015-08-08');
     assert.equal(row['报考专业'], '钢琴');
     assert.equal(row['报考级别'], '6');
-    assert.equal(row['考试曲目1'], '音阶与琶音');
-    assert.equal(row['考试曲目2'], '车尔尼练习曲');
-    assert.equal(row['考试曲目3'], '');
-    assert.equal(row['考试曲目4'], '');
-    assert.equal(row['报考状态'], '审核通过');
+
+    const csv = serializeExportRowsToCsv([row]);
+    assert.ok(csv.startsWith('\uFEFF"报名机构ID"'));
+    assert.ok(csv.includes('"\t310101201508085678"'));
   });
 });

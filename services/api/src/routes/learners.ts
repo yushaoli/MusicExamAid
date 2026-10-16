@@ -1,11 +1,13 @@
 /**
- * Learner profile routes (backed by DomainRepository with AES-256 ID encryption).
+ * Learner profile routes (backed by DomainRepository with AES-256-GCM ID encryption).
  *
+ * - GET  /learners
  * - POST /learners
- * - GET /learners/:id
+ * - GET  /learners/:id
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { StoredLearner } from '../store/repository';
 
 interface CreateLearnerBody {
   name_cn?: string;
@@ -23,7 +25,29 @@ interface CreateLearnerBody {
   has_portrait_photo?: boolean;
 }
 
+function toPublicLearner(learner: StoredLearner) {
+  return {
+    id: learner.id,
+    name_cn: learner.name_cn,
+    name_en_optional: learner.name_en_optional,
+    gender: learner.gender,
+    dob: learner.dob,
+    nationality: learner.nationality,
+    id_type: learner.id_type,
+    id_last4: learner.id_last4,
+    guardian_phone: learner.guardian_phone,
+    has_portrait_photo: learner.has_portrait_photo,
+    created_at: learner.created_at,
+    updated_at: learner.updated_at,
+  };
+}
+
 export async function learnerRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/learners', async (_req: FastifyRequest, reply: FastifyReply) => {
+    const items = app.store.listLearners().map(toPublicLearner);
+    return reply.code(200).send({ items });
+  });
+
   app.post(
     '/learners',
     async (
@@ -62,20 +86,7 @@ export async function learnerRoutes(app: FastifyInstance): Promise<void> {
         has_portrait_photo: body.has_portrait_photo,
       });
 
-      // Never return plaintext or encrypted ID to client; return id_last4 only
-      return reply.code(201).send({
-        id: learner.id,
-        name_cn: learner.name_cn,
-        name_en_optional: learner.name_en_optional,
-        gender: learner.gender,
-        dob: learner.dob,
-        nationality: learner.nationality,
-        id_type: learner.id_type,
-        id_last4: learner.id_last4,
-        guardian_phone: learner.guardian_phone,
-        has_portrait_photo: learner.has_portrait_photo,
-        created_at: learner.created_at,
-      });
+      return reply.code(201).send(toPublicLearner(learner));
     },
   );
 
@@ -93,20 +104,7 @@ export async function learnerRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      return reply.code(200).send({
-        id: learner.id,
-        name_cn: learner.name_cn,
-        name_en_optional: learner.name_en_optional,
-        gender: learner.gender,
-        dob: learner.dob,
-        nationality: learner.nationality,
-        id_type: learner.id_type,
-        id_last4: learner.id_last4,
-        guardian_phone: learner.guardian_phone,
-        has_portrait_photo: learner.has_portrait_photo,
-        created_at: learner.created_at,
-        updated_at: learner.updated_at,
-      });
+      return reply.code(200).send(toPublicLearner(learner));
     },
   );
 }

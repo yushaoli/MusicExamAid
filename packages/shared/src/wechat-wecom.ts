@@ -118,11 +118,13 @@ export interface ServiceAccountTemplateInput {
   toStatus: RegistrationStatus;
   teacherNotes?: string;
   updatedAtIso?: string;
+  baseUrl?: string;
 }
 
 export interface ServiceAccountTemplatePayload {
   touser: string;
   template_id: string;
+  url: string;
   miniprogram: {
     appid: string;
     pagepath: string;
@@ -137,21 +139,23 @@ export interface ServiceAccountTemplatePayload {
 
 /**
  * Build a standard WeChat Official/Service Account template message payload
- * that deep-links the parent directly to the Mini Program registration detail page.
+ * that links to both the Service Account H5 web app (`url`) and the Mini Program.
  */
 export function buildServiceAccountTemplatePayload(
   input: ServiceAccountTemplateInput,
 ): ServiceAccountTemplatePayload {
   const statusLabel = STATUS_LABELS_CN[input.toStatus] ?? input.toStatus;
   const dateStr = (input.updatedAtIso ?? new Date().toISOString()).slice(0, 10);
+  const base = (input.baseUrl || 'https://mea.xgar.com.cn').replace(/\/+$/, '');
   const defaultRemark =
     input.toStatus === 'needs_change'
-      ? '请点击进入小程序补充或修改报名信息后重新提交。'
-      : '点击卡片可打开「考级助手」小程序查看详情。';
+      ? '请点击进入修改报名信息后重新提交。'
+      : '点击卡片可查看考级报名详情。';
 
   return {
     touser: input.mpOpenId,
     template_id: input.templateId,
+    url: `${base}/app?tab=parent&reg_id=${encodeURIComponent(input.registrationId)}`,
     miniprogram: {
       appid: input.miniProgramAppId,
       pagepath: `pages/registration/detail/detail?id=${encodeURIComponent(input.registrationId)}`,
@@ -168,3 +172,31 @@ export function buildServiceAccountTemplatePayload(
     },
   };
 }
+
+/**
+ * Build the WeChat Service Account custom menu (`cgi-bin/menu/create`) JSON
+ * mounting the MusicExamAid H5 tool on `mea.xgar.com.cn`.
+ */
+export function buildServiceAccountMenuConfig(baseUrl = 'https://mea.xgar.com.cn') {
+  const base = baseUrl.replace(/\/+$/, '');
+  return {
+    button: [
+      {
+        type: 'view',
+        name: '我要报名',
+        url: `${base}/app?tab=parent`,
+      },
+      {
+        type: 'view',
+        name: '考级档案',
+        url: `${base}/app?tab=archive`,
+      },
+      {
+        type: 'view',
+        name: '老师工作台',
+        url: `${base}/app?tab=console`,
+      },
+    ],
+  };
+}
+

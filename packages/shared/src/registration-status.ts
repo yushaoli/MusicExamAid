@@ -1,5 +1,5 @@
 /**
- * Registration workflow state machine.
+ * Registration workflow state machine (optimized for WeChat Service Account & WeCom).
  *
  * States
  * ------
@@ -7,16 +7,18 @@
  *   submitted    – parent submitted for teacher review
  *   needs_change – teacher requested corrections; parent can re-edit
  *   confirmed    – teacher approved the submission
- *   locked       – teacher locked the record for institution handoff
+ *   locked       – teacher locked the record for institution handoff (snapshot written)
  *
  * Allowed transitions
  * -------------------
  *   draft        → submitted       (parent submits)
  *   submitted    → needs_change    (teacher requests changes)
  *   submitted    → confirmed       (teacher confirms)
+ *   submitted    → locked          (1-click teacher confirm + lock shortcut)
  *   needs_change → submitted       (parent resubmits after fixing)
  *   confirmed    → locked          (teacher locks)
  *   locked       → confirmed       (teacher unlocks for correction)
+ *   locked       → needs_change    (teacher unlocks and returns directly to parent)
  */
 
 // ---------------------------------------------------------------------------
@@ -45,10 +47,17 @@ export const VALID_TRANSITIONS: Readonly<
   [RegistrationStatus.SUBMITTED]: [
     RegistrationStatus.NEEDS_CHANGE,
     RegistrationStatus.CONFIRMED,
+    RegistrationStatus.LOCKED,
   ],
   [RegistrationStatus.NEEDS_CHANGE]: [RegistrationStatus.SUBMITTED],
-  [RegistrationStatus.CONFIRMED]: [RegistrationStatus.LOCKED],
-  [RegistrationStatus.LOCKED]: [RegistrationStatus.CONFIRMED],
+  [RegistrationStatus.CONFIRMED]: [
+    RegistrationStatus.LOCKED,
+    RegistrationStatus.NEEDS_CHANGE,
+  ],
+  [RegistrationStatus.LOCKED]: [
+    RegistrationStatus.CONFIRMED,
+    RegistrationStatus.NEEDS_CHANGE,
+  ],
 };
 
 // ---------------------------------------------------------------------------

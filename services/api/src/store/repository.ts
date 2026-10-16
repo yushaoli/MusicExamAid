@@ -144,6 +144,10 @@ export class DomainRepository {
     return this.learners.get(id);
   }
 
+  listLearners(): StoredLearner[] {
+    return Array.from(this.learners.values());
+  }
+
   createRegistration(input: {
     id?: string;
     learner_id: string;
@@ -189,6 +193,10 @@ export class DomainRepository {
 
   getRegistration(id: string): StoredRegistration | undefined {
     return this.registrations.get(id);
+  }
+
+  listRegistrations(): StoredRegistration[] {
+    return Array.from(this.registrations.values());
   }
 
   getStatusHistory(registrationId: string): StoredStatusHistory[] {
@@ -295,6 +303,10 @@ export class DomainRepository {
     return record;
   }
 
+  listArchives(): StoredArchive[] {
+    return Array.from(this.archives.values());
+  }
+
   createExportBatch(input: {
     cycle_id: string;
     institution_id?: string | null;
@@ -325,5 +337,9 @@ export class DomainRepository {
     };
     this.exportBatches.set(jobId, batch);
     return batch;
+  }
+
+  getExportBatch(jobId: string): StoredExportBatch | undefined {
+    return this.exportBatches.get(jobId);
   }
 }
