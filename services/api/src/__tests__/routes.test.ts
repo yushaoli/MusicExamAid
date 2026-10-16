@@ -480,6 +480,123 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
 
     await app.close();
   });
+
+  it('Official portal (kjzx002120) QR auth parser & cross-channel consolidation merges official_only, matched_both, helper_only, and accrues teacher concessions', async () => {
+    const app = buildApp();
+
+    // 1. Parse official login page HTML structure from kjzx002120.kj5.zgyyxykj.com/admins
+    const qrRes = await app.inject({
+      method: 'POST',
+      url: '/official-sync/qr-session',
+      payload: {
+        mock_php_sess_id: '199fc2mblsffjmuc569dpopi9h',
+        mock_html: `
+          <div class="qr-lg-title">江西小戈尔文化艺术有限公司考级办管理后台</div>
+          <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAA==" alt="">
+          <script>interV = get_wxauth_status('w06xSJ3ovW', function() {});</script>
+        `,
+      },
+    });
+    assert.equal(qrRes.statusCode, 200);
+    assert.equal(qrRes.json().php_sess_id, '199fc2mblsffjmuc569dpopi9h');
+    assert.equal(qrRes.json().wxauth_token, 'w06xSJ3ovW');
+    assert.equal(qrRes.json().portal_title, '江西小戈尔文化艺术有限公司考级办管理后台');
+
+    // 2. Seed two helper registrations:
+    //    - Student A (陈小乐, last4 9876, Piano Grade 5) -> helper_only
+    //    - Student B (林小音, last4 6666, Piano Grade 5) -> will also appear in official portal (matched_both)
+    const lrnA = await app.inject({
+      method: 'POST',
+      url: '/learners',
+      payload: {
+        name_cn: '陈小乐',
+        gender: '女',
+        dob: '2016-03-15',
+        id_type: '身份证',
+        id_number: '440101201603159876',
+        guardian_phone: '13800138001',
+      },
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/registrations',
+      payload: {
+        learner_id: lrnA.json().id,
+        cycle_id: '2025-summer',
+        subject_id: 'piano',
+        level: 5,
+      },
+    });
+
+    const lrnB = await app.inject({
+      method: 'POST',
+      url: '/learners',
+      payload: {
+        name_cn: '林小音',
+        gender: '女',
+        dob: '2017-04-12',
+        id_type: '身份证',
+        id_number: '310101201704126666',
+        guardian_phone: '13800138002',
+      },
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/registrations',
+      payload: {
+        learner_id: lrnB.json().id,
+        cycle_id: '2025-summer',
+        subject_id: 'piano',
+        level: 5,
+      },
+    });
+
+    // 3. Consolidate with official website registrations:
+    //    - 林小音 (same Piano Grade 5 -> matched_both)
+    //    - 王小羽 (registered directly on kjzx002120, Violin Grade 8 under tch_zhang -> official_only, auto-ingested + accrues ¥70 concession)
+    const consRes = await app.inject({
+      method: 'POST',
+      url: '/official-sync/consolidate',
+      payload: {
+        cycle_id: '2025-summer',
+        official_registrations: [
+          {
+            official_id: 'kjzx_2001',
+            name_cn: '林小音',
+            id_number: '310101201704126666',
+            subject_id: 'piano',
+            level: 5,
+            teacher_id: 'tch_zhang',
+          },
+          {
+            official_id: 'kjzx_2002',
+            name_cn: '王小羽',
+            id_number: '360101201508083333',
+            subject_id: 'violin',
+            level: 8,
+            teacher_id: 'tch_zhang',
+          },
+        ],
+      },
+    });
+    assert.equal(consRes.statusCode, 200);
+    const report = consRes.json();
+    assert.equal(report.total_unique_students, 3);
+    assert.equal(report.helper_only_count, 1);
+    assert.equal(report.matched_both_count, 1);
+    assert.equal(report.official_only_count, 1);
+    assert.equal(report.ingested_official_registration_ids.length, 1);
+
+    // Verify that 王小羽 (official_only) automatically accrued Grade 8 concession (¥70 = 7000 fen) for tch_zhang
+    const walletRes = await app.inject({
+      method: 'GET',
+      url: '/concessions/wallet?teacher_id=tch_zhang',
+    });
+    assert.equal(walletRes.json().summary.accrued_fen, 7000);
+
+    await app.close();
+  });
 });
+
 
 

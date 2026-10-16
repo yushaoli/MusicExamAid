@@ -8,6 +8,7 @@ import { integrationRoutes } from './routes/integrations';
 import { webAppRoutes } from './routes/web-app';
 import { rpcRoutes } from './routes/rpc';
 import { paymentConcessionRoutes } from './routes/payments-concessions';
+import { officialSyncRoutes } from './routes/official-sync';
 import { DomainRepository } from './store/repository';
 
 declare module 'fastify' {
@@ -37,7 +38,9 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
   app.register(webAppRoutes);
   app.register(rpcRoutes);
   app.register(paymentConcessionRoutes);
+  app.register(officialSyncRoutes);
 
   return app;
 }
+
 

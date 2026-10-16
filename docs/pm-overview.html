@@ -301,7 +301,8 @@
     <button class="tab-btn" onclick="switchTab('arch', this)">2. 服务器与网络架构 (xgar.com.cn Topology)</button>
     <button class="tab-btn" onclick="switchTab('data', this)">3. 数据安全与状态机 (Encryption & Dedup)</button>
     <button class="tab-btn" onclick="switchTab('concessions', this)">4. 💰 微信支付与老师返佣提现 (Concessions)</button>
-    <button class="tab-btn" onclick="switchTab('status', this)">5. PM 进度与上线清单 (Milestone & Cutover)</button>
+    <button class="tab-btn" onclick="switchTab('officialsync', this)">5. 🔄 官网 (kjzx002120) 自动同步与双端合并</button>
+    <button class="tab-btn" onclick="switchTab('status', this)">6. PM 进度与上线清单 (Milestone & Cutover)</button>
   </nav>
 
   <main>
@@ -675,6 +676,114 @@
             </tr>
           </thead>
           <tbody id="sim-wd-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 6: OFFICIAL PORTAL (kjzx002120.kj5.zgyyxykj.com/admins) SYNC & CONSOLIDATION -->
+    <section id="tab-officialsync" class="panel">
+      <div class="card">
+        <h2>🔄 官方考级办后台 (`https://kjzx002120.kj5.zgyyxykj.com/admins`) 登录自动化与双端合并原理</h2>
+        <p class="sub">
+          我们对官方后台 <strong>「江西小戈尔文化艺术有限公司考级办管理后台」</strong> 的底层页面与登录接口进行了逆向分析，发现其存在两条登录链路，其中<strong>「微信扫码登录接口 (`wxauth`)」完全绕过了旋转图片验证码 (`capt.zgyyxykj.com`)</strong>，最适合做自动化会话桥接与双端报名合并：
+        </p>
+
+        <div class="arch-zones">
+          <div class="zone">
+            <div class="zone-header">
+              <span>🔑 方式 A：官方微信扫码会话桥接 (零验证码 · 推荐)</span>
+              <span class="badge-done">POST /official-sync/qr-session</span>
+            </div>
+            <div class="node-box green">
+              <strong>1. 自动抓取官方登录二维码与 <code>PHPSESSID</code></strong><br>
+              • 后端请求 <code>GET https://kjzx002120.kj5.zgyyxykj.com/admins</code><br>
+              • 自动提取 Cookie <code>PHPSESSID</code>、10位令牌 <code>wxauth_token</code> 与内嵌 Base64 二维码图片
+            </div>
+            <div class="node-box">
+              <strong>2. 手机微信扫一下 → 自动接管后台 Cookie</strong><br>
+              • 后端轮询 <code>POST /admins/index/get_wxauth_status?token=...</code><br>
+              • 扫码确认 (<code>scan_status == 4</code>) 后自动调用 <code>/admins/index/wxauth_confirm</code>，<strong>无需识别任何旋转验证码即可获得完整后台会话 (`/admins/manage?is_agent=0`)！</strong>
+            </div>
+          </div>
+
+          <div class="zone">
+            <div class="zone-header">
+              <span>🔐 方式 B：账密 + 旋转验证码辅助 (`SparkMD5`)</span>
+              <span class="badge-next">备用通道</span>
+            </div>
+            <div class="node-box amber">
+              <strong>为什么纯脚本账密登录会被拦？</strong><br>
+              • 官方账密登录 (`POST /admins/index/pwd_login`) 会先对密码做 <code>SparkMD5.hash(pwd.replace(/！/g,'!'))</code>，并强制弹出 <code>capt.zgyyxykj.com/captcha/rotate</code>（旋转图片角度验证码）。
+            </div>
+            <div class="node-box">
+              <strong>解决方案：一次扫码/人工滑块，全天复用 <code>PHPSESSID</code></strong><br>
+              • 在我方教务台内嵌扫码框（或 1 秒人工完成一次旋转验证码），<code>ubtxiaomi</code> 即可持续复用该 <code>PHPSESSID</code> 自动拉取官网报名列表与上传增量包。
+            </div>
+          </div>
+
+          <div class="zone">
+            <div class="zone-header">
+              <span>⚖️ 双端报名自动合并对账引擎</span>
+              <span class="badge-done">POST /official-sync/consolidate</span>
+            </div>
+            <div class="node-box purple">
+              <strong>按 <code>(考期 + 科目 + 姓名 + 证件号后4位)</code> 自动归类 4 种状态：</strong><br>
+              • 🔵 <strong>仅官网直报 (<code>official_only</code>)：</strong> 自动补录进本地总库，并<strong>自动按该学生指导老师的「老师×级别」协议价累计老师返佣！</strong><br>
+              • 🟡 <strong>仅助手填报 (<code>helper_only</code>)：</strong> 一键筛选出来导出 25 列标准包上传至官网。<br>
+              • 🟢 <strong>双端已对齐 (<code>matched_both</code>)：</strong> 自动去重合并，绝不重复计算人数或重复发返佣。<br>
+              • 🔴 <strong>级别冲突 (<code>conflict_grade</code>)：</strong> 如官网报 6 级、助手报 5 级，高亮拦截提醒教务核实。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📋 双端合并对账效果一览（`POST /official-sync/consolidate` 实测结果）</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>考生姓名 / 证件尾号</th>
+              <th>报考科目</th>
+              <th>我方助手 (`MusicExamAid`)</th>
+              <th>官方后台 (`kjzx002120`)</th>
+              <th>自动对账分类</th>
+              <th>系统自动执行动作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>陈小乐</strong> (<code>*9876</code>)</td>
+              <td>钢琴</td>
+              <td>5级 (张老师)</td>
+              <td>— (未在官网直报)</td>
+              <td><span class="badge-next">🟡 helper_only (仅助手填报)</span></td>
+              <td>归入「待上传官网增量包 (`bundle.zip`)」，一键导入考级办后台</td>
+            </tr>
+            <tr>
+              <td><strong>林小音</strong> (<code>*6666</code>)</td>
+              <td>钢琴</td>
+              <td>5级 (张老师)</td>
+              <td>5级 (`kjzx_2001`, 张老师)</td>
+              <td><span class="badge-done">🟢 matched_both (双端重合)</span></td>
+              <td><strong>自动合并去重！</strong>仅保留 1 条有效记录，防止重复导出或重复结算返佣</td>
+            </tr>
+            <tr>
+              <td><strong>王小羽</strong> (<code>*3333</code>)</td>
+              <td>小提琴</td>
+              <td>— (未经过助手)</td>
+              <td>8级 (`kjzx_2002`, 张老师)</td>
+              <td><span class="badge-done">🔵 official_only (仅官网直报)</span></td>
+              <td><strong>自动同步入库 (`locked`) + 自动按张老师 8 级标准累计待确认返佣！</strong></td>
+            </tr>
+            <tr>
+              <td><strong>孙小朗</strong> (<code>*1122</code>)</td>
+              <td>古筝</td>
+              <td>6级 (李老师)</td>
+              <td>7级 (`kjzx_2003`, 李老师)</td>
+              <td><span class="badge-next" style="color:#f87171">🔴 conflict_grade (级别冲突)</span></td>
+              <td>拦截并提示：<code>助手填报 6级 vs 官网直报 7级</code>，待教务确认后统一</td>
+            </tr>
+          </tbody>
         </table>
       </div>
     </section>

@@ -81,4 +81,19 @@ export type {
   TeacherWalletSummary,
 } from './concession-ledger';
 
+export {
+  OFFICIAL_PORTAL_BASE_URL,
+  parseOfficialAdminLoginHtml,
+  buildStudentIdentityKey,
+  consolidateOfficialAndHelperRegistrations,
+} from './official-sync';
+export type {
+  OfficialPortalQrSession,
+  ChannelRegistrationInput,
+  ConsolidationCategory,
+  ConsolidatedStudentItem,
+  ConsolidationReport,
+} from './official-sync';
+
+
 
