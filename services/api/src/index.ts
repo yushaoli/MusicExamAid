@@ -1,7 +1,6 @@
 import path from 'path';
-import Fastify from 'fastify';
 import { loadConfig } from '@musicexamaid/shared';
-import { healthRoutes } from './routes/health';
+import { buildApp } from './app';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -23,13 +22,11 @@ try {
 // App
 // ---------------------------------------------------------------------------
 
-const app = Fastify({
+const app = buildApp({
   logger: {
     level: cfg.NODE_ENV === 'production' ? 'info' : 'debug',
   },
 });
-
-app.register(healthRoutes);
 
 // ---------------------------------------------------------------------------
 // Start

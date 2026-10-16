@@ -7,6 +7,14 @@ import {
   canTransition,
   assertTransition,
 } from '../registration-status';
+import {
+  encryptIdNumber,
+  decryptIdNumber,
+  getIdLast4,
+  buildRegistrationSnapshot,
+  computeMissingFlags,
+  mapSnapshotToExportRow,
+} from '../snapshot-crypto';
 
 // ---------------------------------------------------------------------------
 // canTransition – valid transitions
@@ -127,5 +135,61 @@ describe('VALID_TRANSITIONS', () => {
         );
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AES-256 ID Encryption, Snapshot & Template v2.1 Mapper
+// ---------------------------------------------------------------------------
+
+describe('snapshot-crypto & Template v2.1 mapping', () => {
+  it('encrypts and decrypts ID numbers symmetrically and extracts last4', () => {
+    const plain = '110101201605011234';
+    const enc = encryptIdNumber(plain);
+    assert.notEqual(enc, plain);
+    assert.ok(enc.includes(':'));
+    assert.equal(decryptIdNumber(enc), plain);
+    assert.equal(getIdLast4(plain), '1234');
+  });
+
+  it('builds registration snapshot, computes missing flags, and maps to Template v2.1 headers', () => {
+    const plainId = '310101201508085678';
+    const snapshot = buildRegistrationSnapshot({
+      learner: {
+        name_cn: '李小华',
+        gender: '男',
+        dob: '2015-08-08',
+        id_type: '身份证',
+        id_number_encrypted: encryptIdNumber(plainId),
+        guardian_phone: '13900139000',
+      },
+      registration: {
+        subject_id: '钢琴',
+        level: 6,
+        repertoire: ['音阶与琶音', '车尔尼练习曲'],
+        exam_mode: '现场',
+        cycle_id: '2025-summer',
+      },
+      institution: { legacy_org_id: 'ORG_88' },
+      teacherProfile: { teacher_name: '王老师', teacher_phone: '13700137000' },
+    });
+
+    assert.equal(snapshot.id_number_plaintext, plainId);
+    assert.deepEqual(snapshot.repertoire, ['音阶与琶音', '车尔尼练习曲', '', '']);
+    assert.deepEqual(computeMissingFlags(snapshot, true), []);
+    assert.deepEqual(computeMissingFlags(snapshot, false), ['portrait_photo']);
+
+    const row = mapSnapshotToExportRow(snapshot);
+    assert.equal(row['报名机构ID'], 'ORG_88');
+    assert.equal(row['姓名'], '李小华');
+    assert.equal(row['证件号码'], plainId);
+    assert.equal(row['出生日期'], '2015-08-08');
+    assert.equal(row['报考专业'], '钢琴');
+    assert.equal(row['报考级别'], '6');
+    assert.equal(row['考试曲目1'], '音阶与琶音');
+    assert.equal(row['考试曲目2'], '车尔尼练习曲');
+    assert.equal(row['考试曲目3'], '');
+    assert.equal(row['考试曲目4'], '');
+    assert.equal(row['报考状态'], '审核通过');
   });
 });

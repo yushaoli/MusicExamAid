@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "build": "npm run build -w @musicexamaid/shared && npm run build -w @musicexamaid/api",
-    "test": "npm test -w @musicexamaid/shared",
+    "test": "npm test -w @musicexamaid/shared && npm test -w @musicexamaid/api",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "check-shared": "./scripts/check-shared.sh"
   }

@@ -1,0 +1,141 @@
+openapi: 3.0.3
+info:
+  title: Music Exam Aid - MVP API
+  version: "2.2.1"
+  description: Baseline OpenAPI specification for the MusicExamAid Fastify API.
+servers:
+  - url: http://localhost:3000
+paths:
+  /health:
+    get:
+      summary: Service health and dependency status check
+      responses:
+        "200":
+          description: Service health status
+  /learners:
+    post:
+      summary: Create learner profile with masked ID response
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name_cn, gender, dob, id_type, id_number, guardian_phone]
+              properties:
+                name_cn: { type: string }
+                gender: { type: string, enum: [男, 女] }
+                dob: { type: string, format: date }
+                id_type: { type: string }
+                id_number: { type: string }
+                guardian_phone: { type: string }
+      responses:
+        "201":
+          description: Learner created
+  /learners/{id}:
+    get:
+      summary: Get learner profile (masked ID)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Learner profile
+  /registrations:
+    post:
+      summary: Create draft registration record for an exam cycle
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [learner_id, cycle_id, subject_id, level]
+              properties:
+                learner_id: { type: string }
+                institution_id: { type: string }
+                cycle_id: { type: string }
+                subject_id: { type: string }
+                level: { type: integer }
+                exam_mode: { type: string, enum: [现场, 视频, 音基] }
+                repertoire:
+                  type: array
+                  items: { type: string }
+      responses:
+        "201":
+          description: Draft registration created
+  /registrations/{id}/status:
+    patch:
+      summary: Transition registration status (submit / teacher review / confirm / lock)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to_status]
+              properties:
+                from_status:
+                  type: string
+                  enum: [draft, submitted, needs_change, confirmed, locked]
+                to_status:
+                  type: string
+                  enum: [draft, submitted, needs_change, confirmed, locked]
+                teacher_notes:
+                  type: string
+      responses:
+        "200":
+          description: Registration status updated
+        "409":
+          description: Invalid status transition
+  /archives:
+    post:
+      summary: Save exam result/certificate record to learner archive
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Archive record created
+  /exports:
+    post:
+      summary: Queue an Excel export job for a batch of locked registrations
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cycle_id, registration_ids]
+              properties:
+                cycle_id: { type: string }
+                institution_id: { type: string }
+                batch_type: { type: string, enum: [institution, super] }
+                registration_ids:
+                  type: array
+                  items: { type: string }
+      responses:
+        "202":
+          description: Export job queued
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

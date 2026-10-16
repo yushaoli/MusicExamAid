@@ -31,6 +31,35 @@ const ConfigSchema = z.object({
     .enum(['development', 'test', 'production'])
     .optional()
     .default('development'),
+
+  // xgar.com.cn public endpoint
+  PUBLIC_BASE_URL: z
+    .string()
+    .url('PUBLIC_BASE_URL must be a valid URL')
+    .optional()
+    .default('https://mea.xgar.com.cn'),
+
+  // WeChat Mini Program
+  WECHAT_MINI_APPID: z.string().optional().default('wxaf3466a310a8bd07'),
+  WECHAT_MINI_SECRET: z.string().optional().default(''),
+
+  // WeChat Service Account (服务号 / 公众号)
+  WECHAT_MP_APPID: z.string().optional().default(''),
+  WECHAT_MP_SECRET: z.string().optional().default(''),
+  WECHAT_MP_TOKEN: z.string().optional().default(''),
+  WECHAT_MP_ENCODING_AES_KEY: z.string().optional().default(''),
+  WECHAT_MP_REVIEW_TEMPLATE_ID: z.string().optional().default(''),
+
+  // WeCom (企业微信)
+  WECOM_CORPID: z.string().optional().default('wwdf0a37a3059d0f1c'),
+  WECOM_AGENTID: z.string().optional().default('1000004'),
+  WECOM_SECRET: z.string().optional().default(''),
+  WECOM_RELAY_URL: z
+    .string()
+    .url('WECOM_RELAY_URL must be a valid URL')
+    .optional()
+    .default('https://wecom.xgar.com.cn/send'),
+  WECOM_RELAY_TOKEN: z.string().optional().default(''),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
