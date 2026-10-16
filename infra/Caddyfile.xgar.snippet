@@ -1,14 +1,15 @@
 # Caddyfile vhost snippet for MusicExamAid on xgar.com.cn
 #
-# Target deployment options:
-# 1. On ubtxiaomi (100.64.0.4) via caddy-cloudflare (Cloudflare DNS-01 TLS):
-#    Serves https://mea.xgar.com.cn -> MusicExamAid API container/host (:3000)
-# 2. On derp-sgr (47.130.165.104 / 100.64.0.1) via Caddy over tailnet -> 100.64.0.4:3000
-#    (recommended if public ingress without Cloudflare Tunnel is required for WeChat callbacks)
+# Target deployment locations (from homeClusterInfra/shared/templates/wecom-alerts/README.md):
+# - Public Ingress (derp-sgr / 47.130.165.104): /home/ubuntu/headscale-core/caddy/Caddyfile
+# - App Host (ubtxiaomi / 100.64.0.4): musicexamaid-api container on :3100 (homepage uses :3000)
+# - WeCom Relay env (derp-sgr): /home/ubuntu/headscale-core/kuma-wecom-relay.env (RELAY_TOKEN)
 #
 # Exposed routes:
+# - /app                    -> WeChat Service Account & WeCom H5 Web Tool (?tab=parent|archive|console)
+# - /rpc/*                  -> Zero-rewrite WeChat Mini Program RPC bridge
 # - /health                 -> API health + Uptime Kuma monitor
-# - /webhooks/wechat-mp     -> WeChat Service Account (服务号) server callback
+# - /webhooks/wechat-mp*    -> WeChat Service Account (服务号) server callback & menu config
 # - /webhooks/wecom         -> WeCom (企业微信) app callback
 # - /learners, /registrations, /archives, /exports, /notifications/* -> REST API
 # - /MP_verify_*.txt, /WW_verify_*.txt -> Static domain verification files
@@ -25,6 +26,6 @@ mea.xgar.com.cn {
 	}
 
 	handle {
-		reverse_proxy 100.64.0.4:3000
+		reverse_proxy 100.64.0.4:3100
 	}
 }
