@@ -19,6 +19,7 @@ import {
   normalizeLevelKey,
   resolveTeacherGradeRate,
   summarizeTeacherWallet,
+  calculateCheckoutWithAddons,
 } from '@musicexamaid/shared';
 import type {
   RegistrationStatusType,
@@ -29,6 +30,7 @@ import type {
   ConcessionLedgerRecord,
   TeacherWithdrawalRecord,
   TeacherWalletSummary,
+  CheckoutAddonBreakdown,
 } from '@musicexamaid/shared';
 
 export interface StoredLearner {
@@ -356,15 +358,25 @@ export class DomainRepository {
     return reg;
   }
 
+  listTeacherGradeRateCards(): TeacherGradeRateCard[] {
+    return Array.from(this.teacherGradeRateCards.values());
+  }
+
   /**
    * Create and mark a WeChat Pay order paid for a registration.
-   * Both exam fee and teacher concession are resolved by `(teacher_id, level)`.
+   * Both exam fee and teacher concession are resolved by `(teacher_id, level)`,
+   * plus optional value-added checkout add-ons (`addon_ids`).
    */
   payRegistrationOrder(input: {
     registration_id: string;
     teacher_id?: string;
+    addon_ids?: string[];
     wx_transaction_id?: string;
-  }): { order: PaymentOrderRecord; concession?: ConcessionLedgerRecord } {
+  }): {
+    order: PaymentOrderRecord;
+    addon_breakdown: CheckoutAddonBreakdown;
+    concession?: ConcessionLedgerRecord;
+  } {
     const now = new Date().toISOString();
     const reg = this.registrations.get(input.registration_id);
     const levelStr = String(reg?.level ?? 5);
@@ -379,6 +391,12 @@ export class DomainRepository {
       Array.from(this.teacherGradeRateCards.values()),
     );
 
+    const breakdown = calculateCheckoutWithAddons(
+      rate.feeFen,
+      rate.defaultConcessionFen,
+      input.addon_ids ?? [],
+    );
+
     const existingOrder = Array.from(this.paymentOrders.values()).find(
       o => o.registration_id === input.registration_id,
     );
@@ -388,7 +406,10 @@ export class DomainRepository {
           ...existingOrder,
           teacher_id: teacherId,
           level: rate.level,
-          amount_fen: rate.feeFen,
+          amount_fen: breakdown.total_payable_fen,
+          addon_ids: breakdown.selected_addons.map(a => a.id),
+          addons_fee_fen: breakdown.addons_fee_fen,
+          addons_teacher_bonus_fen: breakdown.addons_teacher_bonus_fen,
           rate_source: rate.source,
           status: 'paid',
           wx_transaction_id: input.wx_transaction_id || existingOrder.wx_transaction_id || `wx_tx_${crypto.randomUUID().slice(0, 12)}`,
@@ -401,7 +422,10 @@ export class DomainRepository {
           learner_id: reg?.learner_id || 'lrn_stub',
           teacher_id: teacherId,
           level: rate.level,
-          amount_fen: rate.feeFen,
+          amount_fen: breakdown.total_payable_fen,
+          addon_ids: breakdown.selected_addons.map(a => a.id),
+          addons_fee_fen: breakdown.addons_fee_fen,
+          addons_teacher_bonus_fen: breakdown.addons_teacher_bonus_fen,
           rate_source: rate.source,
           status: 'paid',
           wx_transaction_id: input.wx_transaction_id || `wx_tx_${crypto.randomUUID().slice(0, 12)}`,
@@ -416,12 +440,12 @@ export class DomainRepository {
     if (reg?.status === RegistrationStatus.LOCKED) {
       concession = this.ensureConcessionAccrued(input.registration_id);
     }
-    return { order, concession };
+    return { order, addon_breakdown: breakdown, concession };
   }
 
   /**
    * Ensure a teacher concession ledger item is accrued once a registration is LOCKED.
-   * Uses the `(teacher_id, level)` rate card so each teacher gets their specific grade rate.
+   * Uses the `(teacher_id, level)` rate card plus any teacher revenue share from value-added add-ons.
    */
   ensureConcessionAccrued(registrationId: string): ConcessionLedgerRecord | undefined {
     const reg = this.registrations.get(registrationId);
@@ -445,6 +469,14 @@ export class DomainRepository {
       Array.from(this.teacherGradeRateCards.values()),
     );
 
+    const addonBonusFen = paidOrder?.addons_teacher_bonus_fen ?? 0;
+    const totalDefaultConcessionFen = rate.defaultConcessionFen + addonBonusFen;
+    const noteParts: string[] = [];
+    if (rate.note) noteParts.push(rate.note);
+    if (addonBonusFen > 0 && paidOrder?.addon_ids?.length) {
+      noteParts.push(`含增值包分成 +¥${(addonBonusFen / 100).toFixed(2)} (${paidOrder.addon_ids.join(',')})`);
+    }
+
     const record: ConcessionLedgerRecord = {
       id: existing?.id || `cns_${crypto.randomUUID()}`,
       teacher_id: teacherId,
@@ -453,10 +485,10 @@ export class DomainRepository {
       subject_id: reg.subject_id,
       level: rate.level,
       exam_fee_fen: paidOrder?.amount_fen ?? rate.feeFen,
-      default_amount_fen: rate.defaultConcessionFen,
-      adjusted_amount_fen: rate.defaultConcessionFen,
+      default_amount_fen: totalDefaultConcessionFen,
+      adjusted_amount_fen: totalDefaultConcessionFen,
       rate_source: rate.source,
-      adjustment_note: rate.note,
+      adjustment_note: noteParts.length > 0 ? noteParts.join(' | ') : undefined,
       status: 'accrued',
       created_at: existing?.created_at || now,
       updated_at: now,

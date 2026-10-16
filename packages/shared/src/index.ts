@@ -95,5 +95,18 @@ export type {
   ConsolidationReport,
 } from './official-sync';
 
-
-
+export {
+  VALUE_ADDED_CATALOG,
+  calculateCheckoutWithAddons,
+  validateAndPolishExamIdPhoto,
+  evaluateHistoricalUpgradeRadar,
+} from './value-added';
+export type {
+  ValueAddedAddonId,
+  ValueAddedAddonSpec,
+  CheckoutAddonBreakdown,
+  ExamIdPhotoPolishResult,
+  HistoricalStudentRecord,
+  UpgradeRadarCandidate,
+  UpgradeRadarReport,
+} from './value-added';

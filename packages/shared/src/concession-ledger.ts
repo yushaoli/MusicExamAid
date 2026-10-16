@@ -131,6 +131,9 @@ export interface PaymentOrderRecord {
   teacher_id: string;
   level: string;
   amount_fen: number;
+  addon_ids?: string[];
+  addons_fee_fen?: number;
+  addons_teacher_bonus_fen?: number;
   rate_source: 'teacher_custom' | 'default_schedule';
   status: PaymentOrderStatus;
   wx_transaction_id?: string;

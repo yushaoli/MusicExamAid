@@ -596,7 +596,148 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
 
     await app.close();
   });
+
+  it('Value-added checkout order bumps (AI ID photo + Mock video review) & multi-year historical student upgrade radar', async () => {
+    const app = buildApp();
+
+    // 1. Fetch Value-Added Catalog
+    const catRes = await app.inject({
+      method: 'GET',
+      url: '/value-added/catalog',
+    });
+    assert.equal(catRes.statusCode, 200);
+    assert.equal(catRes.json().items.length, 5);
+
+    // 2. AI 2-Inch Standard Exam ID Photo Polish
+    const photoRes = await app.inject({
+      method: 'POST',
+      url: '/value-added/id-photo-polish',
+      payload: {
+        name_cn: '陈小乐',
+        id_number_or_last4: '440101201603159876',
+        backdrop_color: 'blue',
+      },
+    });
+    assert.equal(photoRes.statusCode, 200);
+    assert.equal(photoRes.json().compliant, true);
+    assert.equal(photoRes.json().official_filename, '440101201603159876_陈小乐.jpg');
+
+    // 3. Configure custom Grade 6 rate card for Teacher Zhang (Fee ¥460 = 46000 fen, Concession ¥85 = 8500 fen)
+    await app.inject({
+      method: 'PUT',
+      url: '/concessions/rate-cards',
+      payload: {
+        teacher_id: 'tch_zhang',
+        level: 6,
+        exam_fee_fen: 46000,
+        concession_fen: 8500,
+        note: '资深合伙 6级专属价',
+      },
+    });
+
+    // 4. Create student + Grade 6 registration and pay with 2 Order Bumps:
+    //    - ai_id_photo (+¥9.90 = 990 fen, teacher share ¥0)
+    //    - mock_video_review (+¥49.00 = 4900 fen, teacher share +¥24.00 = 2400 fen)
+    //    Expected Total Paid: 46000 + 990 + 4900 = 51890 fen (¥518.90)
+    //    Expected Teacher Concession when locked: 8500 + 2400 = 10900 fen (¥109.00)
+    const lrn = await app.inject({
+      method: 'POST',
+      url: '/learners',
+      payload: {
+        name_cn: '周星辰',
+        gender: '男',
+        dob: '2016-09-01',
+        id_type: '身份证',
+        id_number: '360101201609017788',
+        guardian_phone: '13900139000',
+      },
+    });
+    const reg = await app.inject({
+      method: 'POST',
+      url: '/registrations',
+      payload: {
+        learner_id: lrn.json().id,
+        cycle_id: '2025-summer',
+        subject_id: 'piano',
+        level: 6,
+      },
+    });
+    const regId = reg.json().id;
+
+    const payRes = await app.inject({
+      method: 'POST',
+      url: '/payments/checkout',
+      payload: {
+        registration_id: regId,
+        teacher_id: 'tch_zhang',
+        addon_ids: ['ai_id_photo', 'mock_video_review'],
+      },
+    });
+    assert.equal(payRes.statusCode, 201);
+    assert.equal(payRes.json().order.amount_fen, 51890);
+    assert.equal(payRes.json().order.amount_yuan, '¥518.90');
+    assert.equal(payRes.json().addon_breakdown.addons_fee_fen, 5890);
+    assert.equal(payRes.json().addon_breakdown.addons_teacher_bonus_fen, 2400);
+    assert.equal(payRes.json().addon_breakdown.platform_net_addon_profit_fen, 3490);
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/registrations/${regId}/status`,
+      payload: { to_status: 'submitted' },
+    });
+    await app.inject({
+      method: 'PATCH',
+      url: `/registrations/${regId}/status`,
+      payload: { to_status: 'locked' },
+    });
+
+    const walletRes = await app.inject({
+      method: 'GET',
+      url: '/concessions/wallet?teacher_id=tch_zhang',
+    });
+    assert.equal(walletRes.json().summary.accrued_fen, 10900);
+    assert.equal(walletRes.json().summary.accrued_yuan, '¥109.00');
+
+    // 5. Evaluate Multi-Year Historical Student Upgrade Radar:
+    //    - 周星辰 (already registered in 2025-summer -> excluded from radar)
+    //    - 许小贝 (passed Piano Grade 5 in 2024-summer under tch_zhang, not yet registered in 2025-summer -> recommended Grade 6 at ¥460 fee / ¥85 concession!)
+    const radarRes = await app.inject({
+      method: 'POST',
+      url: '/value-added/upgrade-radar',
+      payload: {
+        target_cycle_id: '2025-summer',
+        historical_records: [
+          {
+            name_cn: '周星辰',
+            id_last4: '7788',
+            guardian_phone: '13900139000',
+            subject_id: 'piano',
+            level: 5,
+            cycle_id: '2024-summer',
+            teacher_id: 'tch_zhang',
+          },
+          {
+            name_cn: '许小贝',
+            id_last4: '5544',
+            guardian_phone: '13612345544',
+            subject_id: 'piano',
+            level: 5,
+            cycle_id: '2024-summer',
+            teacher_id: 'tch_zhang',
+          },
+        ],
+      },
+    });
+    assert.equal(radarRes.statusCode, 200);
+    const radar = radarRes.json();
+    assert.equal(radar.total_candidates, 1);
+    assert.equal(radar.candidates[0].name_cn, '许小贝');
+    assert.equal(radar.candidates[0].last_level, 5);
+    assert.equal(radar.candidates[0].recommended_level, 6);
+    assert.equal(radar.candidates[0].expected_exam_fee_yuan, '¥460.00');
+    assert.equal(radar.candidates[0].expected_concession_yuan, '¥85.00');
+    assert.ok(radar.candidates[0].outreach_wechat_copy.includes('钢琴 6级'));
+
+    await app.close();
+  });
 });
-
-
-

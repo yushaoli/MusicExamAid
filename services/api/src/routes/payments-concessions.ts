@@ -78,7 +78,7 @@ export async function paymentConcessionRoutes(app: FastifyInstance): Promise<voi
     },
   );
 
-  // 1. Parent WeChat Pay checkout (priced by teacher_id + grade level)
+  // 1. Parent WeChat Pay checkout (priced by teacher_id + grade level + optional value-added add-ons)
   app.post(
     '/payments/checkout',
     async (
@@ -86,6 +86,7 @@ export async function paymentConcessionRoutes(app: FastifyInstance): Promise<voi
         Body: {
           registration_id?: string;
           teacher_id?: string;
+          addon_ids?: string[];
           wx_transaction_id?: string;
         };
       }>,
@@ -102,6 +103,7 @@ export async function paymentConcessionRoutes(app: FastifyInstance): Promise<voi
       const result = app.store.payRegistrationOrder({
         registration_id: body.registration_id,
         teacher_id: body.teacher_id,
+        addon_ids: body.addon_ids,
         wx_transaction_id: body.wx_transaction_id,
       });
 
@@ -109,6 +111,18 @@ export async function paymentConcessionRoutes(app: FastifyInstance): Promise<voi
         order: {
           ...result.order,
           amount_yuan: formatRmbYuan(result.order.amount_fen),
+        },
+        addon_breakdown: {
+          ...result.addon_breakdown,
+          base_exam_fee_yuan: formatRmbYuan(result.addon_breakdown.base_exam_fee_fen),
+          addons_fee_yuan: formatRmbYuan(result.addon_breakdown.addons_fee_fen),
+          total_payable_yuan: formatRmbYuan(result.addon_breakdown.total_payable_fen),
+          addons_teacher_bonus_yuan: formatRmbYuan(
+            result.addon_breakdown.addons_teacher_bonus_fen,
+          ),
+          platform_net_addon_profit_yuan: formatRmbYuan(
+            result.addon_breakdown.platform_net_addon_profit_fen,
+          ),
         },
         concession: result.concession
           ? {
