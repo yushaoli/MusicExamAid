@@ -11,10 +11,12 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   OFFICIAL_PORTAL_BASE_URL,
   RegistrationStatus,
+  formatRmbYuan,
   parseOfficialAdminLoginHtml,
   consolidateOfficialAndHelperRegistrations,
   type ChannelRegistrationInput,
 } from '@musicexamaid/shared';
+import { getPostgresPool } from '../store/postgres';
 
 // Server-side cached official portal session (`PHPSESSID`) so subsequent "Sync" clicks
 // reuse the authenticated session without re-prompting WeChat confirmation until expiry.
@@ -380,6 +382,189 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         discovered_table_urls: Array.from(tableUrls),
         pulled_tables: pulledTables,
         total_rows_pulled: discoveredRows.length,
+      });
+    },
+  );
+
+  // 5. Query Live PostgreSQL Archive Summary (`GET /official-sync/archive-stats`)
+  app.get('/official-sync/archive-stats', async (_req, reply) => {
+    const pool = getPostgresPool();
+    const [
+      countsRes,
+      seasonsRes,
+      topAgentsRes,
+      topMajorsRes,
+      levelsRes,
+    ] = await Promise.all([
+      pool.query(`
+        SELECT
+          (SELECT COUNT(*)::int FROM kjzx_partner_agents) AS partner_agents_count,
+          (SELECT COUNT(*)::int FROM kjzx_historical_students) AS historical_students_count,
+          (SELECT COUNT(*)::int FROM kjzx_historical_exams) AS historical_exams_count,
+          (SELECT COUNT(*)::int FROM kjzx_official_majors) AS official_majors_count,
+          (SELECT COUNT(*)::int FROM kjzx_official_filings) AS official_filings_count
+      `),
+      pool.query(`
+        SELECT season_code, season_label, COUNT(*)::int AS exam_count
+        FROM kjzx_historical_exams
+        GROUP BY season_code, season_label
+        ORDER BY season_code DESC
+      `),
+      pool.query(`
+        SELECT a.agent_id, a.code, a.name, a.manager, a.phone,
+               COUNT(e.exam_id)::int AS total_exams,
+               COUNT(DISTINCT e.student_id)::int AS distinct_students
+        FROM kjzx_partner_agents a
+        LEFT JOIN kjzx_historical_exams e ON e.agent_id = a.agent_id
+        GROUP BY a.agent_id, a.code, a.name, a.manager, a.phone
+        ORDER BY total_exams DESC
+        LIMIT 15
+      `),
+      pool.query(`
+        SELECT major_name, COUNT(*)::int AS exam_count
+        FROM kjzx_historical_exams
+        GROUP BY major_name
+        ORDER BY exam_count DESC
+        LIMIT 12
+      `),
+      pool.query(`
+        SELECT level_id, level_name, official_price_yuan, official_price_fen, default_concession_fen
+        FROM kjzx_official_levels
+        ORDER BY level_id ASC
+      `),
+    ]);
+
+    return reply.code(200).send({
+      totals: countsRes.rows[0],
+      seasons: seasonsRes.rows,
+      top_partner_agents: topAgentsRes.rows,
+      top_majors: topMajorsRes.rows,
+      official_levels: levelsRes.rows,
+    });
+  });
+
+  // 6. Query Live Multi-Year Historical Upgrade Radar from PostgreSQL (`GET /official-sync/archive-upgrade-radar`)
+  app.get(
+    '/official-sync/archive-upgrade-radar',
+    async (
+      req: FastifyRequest<{
+        Querystring: { agent_id?: string; limit?: string };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const pool = getPostgresPool();
+      const agentFilter = req.query?.agent_id ? Number(req.query.agent_id) : null;
+      const limit = Math.min(Math.max(Number(req.query?.limit || 50), 1), 200);
+
+      // Find students whose latest 2025 exam (20254 or 20255) is level < 10 and who have NOT
+      // registered in 2026 (20264 or 20265) for the same major_name.
+      const summarySql = `
+        WITH latest_2025 AS (
+          SELECT DISTINCT ON (student_id, major_name)
+            student_id, student_name, parent_phone, agent_id, agent_name,
+            major_name, level AS last_level, season_label AS last_season
+          FROM kjzx_historical_exams
+          WHERE season_code IN (20254, 20255)
+            AND level < 10
+            AND ($1::int IS NULL OR agent_id = $1::int)
+          ORDER BY student_id, major_name, level DESC, season_code DESC
+        ),
+        registered_2026 AS (
+          SELECT DISTINCT student_id, major_name
+          FROM kjzx_historical_exams
+          WHERE season_code IN (20264, 20265)
+        ),
+        candidates AS (
+          SELECT
+            l.student_id,
+            l.student_name,
+            l.parent_phone,
+            l.agent_id,
+            l.agent_name,
+            l.major_name,
+            l.last_level,
+            l.last_season,
+            (l.last_level + 1) AS recommended_level,
+            COALESCE(ol.official_price_fen, 36000) AS expected_exam_fee_fen,
+            COALESCE(ol.default_concession_fen, 5000) AS expected_concession_fen
+          FROM latest_2025 l
+          LEFT JOIN registered_2026 r
+            ON r.student_id = l.student_id AND r.major_name = l.major_name
+          LEFT JOIN kjzx_official_levels ol
+            ON ol.level_id = (l.last_level + 1)
+          WHERE r.student_id IS NULL
+        )
+        SELECT
+          COUNT(*)::int AS total_candidates,
+          COALESCE(SUM(expected_exam_fee_fen), 0)::bigint AS total_expected_exam_fee_fen,
+          COALESCE(SUM(expected_concession_fen), 0)::bigint AS total_expected_concession_fen
+        FROM candidates
+      `;
+
+      const listSql = `
+        WITH latest_2025 AS (
+          SELECT DISTINCT ON (student_id, major_name)
+            student_id, student_name, parent_phone, agent_id, agent_name,
+            major_name, level AS last_level, season_label AS last_season
+          FROM kjzx_historical_exams
+          WHERE season_code IN (20254, 20255)
+            AND level < 10
+            AND ($1::int IS NULL OR agent_id = $1::int)
+          ORDER BY student_id, major_name, level DESC, season_code DESC
+        ),
+        registered_2026 AS (
+          SELECT DISTINCT student_id, major_name
+          FROM kjzx_historical_exams
+          WHERE season_code IN (20264, 20265)
+        )
+        SELECT
+          l.student_id,
+          l.student_name,
+          l.parent_phone,
+          l.agent_id,
+          l.agent_name,
+          l.major_name,
+          l.last_level,
+          l.last_season,
+          (l.last_level + 1) AS recommended_level,
+          COALESCE(ol.official_price_yuan, 360) AS expected_exam_fee_yuan,
+          COALESCE(ol.official_price_fen, 36000) AS expected_exam_fee_fen,
+          COALESCE(ol.default_concession_fen, 5000) AS expected_concession_fen
+        FROM latest_2025 l
+        LEFT JOIN registered_2026 r
+          ON r.student_id = l.student_id AND r.major_name = l.major_name
+        LEFT JOIN kjzx_official_levels ol
+          ON ol.level_id = (l.last_level + 1)
+        WHERE r.student_id IS NULL
+        ORDER BY l.last_level DESC, l.student_id DESC
+        LIMIT $2::int
+      `;
+
+      const [sumRes, listRes] = await Promise.all([
+        pool.query(summarySql, [agentFilter]),
+        pool.query(listSql, [agentFilter, limit]),
+      ]);
+
+      const summary = sumRes.rows[0] || {
+        total_candidates: 0,
+        total_expected_exam_fee_fen: 0,
+        total_expected_concession_fen: 0,
+      };
+      const totalFeeFen = Number(summary.total_expected_exam_fee_fen || 0);
+      const totalConcFen = Number(summary.total_expected_concession_fen || 0);
+
+      return reply.code(200).send({
+        target_season: '2026考期 (未报名续报升班雷达)',
+        total_candidates: Number(summary.total_candidates || 0),
+        total_expected_exam_fee_fen: totalFeeFen,
+        total_expected_exam_fee_yuan: formatRmbYuan(totalFeeFen),
+        total_expected_concession_fen: totalConcFen,
+        total_expected_concession_yuan: formatRmbYuan(totalConcFen),
+        sample_candidates: listRes.rows.map(r => ({
+          ...r,
+          expected_concession_yuan: formatRmbYuan(Number(r.expected_concession_fen || 0)),
+          wechat_template_preview: `【中国音乐学院考级升班提醒】${r.student_name}家长您好，孩子在${r.last_season}已顺利完成「${r.major_name} ${r.last_level}级」，本季可直升「${r.major_name} ${r.recommended_level}级」（报名费 ¥${r.expected_exam_fee_yuan}）。点击小程序一键复用历史档案免填表报名（指导老师：${r.agent_name || '本机构'}）。`,
+        })),
       });
     },
   );

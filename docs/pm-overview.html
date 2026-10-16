@@ -800,49 +800,52 @@ photos/440101201603159876_陈小乐.jpg</pre>
 
           <!-- Interactive Historical Student Upgrade Radar -->
           <div class="card" style="border-color:rgba(192,132,252,.45)">
-            <h3>📡 模拟器 2：历年考生「智能升班催报雷达」(`POST /value-added/upgrade-radar`)</h3>
-            <p class="sub">把从官网 <code>kjzx002120</code> 抓回的历年数据直接转化为本考期增量订单！各级别报名费常年固定，系统自动按下一级别固定标准计算费用与老师返佣：</p>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+              <h3 style="margin:0">📡 实盘数据 2：历年考生「智能升班催报雷达」(`GET /official-sync/archive-upgrade-radar`)</h3>
+              <button class="btn btn-purple" onclick="loadLiveUpgradeRadar()">🔄 从 PostgreSQL 实时刷新 1,620 人升班池</button>
+            </div>
+            <p class="sub">基于已入库 <code>31,939</code> 笔真实历年考级数据：自动筛出 <strong>2025暑假/寒假已考（1-9级）但 2026 尚未续报</strong> 的 <strong>1,620 名真实考生</strong>（预计升班报名费池 <strong>¥566,230.00</strong>，合作老师优待金池 <strong>¥81,710.00</strong>）：</p>
 
             <table>
               <thead>
                 <tr>
-                  <th>老生姓名</th>
-                  <th>上次通过记录</th>
-                  <th>本期推荐升班</th>
-                  <th>固定级别报名费 / 老师返佣</th>
+                  <th>真实考生 / 指导老师</th>
+                  <th>2025 已考记录</th>
+                  <th>2026 推荐升班</th>
+                  <th>官方固定报名费 / 优待金</th>
                   <th>一键催报</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody id="live-radar-tbody">
                 <tr>
-                  <td><strong>许小贝</strong> (<code>*5544</code>)<br><span style="font-size:11px;color:var(--muted)">张老师</span></td>
-                  <td>2024暑期 · 钢琴 5级</td>
-                  <td><span class="badge-done">🎯 钢琴 6级</span></td>
-                  <td>收 <strong>¥460</strong> / 返 <strong style="color:var(--green)">¥85</strong></td>
+                  <td><strong>詹歆可</strong> (<code>138****8518</code>)<br><span style="font-size:11px;color:var(--muted)">指导老师：钟素萍</span></td>
+                  <td>2025暑假 · 钢琴 9级</td>
+                  <td><span class="badge-done">🎯 钢琴 10级</span></td>
+                  <td>收 <strong>¥510</strong> / 返 <strong style="color:var(--green)">¥80</strong></td>
                   <td>
-                    <button class="btn" onclick="copyOutreach('【考级升班提醒】许小贝家长您好！档案显示孩子往期已顺利通过中国音乐学院【钢琴 5级】。本期（2025-summer）可衔接报考【钢琴 6级】（6级报考费 ¥460.00，历年统一标准），点击小程序链接即可10秒复用历史资料一键升班报名！')">
+                    <button class="btn" onclick="copyOutreach('【中国音乐学院考级升班提醒】詹歆可家长您好，孩子在2025暑假已顺利完成「钢琴 9级」，本季可直升「钢琴 10级」（报名费 ¥510）。点击小程序一键复用历史档案免填表报名（指导老师：钟素萍）。')">
                       📋 复制微信话术
                     </button>
                   </td>
                 </tr>
                 <tr>
-                  <td><strong>赵小溪</strong> (<code>*2211</code>)<br><span style="font-size:11px;color:var(--muted)">张老师</span></td>
-                  <td>2024暑期 · 古筝 7级</td>
-                  <td><span class="badge-done">🎯 古筝 8级</span></td>
-                  <td>收 <strong>¥550</strong> / 返 <strong style="color:var(--green)">¥100</strong></td>
+                  <td><strong>李仕泓</strong> (<code>139****1871</code>)<br><span style="font-size:11px;color:var(--muted)">指导老师：黄蓝</span></td>
+                  <td>2025暑假 · 小提琴 9级</td>
+                  <td><span class="badge-done">🎯 小提琴 10级</span></td>
+                  <td>收 <strong>¥510</strong> / 返 <strong style="color:var(--green)">¥80</strong></td>
                   <td>
-                    <button class="btn" onclick="copyOutreach('【考级升班提醒】赵小溪家长您好！档案显示孩子往期已顺利通过中国音乐学院【古筝 7级】。本期（2025-summer）可衔接报考【古筝 8级】（8级报考费 ¥550.00，历年统一标准），点击小程序链接即可10秒复用历史资料一键升班报名！')">
+                    <button class="btn" onclick="copyOutreach('【中国音乐学院考级升班提醒】李仕泓家长您好，孩子在2025暑假已顺利完成「小提琴 9级」，本季可直升「小提琴 10级」（报名费 ¥510）。点击小程序一键复用历史档案免填表报名（指导老师：黄蓝）。')">
                       📋 复制微信话术
                     </button>
                   </td>
                 </tr>
                 <tr>
-                  <td><strong>李小茉</strong> (<code>*8899</code>)<br><span style="font-size:11px;color:var(--muted)">李老师</span></td>
-                  <td>2024暑期 · 小提琴 3级</td>
-                  <td><span class="badge-done">🎯 小提琴 4级</span></td>
-                  <td>收 <strong>¥480</strong> / 返 <strong style="color:var(--green)">¥50</strong></td>
+                  <td><strong>唐菁茹</strong> (<code>185****4127</code>)<br><span style="font-size:11px;color:var(--muted)">指导老师：熊鑫</span></td>
+                  <td>2025暑假 · 古筝 9级</td>
+                  <td><span class="badge-done">🎯 古筝 10级</span></td>
+                  <td>收 <strong>¥510</strong> / 返 <strong style="color:var(--green)">¥80</strong></td>
                   <td>
-                    <button class="btn" onclick="copyOutreach('【考级升班提醒】李小茉家长您好！档案显示孩子往期已顺利通过中国音乐学院【小提琴 3级】。本期（2025-summer）可衔接报考【小提琴 4级】（4级报考费 ¥480.00，历年统一标准），点击小程序链接即可10秒复用历史资料一键升班报名！')">
+                    <button class="btn" onclick="copyOutreach('【中国音乐学院考级升班提醒】唐菁茹家长您好，孩子在2025暑假已顺利完成「古筝 9级」，本季可直升「古筝 10级」（报名费 ¥510）。点击小程序一键复用历史档案免填表报名（指导老师：熊鑫）。')">
                       📋 复制微信话术
                     </button>
                   </td>
@@ -851,7 +854,7 @@ photos/440101201603159876_陈小乐.jpg</pre>
             </table>
 
             <div id="outreach-preview" style="margin-top:12px;font-size:12.5px;color:#cbd5e1;background:#0f172a;padding:12px;border-radius:8px;border:1px solid var(--border-line)">
-              💡 点击上方 <strong>「📋 复制微信话术」</strong> 即可复制带考生姓名、往年级别与本期专属优惠价的微信点对点邀请文案。
+              💡 点击上方 <strong>「📋 复制微信话术」</strong> 即可复制带真实考生姓名、2025通过级别与2026直升报名费的微信点对点通知文案。
             </div>
           </div>
         </div>
@@ -872,12 +875,13 @@ photos/440101201603159876_陈小乐.jpg</pre>
             <div>
               <h3 style="margin:0;color:var(--brand)">🟢 实盘真机连线：考级办官网 (`kjzx002120`) 实时扫码登录与数据拉取</h3>
               <p class="sub" style="margin:4px 0 0">
-                直连上海主机 <code>http://100.64.0.4:3100/official-sync/*</code>。点击下方按钮即可从考级办官网拉取真实微信登录二维码，用绑定考级办的管理员微信扫码后，服务器将自动接管 <code>PHPSESSID</code> 并拉取后台菜单与历年考生表！
+                直连上海主机 <code>http://100.64.0.4:3100/official-sync/*</code>。全量 2020–2026 数据已灌入 PostgreSQL (<code>musicexamaid_dev</code>)，点击下方按钮可随时查询或增量同步！
               </p>
             </div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
               <button class="btn" onclick="startLiveOfficialQrSession()">📲 1. 立即拉取考级办官网实时二维码</button>
               <button class="btn btn-green" onclick="triggerLiveRemotePull()">📥 2. 立即拉取官网后台数据 (`pull-remote`)</button>
+              <button class="btn btn-purple" onclick="fetchLivePostgresArchiveStats()">📊 3. 查询 PostgreSQL 已入库大盘 (`archive-stats`)</button>
             </div>
           </div>
 
@@ -900,36 +904,36 @@ photos/440101201603159876_陈小乐.jpg</pre>
 
             <div>
               <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px">实时同步日志与抓取结果 (`http://100.64.0.4:3100`)：</div>
-              <pre id="live-sync-output" style="height:150px;margin:0;overflow-y:auto">[已实盘扫码拉取成功] PHPSESSID=7grefd5bm8qcid4fufuv7vmfkk (admin: kjzx002120)
-✅ 已将 2020夏季—2026暑假 共 13 个考期全量历史数据归档至上海 ubtxiaomi:
-   路径: /opt/stacks/musicexamaid/data/kjzx002120_archive/ (共 219 MB)
-   • 历史考生档案 (students.json): 10,376 人 (含二寸照、证件照、历年证书链接)
-   • 历年报考记录 (exams_all.json): 31,939 笔 (2020夏季至2026暑假全部13个考期)
-   • 合作老师/报名点 (agents.json): 200 家 | 备案批次 (filings.json): 51 批
-   • 2025已考但2026暑假未报的「待升班老生」: 1,141 人！</pre>
+              <pre id="live-sync-output" style="height:150px;margin:0;overflow-y:auto">[已实盘扫码 & 全量入库 PostgreSQL (100.64.0.4:55432/musicexamaid_dev)]
+✅ kjzx_historical_exams:    31,939 笔 (2020夏季—2026暑假共13个考期)
+✅ kjzx_historical_students: 10,376 人 (含二寸照、证件照、历年证书链接)
+✅ kjzx_partner_agents:         200 家 (已同步至 institutions 机构表)
+✅ kjzx_official_majors:         45 个 (已同步至 dict_subjects 科目表)
+✅ kjzx_official_levels:         11 档 (1级¥200..10级¥510, 演奏级¥620)
+🎯 2025已考但2026未续报「待升班老生」: 1,620 人 (预计报名费池 ¥566,230.00)！</pre>
             </div>
           </div>
         </div>
 
         <!-- REAL 2020-2026 DUMPED ARCHIVE SUMMARY CARD -->
         <div class="card" style="border-color:rgba(74,222,128,.6)">
-          <h3>🎉 实盘已全量抓回：2020–2026 历年考级数据资产盘点（上海 `ubtxiaomi` 本地归档 `219 MB`）</h3>
+          <h3>🎉 实盘已全量抓回并入库 PostgreSQL：2020–2026 历年考级数据资产盘点（`100.64.0.4:55432`）</h3>
           <div class="grid-4" style="margin-bottom:14px">
             <div class="stat-card">
-              <div class="stat-label">👨‍🎓 历年考生档案总数 (`students.json`)</div>
+              <div class="stat-label">👨‍🎓 历年考生档案总数 (`kjzx_historical_students`)</div>
               <div class="stat-val" style="color:var(--brand)">10,376 人</div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">📝 历年报考总人次 (`13个考期`)</div>
+              <div class="stat-label">📝 历年报考总人次 (`kjzx_historical_exams`)</div>
               <div class="stat-val" style="color:var(--green)">31,939 笔</div>
             </div>
             <div class="stat-card">
-              <div class="stat-label">👩‍🏫 合作老师 / 报名点 (`agents.json`)</div>
+              <div class="stat-label">👩‍🏫 合作老师 / 报名点 (`kjzx_partner_agents`)</div>
               <div class="stat-val" style="color:var(--amber)">200 家</div>
             </div>
             <div class="stat-card" style="border-color:rgba(192,132,252,.5)">
-              <div class="stat-label">🎯 2026待升班催报老生 (`Upgrade Radar`)</div>
-              <div class="stat-val" style="color:var(--purple)">1,141 人</div>
+              <div class="stat-label">🎯 2026待升班催报老生 (`预计 ¥56.6万`)</div>
+              <div class="stat-val" style="color:var(--purple)">1,620 人</div>
             </div>
           </div>
 
@@ -1592,6 +1596,46 @@ photos/440101201603159876_陈小乐.jpg</pre>
         appendLiveLog('拉取返回结果:\n' + JSON.stringify(data, null, 2));
       } catch (err) {
         appendLiveLog('拉取失败: ' + (err.message || err));
+      }
+    }
+
+    async function fetchLivePostgresArchiveStats() {
+      appendLiveLog('正在请求 GET ' + API_BASE + '/official-sync/archive-stats ...');
+      try {
+        const res = await fetch(API_BASE + '/official-sync/archive-stats');
+        const data = await res.json();
+        appendLiveLog('PostgreSQL 实盘历年大盘统计:\n' + JSON.stringify(data.totals, null, 2) + '\nTop 5 合作机构:\n' + JSON.stringify(data.top_partner_agents.slice(0, 5), null, 2));
+      } catch (err) {
+        appendLiveLog('查询 PostgreSQL 失败: ' + (err.message || err));
+      }
+    }
+
+    async function loadLiveUpgradeRadar() {
+      try {
+        const res = await fetch(API_BASE + '/official-sync/archive-upgrade-radar?limit=8');
+        const data = await res.json();
+        const tbody = document.getElementById('live-radar-tbody');
+        if (!tbody || !Array.isArray(data.sample_candidates)) return;
+        tbody.innerHTML = data.sample_candidates.map(c => {
+          const safeMsg = (c.wechat_template_preview || '').replace(/'/g, "\\'");
+          return `
+            <tr>
+              <td><strong>${c.student_name}</strong> (<code>${c.parent_phone || ''}</code>)<br><span style="font-size:11px;color:var(--muted)">指导老师：${c.agent_name || '本机构'}</span></td>
+              <td>${c.last_season} · ${c.major_name} ${c.last_level}级</td>
+              <td><span class="badge-done">🎯 ${c.major_name} ${c.recommended_level}级</span></td>
+              <td>收 <strong>¥${c.expected_exam_fee_yuan}</strong> / 返 <strong style="color:var(--green)">${c.expected_concession_yuan}</strong></td>
+              <td>
+                <button class="btn" onclick="copyOutreach('${safeMsg}')">
+                  📋 复制微信话术
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+        document.getElementById('outreach-preview').innerHTML =
+          `✅ <strong>已从 PostgreSQL (<code>100.64.0.4:55432</code>) 实时刷新：</strong> 共检出 <strong>${data.total_candidates} 名</strong> 2025已考但2026未续报考生，预计报名费池 <strong>${data.total_expected_exam_fee_yuan}</strong>，老师优待金池 <strong>${data.total_expected_concession_yuan}</strong>！`;
+      } catch (err) {
+        alert('连接 100.64.0.4:3100 失败: ' + (err.message || err));
       }
     }
 
