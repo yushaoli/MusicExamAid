@@ -271,8 +271,8 @@ export function evaluateHistoricalUpgradeRadar(
       phone.length >= 7 ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : '138****0000';
 
     const outreachCopy =
-      `【考级升班提醒】${rec.name_cn}家长您好！系统档案显示孩子在 ${rec.cycle_id} 已顺利通过中国音乐学院【${subjectNameCn} ${lastLevel}级】。` +
-      `本期（${targetCycleId}）可衔接报考【${subjectNameCn} ${recommendedLevel}级】（专属报考费 ${formatRmbYuan(rate.feeFen)}），点击小程序链接即可10秒确认历史资料一键升班报名！`;
+      `【考级升班提醒】${rec.name_cn}家长您好！档案显示孩子往期已顺利通过中国音乐学院【${subjectNameCn} ${lastLevel}级】。` +
+      `本期（${targetCycleId}）可衔接报考【${subjectNameCn} ${recommendedLevel}级】（${recommendedLevel}级报考费 ${formatRmbYuan(rate.feeFen)}，历年统一标准），点击小程序链接即可10秒复用历史资料一键升班报名！`;
 
     candidates.push({
       student_key: studentKey,

@@ -666,7 +666,7 @@ photos/440101201603159876_陈小乐.jpg</pre>
       <section id="tab-monetization" class="panel">
         <div class="section-header">
           <h2>💎 4. 增值付费变现矩阵与「历年考生智能升班雷达」(`003` 已实装)</h2>
-          <p>利用家长「考前焦虑 + 顺手加购」心理与「历年考级档案数据资产」，在不增加获客成本的前提下直接放大单客利润与下考期报名量。</p>
+          <p><strong>核心商业逻辑：</strong>对家长的 1–10 级基础报考费常年固定不变（且需向指导老师分出返佣），因此<strong>基础报名费是流量基本盘，而「结账顺手加购 + 考前冲刺服务」才是不受考级费封顶限制的纯利润增长引擎！</strong></p>
         </div>
 
         <div class="card">
@@ -679,7 +679,7 @@ photos/440101201603159876_陈小乐.jpg</pre>
                 <th>家长付费价</th>
                 <th>老师分成奖励</th>
                 <th>平台净毛利</th>
-                <th>为什么家长/老师愿意买单？</th>
+                <th>为什么在「固定报名费」之外家长愿意买单？</th>
               </tr>
             </thead>
             <tbody>
@@ -731,10 +731,10 @@ photos/440101201603159876_陈小乐.jpg</pre>
           <!-- Interactive Checkout Order Bump Calculator -->
           <div class="card" style="border-color:rgba(56,189,248,.45)">
             <h3>🛒 模拟器 1：微信支付结账页「顺手加购 (Order Bump)」利润测算</h3>
-            <p class="sub">对应实盘接口：<code>POST /payments/checkout</code>（传入 <code>addon_ids</code> 自动合并收款并把老师分成计入返佣账本）</p>
+            <p class="sub">各级别考级费常年固定不变，勾选下方增值项即可在不改动考级费标准的前提下大幅提升单客毛利（<code>POST /payments/checkout</code>）：</p>
 
             <div style="margin-bottom:12px">
-              <label style="font-size:12.5px;color:var(--muted)">选择报考档位（以张老师 6 级协议价 ¥460 / 基础返佣 ¥85 为例）：</label>
+              <label style="font-size:12.5px;color:var(--muted)">基准考级档位（以 6 级常年固定报考费 / 基础返佣 ¥85 为例）：</label>
             </div>
 
             <label class="addon-option">
@@ -801,7 +801,7 @@ photos/440101201603159876_陈小乐.jpg</pre>
           <!-- Interactive Historical Student Upgrade Radar -->
           <div class="card" style="border-color:rgba(192,132,252,.45)">
             <h3>📡 模拟器 2：历年考生「智能升班催报雷达」(`POST /value-added/upgrade-radar`)</h3>
-            <p class="sub">把从官网 <code>kjzx002120</code> 抓回的历年数据直接转化为本考期增量订单！自动筛出「往年考过、今年未报」的老生并生成微信话术：</p>
+            <p class="sub">把从官网 <code>kjzx002120</code> 抓回的历年数据直接转化为本考期增量订单！各级别报名费常年固定，系统自动按下一级别固定标准计算费用与老师返佣：</p>
 
             <table>
               <thead>
@@ -809,7 +809,7 @@ photos/440101201603159876_陈小乐.jpg</pre>
                   <th>老生姓名</th>
                   <th>上次通过记录</th>
                   <th>本期推荐升班</th>
-                  <th>预计报名费 / 老师返佣</th>
+                  <th>固定级别报名费 / 老师返佣</th>
                   <th>一键催报</th>
                 </tr>
               </thead>
@@ -820,7 +820,7 @@ photos/440101201603159876_陈小乐.jpg</pre>
                   <td><span class="badge-done">🎯 钢琴 6级</span></td>
                   <td>收 <strong>¥460</strong> / 返 <strong style="color:var(--green)">¥85</strong></td>
                   <td>
-                    <button class="btn" onclick="copyOutreach('【考级升班提醒】许小贝家长您好！系统档案显示孩子在 2024-summer 已顺利通过中国音乐学院【钢琴 5级】。本期（2025-summer）可衔接报考【钢琴 6级】（专属报考费 ¥460.00），点击小程序链接即可10秒确认历史资料一键升班报名！')">
+                    <button class="btn" onclick="copyOutreach('【考级升班提醒】许小贝家长您好！档案显示孩子往期已顺利通过中国音乐学院【钢琴 5级】。本期（2025-summer）可衔接报考【钢琴 6级】（6级报考费 ¥460.00，历年统一标准），点击小程序链接即可10秒复用历史资料一键升班报名！')">
                       📋 复制微信话术
                     </button>
                   </td>
@@ -831,7 +831,7 @@ photos/440101201603159876_陈小乐.jpg</pre>
                   <td><span class="badge-done">🎯 古筝 8级</span></td>
                   <td>收 <strong>¥550</strong> / 返 <strong style="color:var(--green)">¥100</strong></td>
                   <td>
-                    <button class="btn" onclick="copyOutreach('【考级升班提醒】赵小溪家长您好！系统档案显示孩子在 2024-summer 已顺利通过中国音乐学院【古筝 7级】。本期（2025-summer）可衔接报考【古筝 8级】（专属报考费 ¥550.00），点击小程序链接即可10秒确认历史资料一键升班报名！')">
+                    <button class="btn" onclick="copyOutreach('【考级升班提醒】赵小溪家长您好！档案显示孩子往期已顺利通过中国音乐学院【古筝 7级】。本期（2025-summer）可衔接报考【古筝 8级】（8级报考费 ¥550.00，历年统一标准），点击小程序链接即可10秒复用历史资料一键升班报名！')">
                       📋 复制微信话术
                     </button>
                   </td>
@@ -842,7 +842,7 @@ photos/440101201603159876_陈小乐.jpg</pre>
                   <td><span class="badge-done">🎯 小提琴 4级</span></td>
                   <td>收 <strong>¥480</strong> / 返 <strong style="color:var(--green)">¥50</strong></td>
                   <td>
-                    <button class="btn" onclick="copyOutreach('【考级升班提醒】李小茉家长您好！系统档案显示孩子在 2024-summer 已顺利通过中国音乐学院【小提琴 3级】。本期（2025-summer）可衔接报考【小提琴 4级】（专属报考费 ¥480.00），点击小程序链接即可10秒确认历史资料一键升班报名！')">
+                    <button class="btn" onclick="copyOutreach('【考级升班提醒】李小茉家长您好！档案显示孩子往期已顺利通过中国音乐学院【小提琴 3级】。本期（2025-summer）可衔接报考【小提琴 4级】（4级报考费 ¥480.00，历年统一标准），点击小程序链接即可10秒复用历史资料一键升班报名！')">
                       📋 复制微信话术
                     </button>
                   </td>
