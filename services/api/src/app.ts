@@ -28,6 +28,15 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
     logger: opts.logger ?? false,
   });
 
+  app.addHook('onRequest', async (req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    reply.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+    if (req.method === 'OPTIONS') {
+      return reply.code(204).send();
+    }
+  });
+
   app.decorate('store', opts.store ?? new DomainRepository());
 
   app.register(healthRoutes);

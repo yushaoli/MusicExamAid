@@ -866,6 +866,48 @@ photos/440101201603159876_陈小乐.jpg</pre>
           <p>逆向破解官网二维码底层 <code>snsapi_base</code> 机制与 <code>common.js?b5</code> 导出拦截，实现微信内一键授权保活与免重复扫码全量导出。</p>
         </div>
 
+        <!-- LIVE REAL-TIME QR LOGIN & REMOTE PULL CONSOLE -->
+        <div class="card" style="border:2px solid var(--brand);background:linear-gradient(180deg,#0f172a 0%,#162033 100%)">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px">
+            <div>
+              <h3 style="margin:0;color:var(--brand)">🟢 实盘真机连线：考级办官网 (`kjzx002120`) 实时扫码登录与数据拉取</h3>
+              <p class="sub" style="margin:4px 0 0">
+                直连上海主机 <code>http://100.64.0.4:3100/official-sync/*</code>。点击下方按钮即可从考级办官网拉取真实微信登录二维码，用绑定考级办的管理员微信扫码后，服务器将自动接管 <code>PHPSESSID</code> 并拉取后台菜单与历年考生表！
+              </p>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <button class="btn" onclick="startLiveOfficialQrSession()">📲 1. 立即拉取考级办官网实时二维码</button>
+              <button class="btn btn-green" onclick="triggerLiveRemotePull()">📥 2. 立即拉取官网后台数据 (`pull-remote`)</button>
+            </div>
+          </div>
+
+          <div class="grid-2" style="align-items:center">
+            <div style="display:flex;gap:18px;align-items:center;background:#0b1120;padding:16px;border-radius:12px;border:1px solid var(--border-line)">
+              <div id="live-qr-box" style="width:150px;height:150px;background:#1e293b;border-radius:10px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;color:var(--muted);flex-shrink:0;overflow:hidden;border:2px solid #334155">
+                点击右上角<br>拉取实时二维码
+              </div>
+              <div style="font-size:13px">
+                <div style="margin-bottom:6px"><strong>当前官网门户：</strong> <span id="live-portal-title" style="color:#e2e8f0">等待拉取...</span></div>
+                <div style="margin-bottom:6px"><strong>实时 PHPSESSID：</strong> <code id="live-phpsessid">—</code></div>
+                <div style="margin-bottom:6px"><strong>微信轮询 Token：</strong> <code id="live-wxtoken">—</code></div>
+                <div style="margin-bottom:8px"><strong>扫码状态：</strong> <span id="live-scan-status" class="badge-next">未启动</span></div>
+                <div style="display:flex;gap:6px;align-items:center;margin-top:6px">
+                  <input id="manual-phpsessid-input" type="text" placeholder="或直接粘贴浏览器已登录 PHPSESSID" style="background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:6px 8px;font-size:12px;width:210px" />
+                  <button class="btn btn-slate" onclick="useManualPhpSessId()">注入会话</button>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px">实时同步日志与抓取结果 (`http://100.64.0.4:3100`)：</div>
+              <pre id="live-sync-output" style="height:150px;margin:0;overflow-y:auto">等待操作：
+1. 点击「📲 1. 立即拉取考级办官网实时二维码」，页面将直接显示来自 kjzx002120.kj5.zgyyxykj.com/admins 的真实二维码。
+2. 使用管理员微信扫码确认（系统每 2 秒自动轮询 get_wxauth_status -> wxauth_confirm）。
+3. 登录成功后自动调用 POST /official-sync/pull-remote 探测后台菜单并拉取考生表！</pre>
+            </div>
+          </div>
+        </div>
+
         <div class="card" style="border-color:rgba(74,222,128,.45)">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px">
             <div>
@@ -1377,6 +1419,113 @@ photos/440101201603159876_陈小乐.jpg</pre>
       navigator.clipboard.writeText(code).then(() => {
         alert('✅ 已复制！请打开 https://kjzx002120.kj5.zgyyxykj.com/admins 考级办后台列表页，按 F12 打开 Console 粘贴回车即可一键拉取全部历年数据。');
       });
+    }
+
+    // Live Official Portal QR Session + Polling + Remote Pull against ubtxiaomi (100.64.0.4:3100)
+    const API_BASE = 'http://100.64.0.4:3100';
+    let livePhpSessId = '';
+    let liveWxToken = '';
+    let livePollTimer = null;
+
+    function appendLiveLog(msg) {
+      const out = document.getElementById('live-sync-output');
+      if (!out) return;
+      const ts = new Date().toLocaleTimeString();
+      out.textContent = `[${ts}] ${msg}\n` + out.textContent;
+    }
+
+    async function startLiveOfficialQrSession() {
+      if (livePollTimer) clearInterval(livePollTimer);
+      document.getElementById('live-scan-status').className = 'badge-next';
+      document.getElementById('live-scan-status').textContent = '正在拉取官网二维码...';
+      appendLiveLog('正在请求 POST ' + API_BASE + '/official-sync/qr-session ...');
+
+      try {
+        const res = await fetch(API_BASE + '/official-sync/qr-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        livePhpSessId = data.php_sess_id || '';
+        liveWxToken = data.wxauth_token || '';
+
+        document.getElementById('live-portal-title').textContent = data.portal_title || '考级办管理后台';
+        document.getElementById('live-phpsessid').textContent = livePhpSessId || '未返回';
+        document.getElementById('live-wxtoken').textContent = liveWxToken || '未返回';
+
+        if (data.qr_image_base64) {
+          document.getElementById('live-qr-box').innerHTML =
+            `<img src="${data.qr_image_base64}" style="width:100%;height:100%;object-fit:contain;background:#fff;padding:4px" alt="WeChat QR" />`;
+        }
+        document.getElementById('live-scan-status').textContent = '⏳ 请用管理员微信扫码';
+        appendLiveLog(`成功获取二维码！PHPSESSID=${livePhpSessId}, token=${liveWxToken}。已启动每 2 秒自动轮询...`);
+
+        livePollTimer = setInterval(pollLiveWxAuthStatus, 2000);
+      } catch (err) {
+        document.getElementById('live-scan-status').textContent = '连接失败';
+        appendLiveLog('拉取二维码失败: ' + (err.message || err));
+      }
+    }
+
+    async function pollLiveWxAuthStatus() {
+      if (!livePhpSessId || !liveWxToken) return;
+      try {
+        const res = await fetch(API_BASE + '/official-sync/wxauth-poll', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ php_sess_id: livePhpSessId, wxauth_token: liveWxToken })
+        });
+        const data = await res.json();
+        if (data.authenticated) {
+          clearInterval(livePollTimer);
+          livePollTimer = null;
+          const badge = document.getElementById('live-scan-status');
+          badge.className = 'badge-done';
+          badge.textContent = '🟢 扫码确认成功！已登录保活';
+          appendLiveLog('🎉 微信扫码确认成功！PHPSESSID 已在 ubtxiaomi 认证保活，正在自动拉取后台数据...');
+          await triggerLiveRemotePull();
+        } else {
+          const st = data.scan_status;
+          const statusMap = {
+            0: '⏳ 等待微信扫码 (0)',
+            1: '⏳ 等待微信扫码 (1)',
+            2: '📱 已扫码，请在手机微信上点确认 (2)',
+            3: '⚠️ 二维码已过期，请重新拉取 (3)'
+          };
+          document.getElementById('live-scan-status').textContent = statusMap[st] || `轮询中 (status=${st})`;
+        }
+      } catch (err) {
+        appendLiveLog('轮询异常: ' + (err.message || err));
+      }
+    }
+
+    function useManualPhpSessId() {
+      const val = document.getElementById('manual-phpsessid-input')?.value.trim();
+      if (!val) {
+        alert('请先输入或粘贴浏览器中的 PHPSESSID');
+        return;
+      }
+      livePhpSessId = val;
+      document.getElementById('live-phpsessid').textContent = livePhpSessId;
+      document.getElementById('live-scan-status').className = 'badge-done';
+      document.getElementById('live-scan-status').textContent = '🟢 已注入手动 PHPSESSID';
+      appendLiveLog('已注入手动 PHPSESSID=' + livePhpSessId + '，现在可点击「📥 2. 立即拉取官网后台数据」');
+    }
+
+    async function triggerLiveRemotePull() {
+      appendLiveLog('正在调用 POST ' + API_BASE + '/official-sync/pull-remote 拉取考级办后台菜单与考生表...');
+      try {
+        const res = await fetch(API_BASE + '/official-sync/pull-remote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ php_sess_id: livePhpSessId || undefined })
+        });
+        const data = await res.json();
+        appendLiveLog('拉取返回结果:\n' + JSON.stringify(data, null, 2));
+      } catch (err) {
+        appendLiveLog('拉取失败: ' + (err.message || err));
+      }
     }
 
     selectStep(0);
