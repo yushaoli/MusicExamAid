@@ -4,13 +4,18 @@ import { computeWeChatSignature } from '@musicexamaid/shared';
 import { buildApp } from '../app';
 
 describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Account H5 Web App', () => {
-  it('GET /health returns 200 ok with dependency statuses', async () => {
+  it('GET /health returns 200 ok with stub and live dependency probes', async () => {
     const app = buildApp();
     const res = await app.inject({ method: 'GET', url: '/health' });
     assert.equal(res.statusCode, 200);
     const body = res.json();
     assert.equal(body.status, 'ok');
     assert.equal(body.dependencies.postgres.status, 'stub');
+
+    const liveRes = await app.inject({ method: 'GET', url: '/health?live=1' });
+    assert.equal(liveRes.statusCode, 200);
+    const liveBody = liveRes.json();
+    assert.ok(['ok', 'degraded'].includes(liveBody.status));
     await app.close();
   });
 

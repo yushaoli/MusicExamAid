@@ -1,4 +1,4 @@
-.PHONY: build test typecheck check-shared
+.PHONY: build test typecheck check-shared migrate
 
 build:
 	npm run build
@@ -11,3 +11,6 @@ typecheck:
 
 check-shared:
 	./scripts/check-shared.sh
+
+migrate:
+	./scripts/migrate.sh
