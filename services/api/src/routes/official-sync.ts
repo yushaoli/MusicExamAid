@@ -568,5 +568,137 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       });
     },
   );
+
+  // 7. List all 200 Partner Teachers/Agents with exam & upgrade counts (`GET /official-sync/partner-agents`)
+  app.get('/official-sync/partner-agents', async (_req, reply) => {
+    const pool = getPostgresPool();
+    const { rows } = await pool.query(`
+      SELECT
+        a.agent_id,
+        a.code,
+        a.name,
+        a.manager,
+        a.phone,
+        a.addr,
+        COUNT(e.exam_id)::int AS total_exams,
+        COUNT(DISTINCT e.student_id)::int AS distinct_students
+      FROM kjzx_partner_agents a
+      LEFT JOIN kjzx_historical_exams e ON e.agent_id = a.agent_id
+      GROUP BY a.agent_id, a.code, a.name, a.manager, a.phone, a.addr
+      ORDER BY total_exams DESC, a.agent_id ASC
+    `);
+    return reply.code(200).send({
+      total: rows.length,
+      items: rows,
+    });
+  });
+
+  // 8. Historical Student Lookup & 1-Click Renewal Profile (`GET /official-sync/student-lookup`)
+  app.get(
+    '/official-sync/student-lookup',
+    async (
+      req: FastifyRequest<{
+        Querystring: { q?: string; agent_id?: string; limit?: string };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const pool = getPostgresPool();
+      const q = (req.query?.q || '').trim();
+      const agentId = req.query?.agent_id ? Number(req.query.agent_id) : null;
+      const limit = Math.min(Math.max(Number(req.query?.limit || 12), 1), 50);
+
+      const studentsRes = await pool.query(
+        `
+        SELECT
+          s.student_id,
+          s.name_cn,
+          s.pinyin,
+          s.sex,
+          s.nation,
+          s.birthday,
+          s.id_card_masked,
+          s.parent_phone_masked,
+          s.agent_id,
+          s.agent_name,
+          s.picture_url,
+          s.id_picture_url,
+          s.all_exams
+        FROM kjzx_historical_students s
+        WHERE ($1::text = '' OR s.name_cn ILIKE '%' || $1 || '%' OR s.pinyin ILIKE '%' || $1 || '%' OR s.parent_phone_masked ILIKE '%' || $1 || '%' OR s.id_card_masked ILIKE '%' || $1 || '%')
+          AND ($2::int IS NULL OR s.agent_id = $2::int)
+        ORDER BY s.all_exams DESC, s.student_id DESC
+        LIMIT $3::int
+        `,
+        [q, agentId, limit],
+      );
+
+      const studentIds = studentsRes.rows.map(r => r.student_id);
+      let examsByStudent = new Map<number, Array<Record<string, unknown>>>();
+
+      if (studentIds.length > 0) {
+        const examsRes = await pool.query(
+          `
+          SELECT
+            e.exam_id,
+            e.student_id,
+            e.season_code,
+            e.season_label,
+            e.major_id,
+            e.major_name,
+            e.level,
+            e.exam_no,
+            e.cert_no,
+            e.exam_titles,
+            e.certs_json,
+            e.videos_json,
+            e.status,
+            e.is_pay,
+            e.filing_code,
+            e.agent_id,
+            e.agent_name,
+            COALESCE(ol.official_price_yuan, 360) AS next_level_fee_yuan
+          FROM kjzx_historical_exams e
+          LEFT JOIN kjzx_official_levels ol ON ol.level_id = LEAST(e.level + 1, 11)
+          WHERE e.student_id = ANY($1::int[])
+          ORDER BY e.season_code DESC, e.level DESC
+          `,
+          [studentIds],
+        );
+
+        for (const row of examsRes.rows) {
+          const sid = Number(row.student_id);
+          const list = examsByStudent.get(sid) || [];
+          list.push(row);
+          examsByStudent.set(sid, list);
+        }
+      }
+
+      const items = studentsRes.rows.map(s => {
+        const exams = examsByStudent.get(Number(s.student_id)) || [];
+        const latestExam = exams[0] || null;
+        const nextLevel = latestExam ? Math.min(Number(latestExam.level) + 1, 10) : 1;
+        return {
+          ...s,
+          latest_exam: latestExam,
+          recommended_upgrade: latestExam
+            ? {
+                major_name: latestExam.major_name,
+                last_level: Number(latestExam.level),
+                last_season: latestExam.season_label,
+                recommended_level: nextLevel,
+                official_fee_yuan: Number(latestExam.next_level_fee_yuan || 360),
+              }
+            : null,
+          exams,
+        };
+      });
+
+      return reply.code(200).send({
+        query: q,
+        count: items.length,
+        items,
+      });
+    },
+  );
 }
 

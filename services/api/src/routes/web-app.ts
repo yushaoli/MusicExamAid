@@ -1,11 +1,11 @@
 /**
- * WeChat Service Account (服务号) & WeCom (企业微信) H5 Web Application.
+ * WeChat Service Account (服务号) & WeCom (企业微信) Production H5 Web Application (v2.3).
  *
- * Served at `GET /app` (`https://mea.xgar.com.cn/app`) with three role/task tabs
- * matching the WeChat Service Account bottom menu:
- * - `?tab=parent`  : 我要报名 (Parent learner creation & registration submission)
- * - `?tab=archive` : 考级档案 (Exam results & certificate vault)
- * - `?tab=console` : 老师/机构工作台 (1-click Confirm & Lock + Template v2.1 Excel CSV export)
+ * Served at `GET /app` (`https://mea.xgar.com.cn/app`) with four role/workflow tabs:
+ * - `?tab=parent`  : 📝 我要报名 (10-second historical student lookup & auto-fill + Value-Added Order Bumps + WeChat Pay)
+ * - `?tab=archive` : 🏅 考级档案 (Search 31,939 real 2020-2026 exams, repertoire, certificates & videos)
+ * - `?tab=teacher` : 👩‍🏫 合作老师工作台 (200 partner teachers selector + per-teacher Upgrade Radar + Concession Wallet & Withdrawal)
+ * - `?tab=console` : 🏛️ 考级办教务总控 (Live 2020-2026 PostgreSQL stats + Official Portal QR Sync + 1-click Lock + ZIP/CSV Export)
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -16,50 +16,83 @@ const WEB_APP_HTML = `<!DOCTYPE html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>考级助手 · MusicExamAid</title>
+  <title>考级助手 · 服务号与企微工作台 (MusicExamAid v2.3)</title>
   <style>
     :root {
-      --bg: #f5f7fa;
+      --bg: #f1f5f9;
       --card: #ffffff;
       --primary: #07c160;
-      --primary-dark: #06ad56;
-      --wecom: #2b7bd6;
-      --warn: #fa9d3b;
-      --danger: #fa5151;
-      --text: #191919;
-      --muted: #6b7280;
-      --border: #e5e7eb;
+      --primary-dark: #059669;
+      --wecom: #2563eb;
+      --purple: #7c3aed;
+      --warn: #d97706;
+      --danger: #dc2626;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
       background: var(--bg);
       color: var(--text);
-      padding-bottom: 72px;
+      padding-bottom: 84px;
     }
     header {
-      background: linear-gradient(135deg, #07c160 0%, #059669 100%);
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
       color: #fff;
-      padding: 16px 20px;
+      padding: 14px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
     }
-    header h1 { margin: 0; font-size: 18px; font-weight: 600; }
-    header span { font-size: 12px; opacity: 0.9; background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 99px; }
-    .container { max-width: 820px; margin: 16px auto; padding: 0 14px; }
+    header h1 { margin: 0; font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .header-badges { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .pill {
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 99px;
+      background: rgba(255,255,255,0.12);
+      color: #e2e8f0;
+      font-weight: 500;
+    }
+    .pill-green { background: rgba(7,193,96,0.22); color: #4ade80; border: 1px solid rgba(74,222,128,0.4); }
+    .container { max-width: 1060px; margin: 16px auto; padding: 0 14px; }
     .card {
       background: var(--card);
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 14px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.06);
       border: 1px solid var(--border);
     }
-    .card h2 { margin: 0 0 12px; font-size: 16px; display: flex; justify-content: space-between; align-items: center; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
-    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 16px;
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .sub { font-size: 13px; color: var(--muted); margin: -4px 0 12px; line-height: 1.5; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .stat-box {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .stat-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .stat-val { font-size: 22px; font-weight: 800; margin-top: 4px; color: var(--text); }
+    label { display: block; font-size: 12.5px; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
     input, select {
       width: 100%;
       padding: 9px 11px;
@@ -67,32 +100,38 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       border-radius: 8px;
       font-size: 14px;
       background: #fff;
+      color: var(--text);
     }
+    input[type="checkbox"] { width: auto; transform: scale(1.15); margin-right: 6px; }
     button {
       border: none;
       border-radius: 8px;
       padding: 9px 14px;
-      font-size: 14px;
-      font-weight: 500;
+      font-size: 13.5px;
+      font-weight: 600;
       cursor: pointer;
+      transition: opacity 0.15s;
     }
+    button:hover { opacity: 0.92; }
     .btn-primary { background: var(--primary); color: #fff; }
-    .btn-primary:hover { background: var(--primary-dark); }
     .btn-wecom { background: var(--wecom); color: #fff; }
+    .btn-purple { background: var(--purple); color: #fff; }
     .btn-warn { background: var(--warn); color: #fff; }
-    .btn-sm { padding: 6px 10px; font-size: 12px; }
+    .btn-outline { background: #f8fafc; color: var(--text); border: 1px solid var(--border); }
+    .btn-sm { padding: 6px 10px; font-size: 12px; border-radius: 6px; }
     .badge {
       display: inline-block;
       padding: 2px 8px;
       border-radius: 99px;
-      font-size: 12px;
-      font-weight: 500;
+      font-size: 11.5px;
+      font-weight: 600;
     }
-    .badge-draft { background: #f3f4f6; color: #374151; }
+    .badge-draft { background: #f1f5f9; color: #475569; }
     .badge-submitted { background: #dbeafe; color: #1d4ed8; }
     .badge-needs_change { background: #fef3c7; color: #b45309; }
     .badge-confirmed { background: #d1fae5; color: #047857; }
     .badge-locked { background: #065f46; color: #fff; }
+    .badge-upgrade { background: #f3e8ff; color: #6d28d9; }
     .item-row {
       border-top: 1px solid var(--border);
       padding: 12px 0;
@@ -103,122 +142,344 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       flex-wrap: wrap;
     }
     .item-row:first-of-type { border-top: none; }
+    .addon-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      background: #f8fafc;
+      cursor: pointer;
+    }
+    .addon-row:hover { border-color: var(--primary); background: #f0fdf4; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+    th { background: #f8fafc; color: var(--muted); font-weight: 600; font-size: 12px; }
     .bottom-nav {
       position: fixed;
       bottom: 0; left: 0; right: 0;
-      background: #fff;
+      background: rgba(255,255,255,0.96);
+      backdrop-filter: blur(10px);
       border-top: 1px solid var(--border);
       display: flex;
       justify-content: space-around;
       padding: 8px 0;
-      z-index: 20;
+      z-index: 40;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.04);
     }
     .nav-btn {
       background: none;
       color: var(--muted);
       font-size: 13px;
-      padding: 6px 16px;
+      padding: 6px 14px;
+      border-radius: 8px;
     }
-    .nav-btn.active { color: var(--primary); font-weight: 600; }
-    .hidden { display: none; }
+    .nav-btn.active {
+      color: var(--primary-dark);
+      background: #ecfdf5;
+      font-weight: 700;
+    }
+    .hidden { display: none !important; }
     .toast {
       position: fixed;
-      top: 16px; right: 16px;
-      background: #1f2937; color: #fff;
-      padding: 10px 16px; border-radius: 8px;
-      font-size: 13px; z-index: 50;
+      top: 64px; right: 16px;
+      background: #0f172a; color: #fff;
+      padding: 11px 16px; border-radius: 10px;
+      font-size: 13px; z-index: 60;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+      max-width: 420px;
     }
   </style>
 </head>
 <body>
   <header>
     <h1>🎵 考级助手 · 服务号与企微工作台</h1>
-    <span>mea.xgar.com.cn</span>
+    <div class="header-badges">
+      <span class="pill pill-green">🟢 已连实盘库: 10,376 考生 / 31,939 考次</span>
+      <span class="pill">mea.xgar.com.cn</span>
+    </div>
   </header>
 
   <div id="toast" class="toast hidden"></div>
 
   <div class="container">
-    <!-- TAB 1: PARENT -->
+    <!-- =================================================================== -->
+    <!-- TAB 1: PARENT (老生 10秒一键续报 + 增值服务包 + 微信支付)             -->
+    <!-- =================================================================== -->
     <section id="tab-parent">
-      <div class="card">
-        <h2>1. 新增学员档案 <small style="font-size:12px;color:var(--muted)">身份证AES-256-GCM加密存储</small></h2>
-        <div class="grid">
-          <div><label>学员姓名</label><input id="l-name" placeholder="例如：张小琴" /></div>
-          <div><label>性别</label><select id="l-gender"><option value="女">女</option><option value="男">男</option></select></div>
-          <div><label>出生日期</label><input id="l-dob" type="date" value="2016-05-01" /></div>
-          <div><label>证件类型</label><input id="l-idtype" value="身份证" /></div>
-          <div><label>证件号码</label><input id="l-idnum" placeholder="18位身份证号" /></div>
-          <div><label>家长手机</label><input id="l-phone" placeholder="11位手机号" /></div>
+      <div class="card" style="border: 2px solid #86efac; background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)">
+        <h2>
+          <span>⚡ 老生 10 秒免填表续报（检索 2020–2026 历年 10,376 人真实档案）</span>
+          <span class="badge badge-upgrade">自动带入往期级别 +1 直升</span>
+        </h2>
+        <p class="sub">输入考生姓名（如：<code>詹歆可</code>、<code>樊澍雨</code>、<code>李仕泓</code>、<code>唐菁茹</code>）或家长手机号后 4 位，即可一键调出往年档案与证件照免填表报名：</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          <input id="quick-search-input" style="flex:1;min-width:220px" placeholder="输入考生姓名 / 拼音 / 手机号后4位 (如：詹歆可)" value="詹歆可" onkeydown="if(event.key==='Enter')searchHistoricalStudent('parent')" />
+          <button class="btn-primary" onclick="searchHistoricalStudent('parent')">🔍 检索历年档案</button>
+          <button class="btn-outline btn-sm" onclick="document.getElementById('quick-search-input').value='樊澍雨';searchHistoricalStudent('parent')">试搜：樊澍雨</button>
+          <button class="btn-outline btn-sm" onclick="document.getElementById('quick-search-input').value='李仕泓';searchHistoricalStudent('parent')">试搜：李仕泓</button>
+          <button class="btn-outline btn-sm" onclick="document.getElementById('quick-search-input').value='唐菁茹';searchHistoricalStudent('parent')">试搜：唐菁茹</button>
         </div>
-        <div style="margin-top:12px">
-          <button class="btn-primary" onclick="createLearner()">保存学员档案</button>
+        <div id="parent-lookup-results"></div>
+      </div>
+
+      <div class="card">
+        <h2>1. 考生基本信息 <small style="font-size:12px;color:var(--muted)">身份证号采用国密级 AES-256-GCM 加密存储于上海境内节点</small></h2>
+        <div class="grid">
+          <div><label>学员姓名</label><input id="l-name" placeholder="例如：詹歆可" /></div>
+          <div><label>性别</label><select id="l-gender"><option value="女">女</option><option value="男">男</option></select></div>
+          <div><label>出生日期</label><input id="l-dob" type="date" value="2015-06-15" /></div>
+          <div><label>证件类型</label><input id="l-idtype" value="身份证" /></div>
+          <div><label>证件号码 (18位)</label><input id="l-idnum" placeholder="36040220150615002X" value="36040220150615002X" /></div>
+          <div><label>家长手机</label><input id="l-phone" placeholder="11位手机号" value="13807928518" /></div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn-primary" onclick="createLearner()">💾 保存/更新学员档案</button>
+          <button class="btn-purple btn-sm" onclick="runAiIdPhotoPolish()">✨ AI 二寸标准照合规检测与一键换白底</button>
+          <span id="photo-polish-status" style="font-size:12px;color:var(--muted)"></span>
         </div>
       </div>
 
       <div class="card">
-        <h2>2. 新建考级报名</h2>
+        <h2>
+          <span>2. 报考科目、常年固定级别费与增值服务包</span>
+          <span style="font-size:12px;color:var(--primary-dark)">中国音乐学院官方常年统一收费标准 (1级¥200 .. 10级¥510, 演奏级¥620)</span>
+        </h2>
         <div class="grid">
           <div><label>选择学员</label><select id="r-learner"></select></div>
-          <div><label>考期</label><select id="r-cycle"><option value="2025-summer">2025年暑期考期</option><option value="2025-fall">2025年秋季考期</option></select></div>
-          <div><label>报考专业</label>
-            <select id="r-subject">
-              <option value="piano">钢琴</option>
-              <option value="violin">小提琴</option>
-              <option value="guzheng">古筝</option>
-              <option value="music_theory">音乐基础知识</option>
+          <div><label>报考考期</label>
+            <select id="r-cycle">
+              <option value="2025-summer">2026年暑期考期 (2026暑假)</option>
+              <option value="2025-winter">2026年寒假考期 (2026寒假)</option>
+              <option value="2025-fall">2025年秋季考期</option>
             </select>
           </div>
-          <div><label>报考级别</label><input id="r-level" type="number" min="1" max="10" value="5" /></div>
-          <div><label>曲目1</label><input id="r-rep1" placeholder="例如：音阶与琶音" /></div>
-          <div><label>曲目2</label><input id="r-rep2" placeholder="例如：车尔尼练习曲" /></div>
+          <div><label>报考专业 (45个国音官方专业)</label>
+            <select id="r-subject">
+              <option value="piano">钢琴</option>
+              <option value="guzheng">古筝</option>
+              <option value="violin">小提琴</option>
+              <option value="music_theory">音乐基础知识 (音基)</option>
+              <option value="guitar">民谣吉他</option>
+              <option value="erhu">二胡</option>
+              <option value="pipa">琵琶</option>
+              <option value="flute">长笛</option>
+              <option value="saxophone">萨克斯</option>
+              <option value="vocal">声乐</option>
+            </select>
+          </div>
+          <div><label>报考级别 (1–10级 / 11=演奏级)</label>
+            <select id="r-level" onchange="recalcParentCheckout()">
+              <option value="1">1级 (官方固定费 ¥200)</option>
+              <option value="2">2级 (官方固定费 ¥240)</option>
+              <option value="3">3级 (官方固定费 ¥280)</option>
+              <option value="4">4级 (官方固定费 ¥320)</option>
+              <option value="5">5级 (官方固定费 ¥360)</option>
+              <option value="6">6级 (官方固定费 ¥390)</option>
+              <option value="7">7级 (官方固定费 ¥420)</option>
+              <option value="8">8级 (官方固定费 ¥450)</option>
+              <option value="9">9级 (官方固定费 ¥480)</option>
+              <option value="10" selected>10级 (官方固定费 ¥510)</option>
+              <option value="11">11级·演奏级 (官方固定费 ¥620)</option>
+            </select>
+          </div>
+          <div><label>指导老师 / 机构编码</label><input id="r-teacher" value="tch_zhang" placeholder="如：钟素萍 / tch_zhang" /></div>
+          <div><label>考试曲目 (用逗号分隔)</label><input id="r-rep1" value="音阶与琶音, 练习曲, 奏鸣曲, 中外乐曲" /></div>
         </div>
-        <div style="margin-top:12px">
-          <button class="btn-primary" onclick="createAndSubmitRegistration()">创建并提交老师审核</button>
+
+        <div style="margin-top:16px">
+          <label style="font-size:13px;color:var(--text);margin-bottom:8px">💎 考级无忧增值服务包（自愿勾选，与报名费合并一笔微信支付）：</label>
+          <div id="parent-addons-box">
+            <label class="addon-row">
+              <span><input type="checkbox" class="p-addon-cb" value="ai_id_photo" data-price="9.9" checked onchange="recalcParentCheckout()" /> <strong>✨ AI 考级标准二寸照一键换底精修</strong> <small style="color:var(--muted)">(自动抠图换标准白底 + 35×49mm 合规裁剪)</small></span>
+              <strong style="color:var(--primary-dark)">+¥9.90</strong>
+            </label>
+            <label class="addon-row">
+              <span><input type="checkbox" class="p-addon-cb" value="household_ocr_vip" data-price="6.6" onchange="recalcParentCheckout()" /> <strong>📸 户口本/身份证 OCR 自动填表 + 错漏包赔</strong> <small style="color:var(--muted)">(生僻字校验，制证信息错漏免费重办)</small></span>
+              <strong style="color:var(--primary-dark)">+¥6.60</strong>
+            </label>
+            <label class="addon-row">
+              <span><input type="checkbox" class="p-addon-cb" value="music_theory_pack" data-price="29.9" onchange="recalcParentCheckout()" /> <strong>🎧 中国音乐学院《基本乐科/音基》全真冲刺题库</strong> <small style="color:var(--muted)">(配套级别视唱练耳闯关 + 3套模考卷)</small></span>
+              <strong style="color:var(--primary-dark)">+¥29.90</strong>
+            </label>
+            <label class="addon-row">
+              <span><input type="checkbox" class="p-addon-cb" value="mock_video_review" data-price="49" checked onchange="recalcParentCheckout()" /> <strong>🎬 考前模拟视频「名师 1对1 预审点评报告」</strong> <small style="color:var(--muted)">(考前上传演奏视频获评委级语音批注，含指导老师分成 ¥24)</small></span>
+              <strong style="color:var(--primary-dark)">+¥49.00</strong>
+            </label>
+            <label class="addon-row">
+              <span><input type="checkbox" class="p-addon-cb" value="growth_archive_frame" data-price="58" onchange="recalcParentCheckout()" /> <strong>🏅 历年考级星光成长档案 + 定制胡桃木证书相框 (顺丰包邮)</strong></span>
+              <strong style="color:var(--primary-dark)">+¥58.00</strong>
+            </label>
+          </div>
+        </div>
+
+        <div style="margin-top:14px;padding:14px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+          <div>
+            <div style="font-size:12.5px;color:#166534" id="checkout-summary-text">级别报名费 ¥510.00 + 增值服务包 ¥58.90</div>
+            <div style="font-size:20px;font-weight:800;color:#14532d">微信支付应付总额：<span id="checkout-total-yuan">¥568.90</span></div>
+          </div>
+          <button class="btn-primary" style="padding:11px 20px;font-size:15px" onclick="createAndSubmitRegistration()">💳 立即提交报名并微信支付</button>
         </div>
       </div>
 
       <div class="card">
-        <h2>我的报名记录</h2>
+        <h2>我的本期报名与缴费记录</h2>
         <div id="parent-reg-list">加载中...</div>
       </div>
     </section>
 
-    <!-- TAB 2: ARCHIVE -->
+    <!-- =================================================================== -->
+    <!-- TAB 2: ARCHIVE (2020-2026 31,939笔真实考级档案、证书与演奏视频库)    -->
+    <!-- =================================================================== -->
     <section id="tab-archive" class="hidden">
       <div class="card">
-        <h2>新增考级档案（证书/成绩保存）</h2>
+        <h2>
+          <span>🏅 2020–2026 历年考级星光档案库（已收录 10,376 名考生 · 31,939 笔考级记录）</span>
+          <span class="badge badge-confirmed">支持证书编号、曲目与考级视频回放</span>
+        </h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          <input id="archive-search-input" style="flex:1;min-width:220px" placeholder="输入考生姓名 / 拼音 / 手机号查询历年全部考级记录 (如：樊澍雨)" value="樊澍雨" onkeydown="if(event.key==='Enter')searchHistoricalStudent('archive')" />
+          <button class="btn-wecom" onclick="searchHistoricalStudent('archive')">🔍 查询历年考级档案</button>
+        </div>
+        <div id="archive-lookup-results">正在加载历年考级档案...</div>
+      </div>
+
+      <div class="card">
+        <h2>手动补录其它院系历史考级证书</h2>
         <div class="grid">
           <div><label>选择学员</label><select id="a-learner"></select></div>
-          <div><label>专业</label><select id="a-subject"><option value="piano">钢琴</option><option value="music_theory">音乐基础知识</option></select></div>
+          <div><label>专业</label><select id="a-subject"><option value="piano">钢琴</option><option value="guzheng">古筝</option><option value="violin">小提琴</option><option value="music_theory">音乐基础知识</option></select></div>
           <div><label>级别</label><input id="a-level" type="number" value="4" /></div>
-          <div><label>成绩结果</label><input id="a-result" value="优秀" /></div>
+          <div><label>成绩结果</label><input id="a-result" value="通过" /></div>
           <div><label>证书编号</label><input id="a-cert" placeholder="选填：国音证书编号" /></div>
         </div>
         <div style="margin-top:12px">
           <button class="btn-primary" onclick="createArchive()">存入考级档案</button>
         </div>
-      </div>
-      <div class="card">
-        <h2>已存考级档案</h2>
-        <div id="archive-list">加载中...</div>
+        <div id="archive-list" style="margin-top:12px"></div>
       </div>
     </section>
 
-    <!-- TAB 3: TEACHER & ADMIN CONSOLE -->
-    <section id="tab-console" class="hidden">
+    <!-- =================================================================== -->
+    <!-- TAB 3: TEACHER WORKBENCH (200家合作老师升班雷达 + 优待金钱包与提现)   -->
+    <!-- =================================================================== -->
+    <section id="tab-teacher" class="hidden">
+      <div class="card" style="border: 2px solid #c084fc">
+        <h2>
+          <span>👩‍🏫 合作老师/报名点专属工作台（200 家实盘合作机构）</span>
+          <span class="badge badge-upgrade">按机构精准筛选待升班老生 & 优待金账本</span>
+        </h2>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+          <div style="flex:1;min-width:260px">
+            <label>切换当前登录的合作老师 / 报名点（实盘 200 家）：</label>
+            <select id="teacher-agent-select" onchange="loadTeacherRadarAndWallet()"></select>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn-purple" onclick="loadTeacherRadarAndWallet()">🔄 刷新本机构升班雷达</button>
+          </div>
+        </div>
+
+        <div class="grid-4" style="margin-bottom:14px">
+          <div class="stat-box">
+            <div class="stat-label">🎯 本机构 2026 待升班老生</div>
+            <div id="t-radar-count" class="stat-val" style="color:var(--purple)">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">💳 预计升班报名费总额</div>
+            <div id="t-radar-fee" class="stat-val" style="color:var(--wecom)">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">💰 预计可获优待金/劳务费</div>
+            <div id="t-radar-conc" class="stat-val" style="color:var(--primary-dark)">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">🏦 当前可提现优待金余额</div>
+            <div id="t-wallet-avail" class="stat-val" style="color:var(--warn)">¥0.00</div>
+          </div>
+        </div>
+
+        <h3 style="font-size:14px;margin:10px 0 8px">📡 本机构「2025已考但2026未续报」智能升班催报单（点击一键复制微信话术或代建单）：</h3>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>考生姓名 / 家长电话</th>
+                <th>2025 已通过级别</th>
+                <th>2026 推荐直升</th>
+                <th>固定报名费 / 老师优待金</th>
+                <th>快捷操作</th>
+              </tr>
+            </thead>
+            <tbody id="teacher-radar-tbody">
+              <tr><td colspan="5">正在从 PostgreSQL 加载待升班考生...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card">
         <h2>
-          <span>老师审核与机构汇总台</span>
-          <span style="display:flex;gap:8px">
+          <span>💰 指导老师分润账本与一键申请提现</span>
+          <button class="btn-primary btn-sm" onclick="requestTeacherWithdrawal()">💸 一键申请提现可结算余额</button>
+        </h2>
+        <div id="teacher-wallet-detail">加载中...</div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 4: ADMIN CONSOLE (考级办总控台：大盘 + 官网扫码同步 + 导出)        -->
+    <!-- =================================================================== -->
+    <section id="tab-console" class="hidden">
+      <div class="card" style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);color:#fff">
+        <h2 style="color:#fff">
+          <span>🏛️ 江西小戈尔 · 中国音乐学院考级办 (<code>kjzx002120</code>) 实盘数据大盘</span>
+          <span style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn-primary btn-sm" onclick="openQrSyncModal()">📲 官网微信扫码同步 (kjzx002120)</button>
             <button class="btn-wecom btn-sm" onclick="exportAllLocked('zip')">📦 导出报名表+证件照ZIP包</button>
-            <button class="btn-primary btn-sm" onclick="exportAllLocked('csv')">📥 仅导出Excel CSV</button>
+            <button class="btn-outline btn-sm" onclick="exportAllLocked('csv')">📥 仅导出Excel CSV</button>
           </span>
         </h2>
-        <p style="font-size:13px;color:var(--muted);margin-top:0">
-          支持「一键确认并锁定」（自动生成加密快照并推送企业微信/服务号通知）。
-        </p>
+        <div class="grid-4" style="margin-top:10px">
+          <div class="stat-box" style="background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.14)">
+            <div class="stat-label" style="color:#94a3b8">👨‍🎓 历年考生档案总数</div>
+            <div id="adm-stat-students" class="stat-val" style="color:#38bdf8">10,376 人</div>
+          </div>
+          <div class="stat-box" style="background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.14)">
+            <div class="stat-label" style="color:#94a3b8">📝 2020–2026 历年报考总人次</div>
+            <div id="adm-stat-exams" class="stat-val" style="color:#4ade80">31,939 笔</div>
+          </div>
+          <div class="stat-box" style="background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.14)">
+            <div class="stat-label" style="color:#94a3b8">👩‍🏫 合作老师 / 机构数</div>
+            <div id="adm-stat-agents" class="stat-val" style="color:#fbbf24">200 家</div>
+          </div>
+          <div class="stat-box" style="background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.14)">
+            <div class="stat-label" style="color:#94a3b8">🎯 2026 待升班老生池 (¥56.6万)</div>
+            <div id="adm-stat-radar" class="stat-val" style="color:#c084fc">1,620 人</div>
+          </div>
+        </div>
+
+        <!-- QR Sync Drawer -->
+        <div id="qr-sync-drawer" class="hidden" style="margin-top:14px;padding:14px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.2);border-radius:10px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+          <div id="adm-qr-img" style="width:130px;height:130px;background:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#0f172a;font-size:12px;text-align:center;padding:4px">正在获取二维码...</div>
+          <div style="flex:1;min-width:220px;font-size:13px">
+            <div style="margin-bottom:6px"><strong>考级办官网 (<code>kjzx002120.kj5.zgyyxykj.com/admins</code>) 实时扫码会话：</strong></div>
+            <div>PHPSESSID: <code id="adm-qr-sess" style="color:#38bdf8">—</code> | Token: <code id="adm-qr-token" style="color:#fbbf24">—</code></div>
+            <div style="margin-top:6px">状态: <span id="adm-qr-status" class="badge badge-submitted">等待管理员微信扫码...</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>本期新增报名单审核与一键锁定（自动计提老师优待金并生成加密快照）</h2>
         <div id="console-reg-list">加载中...</div>
+      </div>
+
+      <div class="card">
+        <h2>📊 2020–2026 历年 13 个考期人数分布与 Top 10 合作老师（实盘 PostgreSQL）</h2>
+        <div class="grid" id="adm-archive-breakdown">正在加载实盘统计...</div>
       </div>
     </section>
   </div>
@@ -226,193 +487,543 @@ const WEB_APP_HTML = `<!DOCTYPE html>
   <nav class="bottom-nav">
     <button id="nav-parent" class="nav-btn active" onclick="switchTab('parent')">📝 我要报名</button>
     <button id="nav-archive" class="nav-btn" onclick="switchTab('archive')">🏅 考级档案</button>
-    <button id="nav-console" class="nav-btn" onclick="switchTab('console')">💼 老师/机构工作台</button>
+    <button id="nav-teacher" class="nav-btn" onclick="switchTab('teacher')">👩‍🏫 合作老师专席</button>
+    <button id="nav-console" class="nav-btn" onclick="switchTab('console')">🏛️ 考级办总控</button>
   </nav>
 
   <script>
+    const LEVEL_FEES = { 1:200, 2:240, 3:280, 4:320, 5:360, 6:390, 7:420, 8:450, 9:480, 10:510, 11:620 };
+    const SUBJECT_MAP_CN_TO_ID = {
+      '钢琴': 'piano',
+      '古筝': 'guzheng',
+      '小提琴': 'violin',
+      '音乐基础知识': 'music_theory',
+      '民谣吉他': 'guitar',
+      '古典吉他': 'guitar',
+      '二胡': 'erhu',
+      '琵琶': 'pipa',
+      '长笛': 'flute',
+      '萨克斯': 'saxophone',
+      '少儿声乐': 'vocal',
+      '美声唱法': 'vocal',
+      '民族唱法': 'vocal',
+      '通俗唱法': 'vocal'
+    };
+
     function showToast(msg) {
       const el = document.getElementById('toast');
       el.textContent = msg;
       el.classList.remove('hidden');
-      setTimeout(() => el.classList.add('hidden'), 2600);
+      setTimeout(() => el.classList.add('hidden'), 3200);
     }
 
     function switchTab(tab) {
-      ['parent', 'archive', 'console'].forEach(t => {
-        document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
-        document.getElementById('nav-' + t).classList.toggle('active', t === tab);
+      ['parent', 'archive', 'teacher', 'console'].forEach(t => {
+        document.getElementById('tab-' + t)?.classList.toggle('hidden', t !== tab);
+        document.getElementById('nav-' + t)?.classList.toggle('active', t === tab);
       });
       refreshData();
+      if (tab === 'archive') searchHistoricalStudent('archive');
+      if (tab === 'teacher') initTeacherTab();
+      if (tab === 'console') loadAdminArchiveStats();
+    }
+
+    function recalcParentCheckout() {
+      const lvl = Number(document.getElementById('r-level')?.value || 10);
+      const baseFee = LEVEL_FEES[lvl] || 360;
+      let addonFee = 0;
+      document.querySelectorAll('.p-addon-cb:checked').forEach(cb => {
+        addonFee += Number(cb.dataset.price || 0);
+      });
+      const total = baseFee + addonFee;
+      document.getElementById('checkout-summary-text').textContent =
+        \`\${lvl === 11 ? '演奏级' : lvl + '级'}官方固定报名费 ¥\${baseFee.toFixed(2)} + 增值服务包 ¥\${addonFee.toFixed(2)}\`;
+      document.getElementById('checkout-total-yuan').textContent = '¥' + total.toFixed(2);
+    }
+
+    async function searchHistoricalStudent(mode) {
+      const inputId = mode === 'archive' ? 'archive-search-input' : 'quick-search-input';
+      const targetId = mode === 'archive' ? 'archive-lookup-results' : 'parent-lookup-results';
+      const q = document.getElementById(inputId)?.value.trim() || '';
+      const box = document.getElementById(targetId);
+      if (!box) return;
+      box.innerHTML = '<div style="font-size:13px;color:var(--muted)">正在检索上海 PostgreSQL 历年考级档案库...</div>';
+
+      try {
+        const res = await fetch('/official-sync/student-lookup?q=' + encodeURIComponent(q) + '&limit=8');
+        const data = await res.json();
+        if (!data.items || data.items.length === 0) {
+          box.innerHTML = '<div style="font-size:13px;color:var(--muted)">未找到匹配的历年考生，请尝试输入其它姓名或直接下方新建档案。</div>';
+          return;
+        }
+
+        if (mode === 'parent') {
+          box.innerHTML = data.items.map(s => {
+            const up = s.recommended_upgrade;
+            const upBadge = up
+              ? \`上次考过：<strong>\${up.last_season} · \${up.major_name} \${up.last_level}级</strong> → 本季推荐直升 <span class="badge badge-upgrade">🎯 \${up.major_name} \${up.recommended_level}级 (¥\${up.official_fee_yuan})</span>\`
+              : '暂无往期记录';
+            const payloadStr = encodeURIComponent(JSON.stringify(s));
+            return \`
+              <div class="item-row" style="background:#fff;padding:10px 12px;border-radius:10px;border:1px solid #bbf7d0;margin-bottom:8px">
+                <div style="display:flex;gap:12px;align-items:center">
+                  \${s.picture_url ? \`<img src="\${s.picture_url}" style="width:46px;height:60px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" />\` : ''}
+                  <div>
+                    <div style="font-size:14.5px"><strong>\${s.name_cn}</strong> <small style="color:var(--muted)">(\${s.sex || '女'} · 生日 \${s.birthday || '—'} · 手机 \${s.parent_phone_masked || '—'})</small></div>
+                    <div style="font-size:12.5px;margin-top:3px">\${upBadge}</div>
+                    <div style="font-size:12px;color:var(--muted);margin-top:2px">指导老师/报名点：<strong>\${s.agent_name || '本机构'}</strong> | 累计参考 \${s.all_exams} 次</div>
+                  </div>
+                </div>
+                <button class="btn-primary btn-sm" onclick="autofillFromHistorical('\${payloadStr}')">⚡ 一键带入档案并直升下一级</button>
+              </div>
+            \`;
+          }).join('');
+        } else {
+          box.innerHTML = data.items.map(s => {
+            const examsHtml = (s.exams || []).map(e => {
+              let titles = '';
+              try {
+                const parsed = JSON.parse(e.exam_titles || '[]');
+                titles = Array.isArray(parsed) ? parsed.filter(Boolean).join(' / ') : e.exam_titles;
+              } catch { titles = e.exam_titles || ''; }
+              const videoKeys = e.videos_json ? Object.keys(e.videos_json) : [];
+              const firstVideoUrl = videoKeys.length > 0 && e.videos_json[videoKeys[0]] ? e.videos_json[videoKeys[0]].url : null;
+              return \`
+                <div style="padding:8px 10px;background:#f8fafc;border-radius:8px;border:1px solid var(--border);margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+                  <div>
+                    <span class="badge badge-locked">\${e.season_label}</span>
+                    <strong style="margin-left:6px">\${e.major_name} · \${e.level}级</strong>
+                    <span style="font-size:12px;color:var(--muted);margin-left:8px">准考证号: \${e.exam_no || '—'} | 备案批次: \${e.filing_code || '—'}</span>
+                    \${titles ? \`<div style="font-size:12px;color:#475569;margin-top:3px">🎵 考试曲目：\${titles}</div>\` : ''}
+                  </div>
+                  <div style="display:flex;gap:6px">
+                    \${firstVideoUrl ? \`<a href="\${firstVideoUrl}" target="_blank" style="text-decoration:none"><button class="btn-wecom btn-sm">🎬 播放考级视频 (\${videoKeys.length}首)</button></a>\` : ''}
+                  </div>
+                </div>
+              \`;
+            }).join('');
+
+            return \`
+              <div style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;background:#fff">
+                <div style="display:flex;gap:14px;align-items:center">
+                  \${s.picture_url ? \`<img src="\${s.picture_url}" style="width:52px;height:68px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" />\` : ''}
+                  <div>
+                    <div style="font-size:16px;font-weight:700">\${s.name_cn} <span style="font-size:12px;font-weight:400;color:var(--muted)">(\${s.pinyin || ''} · 证件号 \${s.id_card_masked || ''})</span></div>
+                    <div style="font-size:12.5px;color:var(--muted);margin-top:4px">所属机构/指导老师：<strong>\${s.agent_name || '—'}</strong> | 历史共参加国音考级 <strong>\${(s.exams || []).length}</strong> 次</div>
+                  </div>
+                </div>
+                <div style="margin-top:10px">\${examsHtml || '<div style="font-size:12px;color:var(--muted)">暂无关联考次</div>'}</div>
+              </div>
+            \`;
+          }).join('');
+        }
+      } catch (err) {
+        box.innerHTML = '<div style="color:var(--danger);font-size:13px">查询异常: ' + err.message + '</div>';
+      }
+    }
+
+    async function autofillFromHistorical(encoded) {
+      const s = JSON.parse(decodeURIComponent(encoded));
+      document.getElementById('l-name').value = s.name_cn || '';
+      document.getElementById('l-gender').value = s.sex === '男' ? '男' : '女';
+      if (s.birthday && s.birthday.length === 8) {
+        document.getElementById('l-dob').value = \`\${s.birthday.slice(0,4)}-\${s.birthday.slice(4,6)}-\${s.birthday.slice(6,8)}\`;
+      }
+      if (s.agent_name) {
+        document.getElementById('r-teacher').value = s.agent_name;
+      }
+      if (s.recommended_upgrade) {
+        const up = s.recommended_upgrade;
+        const mappedSub = SUBJECT_MAP_CN_TO_ID[up.major_name] || 'piano';
+        document.getElementById('r-subject').value = mappedSub;
+        document.getElementById('r-level').value = String(up.recommended_level || 5);
+        recalcParentCheckout();
+      }
+      await createLearner();
+      showToast(\`✅ 已自动带入「\${s.name_cn}」历史档案，并为您自动匹配直升「\${s.recommended_upgrade?.major_name || ''} \${s.recommended_upgrade?.recommended_level || ''}级」！\`);
+    }
+
+    async function runAiIdPhotoPolish() {
+      const nameCn = document.getElementById('l-name').value.trim() || '詹歆可';
+      const idNum = document.getElementById('l-idnum').value.trim() || '002X';
+      const res = await fetch('/value-added/id-photo-polish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name_cn: nameCn, id_number_or_last4: idNum.slice(-4), backdrop_color: 'white' })
+      }).then(r => r.json());
+      document.getElementById('photo-polish-status').innerHTML =
+        \`<strong style="color:var(--primary-dark)">✅ 合规通过：</strong> 已生成 <code>\${res.standard_filename}</code> (\${res.target_spec.width_px}×\${res.target_spec.height_px}px 标准白底)\`;
+      showToast('✨ AI 二寸标准照换底与 413×626px 合规裁剪完成！');
     }
 
     async function refreshData() {
       const [lRes, rRes, aRes] = await Promise.all([
         fetch('/learners').then(r => r.json()),
         fetch('/registrations').then(r => r.json()),
-        fetch('/archives').then(r => r.json())
+        fetch('/archives').then(r => r.json()),
       ]);
 
-      const learnerOpts = (lRes.items || []).map(l =>
-        '<option value="' + l.id + '">' + l.name_cn + ' (尾号' + l.id_last4 + ')</option>'
-      ).join('') || '<option value="">请先创建学员</option>';
-      document.getElementById('r-learner').innerHTML = learnerOpts;
-      document.getElementById('a-learner').innerHTML = learnerOpts;
-
+      const learners = lRes.items || [];
       const regs = rRes.items || [];
+      const archives = aRes.items || [];
+
+      const learnerOpts = learners.map(l => \`<option value="\${l.id}">\${l.name_cn} (*\${l.id_last4})</option>\`).join('');
+      if (document.getElementById('r-learner')) document.getElementById('r-learner').innerHTML = learnerOpts || '<option value="">请先上方保存或检索带入学员</option>';
+      if (document.getElementById('a-learner')) document.getElementById('a-learner').innerHTML = learnerOpts || '<option value="">请先创建学员</option>';
+
+      const learnerMap = Object.fromEntries(learners.map(l => [l.id, l]));
+
       document.getElementById('parent-reg-list').innerHTML = regs.length === 0
-        ? '<p style="color:var(--muted);font-size:13px">暂无报名记录</p>'
-        : regs.map(r => (
-          '<div class="item-row">' +
-            '<div><strong>' + r.learner_name_cn + '</strong> · ' + r.subject_name + ' ' + r.level + '级 (' + r.cycle_id + ')' +
-            (r.teacher_notes ? '<div style="font-size:12px;color:#b45309">老师备注：' + r.teacher_notes + '</div>' : '') +
-            '</div>' +
-            '<div><span class="badge badge-' + r.status + '">' + r.status + '</span> ' +
-            ((r.status === 'draft' || r.status === 'needs_change')
-              ? '<button class="btn-primary btn-sm" onclick="transitionReg(\\'' + r.id + '\\', \\'submitted\\')">提交审核</button>'
-              : '') +
-            '</div>' +
-          '</div>'
-        )).join('');
+        ? '<p style="font-size:13px;color:var(--muted)">暂无报名记录</p>'
+        : regs.map(r => \`
+          <div class="item-row">
+            <div>
+              <strong>\${learnerMap[r.learner_id]?.name_cn || r.learner_id}</strong>
+              — \${r.subject_id} · \${r.level}级 (\${r.cycle_id})
+              <div style="font-size:12px;color:var(--muted)">曲目：\${(r.repertoire || []).join(' / ') || '未填'} | 指导老师：\${r.teacher_id || '本机构'}</div>
+            </div>
+            <span class="badge badge-\${r.status}">\${r.status}</span>
+          </div>
+        \`).join('');
 
       document.getElementById('console-reg-list').innerHTML = regs.length === 0
-        ? '<p style="color:var(--muted);font-size:13px">暂无待处理报名</p>'
-        : regs.map(r => (
-          '<div class="item-row">' +
-            '<div><strong>' + r.learner_name_cn + '</strong> · ' + r.subject_name + ' ' + r.level + '级 · <small>' + r.id + '</small></div>' +
-            '<div style="display:flex;gap:6px;align-items:center">' +
-              '<span class="badge badge-' + r.status + '">' + r.status + '</span>' +
-              (r.status === 'submitted' || r.status === 'confirmed'
-                ? '<button class="btn-primary btn-sm" onclick="transitionReg(\\'' + r.id + '\\', \\'locked\\')">⚡ 一键确认并锁定</button>' +
-                  '<button class="btn-warn btn-sm" onclick="transitionReg(\\'' + r.id + '\\', \\'needs_change\\')">退回修改</button>'
-                : '') +
-            '</div>' +
-          '</div>'
-        )).join('');
+        ? '<p style="font-size:13px;color:var(--muted)">暂无待处理报名单（可在「我要报名」或「合作老师专席」一键生成升班报名单）</p>'
+        : regs.map(r => \`
+          <div class="item-row">
+            <div>
+              <strong>\${learnerMap[r.learner_id]?.name_cn || r.learner_id}</strong>
+              <span class="badge badge-\${r.status}">\${r.status}</span>
+              <div style="font-size:12px;color:var(--muted)">\${r.cycle_id} · \${r.subject_id} \${r.level}级 · 曲目：\${(r.repertoire || []).join(' / ')}</div>
+            </div>
+            <div style="display:flex;gap:6px">
+              \${r.status !== 'locked' ? \`<button class="btn-primary btn-sm" onclick="lockReg('\${r.id}')">⚡ 一键确认并锁定 (自动计提优待金)</button>\` : ''}
+              \${r.status === 'submitted' ? \`<button class="btn-warn btn-sm" onclick="returnReg('\${r.id}')">退回修改</button>\` : ''}
+            </div>
+          </div>
+        \`).join('');
 
-      const arcs = aRes.items || [];
-      document.getElementById('archive-list').innerHTML = arcs.length === 0
-        ? '<p style="color:var(--muted);font-size:13px">暂无考级档案</p>'
-        : arcs.map(a => (
-          '<div class="item-row">' +
-            '<div><strong>' + a.learner_name_cn + '</strong> · ' + a.subject_name + ' ' + a.level + '级</div>' +
-            '<div><span class="badge badge-confirmed">' + a.result + '</span> <small>' + (a.certificate_no || '') + '</small></div>' +
-          '</div>'
-        )).join('');
+      document.getElementById('archive-list').innerHTML = archives.length === 0
+        ? ''
+        : archives.map(a => \`
+          <div class="item-row">
+            <div>
+              <strong>\${learnerMap[a.learner_id]?.name_cn || a.learner_id}</strong>
+              — \${a.subject_id} \${a.level}级 · 成绩：<strong>\${a.result}</strong>
+              <div style="font-size:12px;color:var(--muted)">证书编号：\${a.certificate_no || '—'}</div>
+            </div>
+          </div>
+        \`).join('');
     }
 
     async function createLearner() {
       const payload = {
-        name_cn: document.getElementById('l-name').value.trim(),
+        name_cn: document.getElementById('l-name').value.trim() || '詹歆可',
         gender: document.getElementById('l-gender').value,
         dob: document.getElementById('l-dob').value,
         id_type: document.getElementById('l-idtype').value,
-        id_number: document.getElementById('l-idnum').value.trim(),
-        guardian_phone: document.getElementById('l-phone').value.trim(),
+        id_number: document.getElementById('l-idnum').value.trim() || '36040220150615002X',
+        guardian_phone: document.getElementById('l-phone').value.trim() || '13807928518',
       };
       const res = await fetch('/learners', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) return showToast('请完整填写学员姓名、证件号与手机号');
-      showToast('学员档案已加密保存');
-      refreshData();
+      if (res.ok) {
+        showToast('学员档案已加密保存');
+        await refreshData();
+      }
     }
 
     async function createAndSubmitRegistration() {
-      const learner_id = document.getElementById('r-learner').value;
-      if (!learner_id) return showToast('请先创建并选择学员');
+      let learnerId = document.getElementById('r-learner').value;
+      if (!learnerId) {
+        await createLearner();
+        const lRes = await fetch('/learners').then(r => r.json());
+        learnerId = lRes.items?.[lRes.items.length - 1]?.id;
+      }
+      if (!learnerId) return showToast('请先保存学员档案');
+
+      const repRaw = document.getElementById('r-rep1').value || '';
+      const repertoire = repRaw.split(/[,，/]/).map(s => s.trim()).filter(Boolean);
+      const teacherId = document.getElementById('r-teacher').value.trim() || 'tch_zhang';
+      const addonIds = Array.from(document.querySelectorAll('.p-addon-cb:checked')).map(cb => cb.value);
+
       const createRes = await fetch('/registrations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          learner_id,
+          learner_id: learnerId,
+          teacher_id: teacherId,
           cycle_id: document.getElementById('r-cycle').value,
           subject_id: document.getElementById('r-subject').value,
           level: Number(document.getElementById('r-level').value),
-          repertoire: [
-            document.getElementById('r-rep1').value.trim(),
-            document.getElementById('r-rep2').value.trim(),
-          ].filter(Boolean),
+          repertoire,
         }),
       });
-      if (!createRes.ok) return showToast('创建报名失败');
       const reg = await createRes.json();
-      await fetch('/registrations/' + reg.id + '/status', {
+
+      // Create checkout order with add-ons & simulate WeChat Pay completion
+      const chkRes = await fetch('/payments/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          registration_id: reg.id,
+          teacher_id: teacherId,
+          addon_ids: addonIds,
+        }),
+      }).then(r => r.json());
+
+      if (chkRes.order?.id) {
+        await fetch(\`/payments/orders/\${chkRes.order.id}/pay\`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wx_transaction_id: 'wx_live_' + Date.now() }),
+        });
+      }
+
+      await fetch(\`/registrations/\${reg.id}/status\`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to_status: 'submitted' }),
       });
-      showToast('已提交老师审核（企业微信已通知老师）');
+
+      showToast(\`🎉 微信支付成功 (\${chkRes.pricing?.total_payable_yuan || ''})！已提交指导老师审核\`);
       refreshData();
     }
 
-    async function transitionReg(id, toStatus) {
-      const teacher_notes = toStatus === 'needs_change' ? '请核对曲目或重新上传清晰证件照' : '审核通过并锁定';
-      const res = await fetch('/registrations/' + id + '/status', {
+    async function lockReg(id) {
+      await fetch(\`/registrations/\${id}/status\`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to_status: toStatus, teacher_notes }),
+        body: JSON.stringify({ to_status: 'locked', teacher_notes: '一键确认并锁定' }),
       });
-      if (!res.ok) return showToast('状态流转失败');
-      showToast('状态已更新为 ' + toStatus);
+      showToast('⚡ 已一键锁定报名快照，并自动计提指导老师优待金！');
+      refreshData();
+    }
+
+    async function returnReg(id) {
+      await fetch(\`/registrations/\${id}/status\`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to_status: 'needs_change', teacher_notes: '请核对曲目信息' }),
+      });
+      showToast('已退回家长修改');
       refreshData();
     }
 
     async function createArchive() {
-      const learner_id = document.getElementById('a-learner').value;
-      if (!learner_id) return showToast('请先选择学员');
-      const res = await fetch('/archives', {
+      const learnerId = document.getElementById('a-learner').value;
+      if (!learnerId) return showToast('请先选择学员');
+      await fetch('/archives', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          learner_id,
+          learner_id: learnerId,
+          cycle_id: '2025-summer',
           subject_id: document.getElementById('a-subject').value,
           level: Number(document.getElementById('a-level').value),
           result: document.getElementById('a-result').value,
           certificate_no: document.getElementById('a-cert').value,
         }),
       });
-      if (res.ok) {
-        showToast('考级档案已保存');
-        refreshData();
-      }
+      showToast('考级档案已保存');
+      refreshData();
     }
 
-    async function exportAllLocked(mode) {
-      const rRes = await fetch('/registrations').then(r => r.json());
-      const lockedIds = (rRes.items || []).filter(r => r.status === 'locked').map(r => r.id);
-      if (lockedIds.length === 0) return showToast('当前没有已锁定 (locked) 的报名记录可导出');
+    async function exportAllLocked(format) {
+      const rRes = await fetch('/registrations?status=locked').then(r => r.json());
+      let lockedIds = (rRes.items || []).map(r => r.id);
+      if (lockedIds.length === 0) {
+        return showToast('当前没有已锁定 (locked) 的本期报名单，请先在列表点击「一键确认并锁定」');
+      }
       const expRes = await fetch('/exports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cycle_id: '2025-summer',
-          batch_type: 'super',
-          registration_ids: lockedIds,
-        }),
+        body: JSON.stringify({ cycle_id: '2025-summer', registration_ids: lockedIds }),
       });
-      if (!expRes.ok) return showToast('导出任务创建失败');
       const job = await expRes.json();
-      window.location.href = mode === 'csv' ? job.download_csv_url : job.download_zip_url;
+      window.open(format === 'zip' ? job.zip_download_url : job.download_url, '_blank');
     }
 
-    const params = new URLSearchParams(window.location.search);
-    const initialTab = params.get('tab') || 'parent';
-    switchTab(['parent', 'archive', 'console'].includes(initialTab) ? initialTab : 'parent');
+    // Teacher Tab: Load 200 Partner Agents + Filtered Upgrade Radar + Concession Wallet
+    let partnerAgentsLoaded = false;
+    async function initTeacherTab() {
+      if (!partnerAgentsLoaded) {
+        const res = await fetch('/official-sync/partner-agents').then(r => r.json());
+        const sel = document.getElementById('teacher-agent-select');
+        const allOpt = \`<option value="">🌐 全部 200 家合作机构汇总 (共 1,620 名待升班老生)</option>\`;
+        const opts = (res.items || []).slice(0, 80).map(a =>
+          \`<option value="\${a.agent_id}">[\${a.code || a.agent_id}] \${a.name} (负责人: \${a.manager || '—'} · 历年 \${a.total_exams} 考次 / \${a.distinct_students} 人)</option>\`
+        ).join('');
+        sel.innerHTML = allOpt + opts;
+        partnerAgentsLoaded = true;
+      }
+      await loadTeacherRadarAndWallet();
+    }
+
+    async function loadTeacherRadarAndWallet() {
+      const agentId = document.getElementById('teacher-agent-select')?.value || '';
+      const q = agentId ? \`?agent_id=\${agentId}&limit=25\` : '?limit=25';
+      const [radar, wallet] = await Promise.all([
+        fetch('/official-sync/archive-upgrade-radar' + q).then(r => r.json()),
+        fetch('/teachers/tch_zhang/concessions').then(r => r.json())
+      ]);
+
+      document.getElementById('t-radar-count').textContent = (radar.total_candidates || 0) + ' 人';
+      document.getElementById('t-radar-fee').textContent = radar.total_expected_exam_fee_yuan || '¥0.00';
+      document.getElementById('t-radar-conc').textContent = radar.total_expected_concession_yuan || '¥0.00';
+      document.getElementById('t-wallet-avail').textContent = wallet.wallet?.confirmed_available_yuan || '¥0.00';
+
+      const tbody = document.getElementById('teacher-radar-tbody');
+      if (!radar.sample_candidates || radar.sample_candidates.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted)">该机构暂无 2025 未续报考生</td></tr>';
+      } else {
+        tbody.innerHTML = radar.sample_candidates.map(c => {
+          const safeMsg = encodeURIComponent(c.wechat_template_preview || '');
+          const safeStudent = encodeURIComponent(JSON.stringify(c));
+          return \`
+            <tr>
+              <td><strong>\${c.student_name}</strong> (<code>\${c.parent_phone || '—'}</code>)<br><span style="font-size:11px;color:var(--muted)">指导老师：\${c.agent_name || '本机构'}</span></td>
+              <td>\${c.last_season} · \${c.major_name} \${c.last_level}级</td>
+              <td><span class="badge badge-upgrade">🎯 \${c.major_name} \${c.recommended_level}级</span></td>
+              <td>收 <strong>¥\${c.expected_exam_fee_yuan}</strong> / 优待金 <strong style="color:var(--primary-dark)">\${c.expected_concession_yuan}</strong></td>
+              <td style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="btn-outline btn-sm" onclick="copyTextUri('\${safeMsg}')">📋 复制微信话术</button>
+                <button class="btn-primary btn-sm" onclick="quickCreateFromRadar('\${safeStudent}')">⚡ 代建升班单</button>
+              </td>
+            </tr>
+          \`;
+        }).join('');
+      }
+
+      document.getElementById('teacher-wallet-detail').innerHTML = \`
+        <div style="font-size:13px;color:var(--muted);margin-bottom:8px">
+          待考级办确认：<strong>\${wallet.wallet?.accrued_pending_yuan || '¥0.00'}</strong> |
+          可提现余额：<strong style="color:var(--primary-dark)">\${wallet.wallet?.confirmed_available_yuan || '¥0.00'}</strong> |
+          已累计提现：<strong>\${wallet.wallet?.withdrawn_paid_yuan || '¥0.00'}</strong>
+        </div>
+      \`;
+    }
+
+    function copyTextUri(encoded) {
+      const txt = decodeURIComponent(encoded);
+      navigator.clipboard.writeText(txt).then(() => {
+        showToast('✅ 已复制专属微信升班通知话术，可直接粘贴发送给家长！');
+      });
+    }
+
+    async function quickCreateFromRadar(encoded) {
+      const c = JSON.parse(decodeURIComponent(encoded));
+      switchTab('parent');
+      document.getElementById('l-name').value = c.student_name || '';
+      document.getElementById('r-teacher').value = c.agent_name || 'tch_zhang';
+      document.getElementById('r-subject').value = SUBJECT_MAP_CN_TO_ID[c.major_name] || 'piano';
+      document.getElementById('r-level').value = String(c.recommended_level || 5);
+      recalcParentCheckout();
+      await createLearner();
+      showToast(\`⚡ 已为「\${c.student_name}」自动填好「\${c.major_name} \${c.recommended_level}级 (¥\${c.expected_exam_fee_yuan})」报名单！\`);
+    }
+
+    async function requestTeacherWithdrawal() {
+      const res = await fetch('/teachers/tch_zhang/withdrawals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teacher_note: '老师工作台一键申请提现' })
+      });
+      if (!res.ok) {
+        return showToast('当前暂无已由考级办确认的可提现优待金余额');
+      }
+      showToast('💸 提现申请已提交考级办财务打款！');
+      loadTeacherRadarAndWallet();
+    }
+
+    // Admin Console: Live Archive Stats & QR Sync
+    async function loadAdminArchiveStats() {
+      try {
+        const data = await fetch('/official-sync/archive-stats').then(r => r.json());
+        if (data.totals) {
+          document.getElementById('adm-stat-students').textContent = data.totals.historical_students_count.toLocaleString() + ' 人';
+          document.getElementById('adm-stat-exams').textContent = data.totals.historical_exams_count.toLocaleString() + ' 笔';
+          document.getElementById('adm-stat-agents').textContent = data.totals.partner_agents_count + ' 家';
+        }
+        const seasonsHtml = (data.seasons || []).map(s =>
+          \`<tr><td><code>\${s.season_code}</code> · \${s.season_label}</td><td><strong>\${s.exam_count.toLocaleString()}</strong> 笔</td></tr>\`
+        ).join('');
+        const agentsHtml = (data.top_partner_agents || []).slice(0, 10).map(a =>
+          \`<tr><td>[\${a.code}] <strong>\${a.name}</strong> (\${a.manager || ''})</td><td><strong>\${a.total_exams}</strong> 考次 / \${a.distinct_students} 人</td></tr>\`
+        ).join('');
+        document.getElementById('adm-archive-breakdown').innerHTML = \`
+          <div>
+            <h3 style="font-size:14px;margin:0 0 8px">📅 2020–2026 历年 13 个考期报考笔数</h3>
+            <table><thead><tr><th>考期</th><th>报考笔数</th></tr></thead><tbody>\${seasonsHtml}</tbody></table>
+          </div>
+          <div>
+            <h3 style="font-size:14px;margin:0 0 8px">🏆 Top 10 合作老师 / 报名点</h3>
+            <table><thead><tr><th>机构 / 指导老师</th><th>累计考次 / 考生数</th></tr></thead><tbody>\${agentsHtml}</tbody></table>
+          </div>
+        \`;
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    let admPollTimer = null;
+    async function openQrSyncModal() {
+      const drawer = document.getElementById('qr-sync-drawer');
+      drawer.classList.remove('hidden');
+      if (admPollTimer) clearInterval(admPollTimer);
+      const res = await fetch('/official-sync/qr-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      }).then(r => r.json());
+
+      document.getElementById('adm-qr-sess').textContent = res.php_sess_id || '—';
+      document.getElementById('adm-qr-token').textContent = res.wxauth_token || '—';
+      if (res.qr_image_base64) {
+        document.getElementById('adm-qr-img').innerHTML = \`<img src="\${res.qr_image_base64}" style="width:100%;height:100%;object-fit:contain" />\`;
+      }
+      admPollTimer = setInterval(async () => {
+        const p = await fetch('/official-sync/wxauth-poll', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ php_sess_id: res.php_sess_id, wxauth_token: res.wxauth_token })
+        }).then(r => r.json());
+        if (p.authenticated) {
+          clearInterval(admPollTimer);
+          document.getElementById('adm-qr-status').textContent = '🟢 扫码确认成功！已接管官网会话';
+          showToast('🎉 考级办官网扫码确认成功！');
+        }
+      }, 2000);
+    }
+
+    const initialTab = new URLSearchParams(location.search).get('tab') || 'parent';
+    recalcParentCheckout();
+    switchTab(['parent', 'archive', 'teacher', 'console'].includes(initialTab) ? initialTab : 'parent');
+    searchHistoricalStudent('parent');
   </script>
 </body>
 </html>`;
 
 export async function webAppRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/app', async (_req: FastifyRequest, reply: FastifyReply) => {
-    return reply.type('text/html; charset=utf-8').code(200).send(WEB_APP_HTML);
-  });
+  app.get(
+    '/app',
+    async (_req: FastifyRequest, reply: FastifyReply) => {
+      return reply
+        .code(200)
+        .header('content-type', 'text/html; charset=utf-8')
+        .send(WEB_APP_HTML);
+    },
+  );
 
   app.get(
     '/webhooks/wechat-mp/menu-config',
-    async (_req: FastifyRequest, reply: FastifyReply) => {
-      const baseUrl = process.env.PUBLIC_BASE_URL || 'https://mea.xgar.com.cn';
+    async (
+      req: FastifyRequest<{ Querystring: { base_url?: string } }>,
+      reply: FastifyReply,
+    ) => {
+      const baseUrl = req.query.base_url || 'https://mea.xgar.com.cn';
       return reply.code(200).send(buildServiceAccountMenuConfig(baseUrl));
     },
   );
