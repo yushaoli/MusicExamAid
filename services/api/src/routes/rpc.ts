@@ -293,6 +293,23 @@ export async function rpcRoutes(app: FastifyInstance): Promise<void> {
             });
           }
 
+          case 'teacherRateCardsGet': {
+            const teacherId = String(payload.teacher_id || 'tch_default');
+            const grades = app.store.getTeacherGradeRateSchedule(teacherId);
+            return reply.send({ success: true, data: { teacher_id: teacherId, grades } });
+          }
+
+          case 'adminUpsertTeacherRateCard': {
+            const card = app.store.upsertTeacherGradeRateCard({
+              teacher_id: String(payload.teacher_id || 'tch_default'),
+              level: String(payload.level || '1'),
+              exam_fee_fen: Number(payload.exam_fee_fen || 0),
+              concession_fen: Number(payload.concession_fen || 0),
+              note: payload.note ? String(payload.note) : undefined,
+            });
+            return reply.send({ success: true, data: card });
+          }
+
           case 'paymentCheckout': {
             const regId = String(payload.reg_id || payload.registration_id || '');
             const res = app.store.payRegistrationOrder({

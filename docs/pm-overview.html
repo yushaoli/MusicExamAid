@@ -567,16 +567,18 @@
     <!-- TAB 5: WECHAT PAY & TEACHER ACCUMULATED CONCESSIONS -->
     <section id="tab-concessions" class="panel">
       <div class="card">
-        <h2>💰 家长微信支付 + 老师返佣「累计 → 管理员调额确认 → 老师申请提现」闭环</h2>
+        <h2>💰 一师一价 · 按考级级别 (1-10级) 差异化收费与返佣 + 累计提现闭环</h2>
         <p class="sub">
-          无需受限于微信自动分账的 30% 比例上限，也无需担心学生中途退考引发资金纠纷：家长通过微信支付缴纳考级费后，当老师<strong>确认并锁定报名 (<code>locked</code>)</strong> 时，系统按级别标准自动记入老师的<strong>「待核算返佣 (<code>accrued</code>)」</strong>；管理员可随时在后台<strong>按需调整金额并确认入账 (<code>confirmed</code>)</strong>，老师即可一键申请提现。
+          由于不同级别 (1-10级) 的考级收费标准不同，且不同合作深度老师的<strong>报考协议收费价 (`exam_fee`) 与返佣标准 (`concession`) 均因人而异</strong>，系统内置了 <strong><code>teacher_grade_rate_cards (teacher_id, level)</code> 二维价目引擎</strong>：家长在微信支付时自动按「所属老师 + 报考级别」计费；老师锁档时自动按该老师对应级别的协议返佣记入<strong>「待管理员核算 (`accrued`)」</strong>；管理员还可随时二次微调金额并确认入账 (`confirmed`)，供老师一键申请提现。
         </p>
 
         <div class="state-row">
-          <span class="state-pill">1. 家长微信支付 (paid) + 老师锁档 (locked)</span>
-          <span class="arrow">──自动记账──▶</span>
+          <span class="state-pill">0. 配置「老师×级别」协议价与返佣</span>
+          <span class="arrow">──家长微信支付──▶</span>
+          <span class="state-pill">1. 按老师专属级别价收款 (paid) + 锁档 (locked)</span>
+          <span class="arrow">──自动累计──▶</span>
           <span class="state-pill warn">2. 待管理员核算 (accrued)</span>
-          <span class="arrow">──管理员改价/确认──▶</span>
+          <span class="arrow">──管理员确认/微调──▶</span>
           <span class="state-pill highlight">3. 可提现余额 (confirmed)</span>
           <span class="arrow">──老师申请提现──▶</span>
           <span class="state-pill">4. 提现打款结清 (paid_out)</span>
@@ -586,15 +588,43 @@
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px">
           <div>
-            <h2 style="margin:0">🎛️ 交互式模拟器：老师返佣累计、管理员动态改价与提现审批</h2>
-            <p class="sub" style="margin:4px 0 0">点击下方按钮直接体验完整的「报名缴费 → 管理员动态调额确认 → 老师一键提现 → 管理员打款」账本流转：</p>
+            <h2 style="margin:0">📊 一师一价 · 按级定费与返佣矩阵 (`PUT /concessions/rate-cards`)</h2>
+            <p class="sub" style="margin:4px 0 0">切换不同老师查看或直接修改该老师在各个考级级别下的<strong>「学生微信支付报名费」</strong>与<strong>「老师协议返佣额」</strong>：</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <label style="font-size:13px;color:#94a3b8;font-weight:700">当前查看/模拟老师：</label>
+            <select id="sim-teacher-select" onchange="renderSimWallet()" style="background:#0f172a;color:#38bdf8;border:1px solid #0284c7;border-radius:8px;padding:8px 12px;font-weight:700;font-size:13px">
+              <option value="tch_zhang">🌟 张老师 (资深合伙级 — 专属优惠价 + 高返佣)</option>
+              <option value="tch_li">🎹 李老师 (标准合作级 — 机构标准价 + 标准返佣)</option>
+              <option value="tch_wang">🎻 王老师 (外部挂靠级 — 溢价代报 + 固定返佣)</option>
+            </select>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>报考级别档位</th>
+              <th>全局默认标准 (报名费 / 返佣)</th>
+              <th>当前老师专属：学生微信支付报名费 (元)</th>
+              <th>当前老师专属：每单自动累计返佣 (元)</th>
+              <th>协议说明</th>
+              <th>快速模拟该级别报名</th>
+            </tr>
+          </thead>
+          <tbody id="sim-ratecard-body"></tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px">
+          <div>
+            <h2 style="margin:0">🎛️ 老师返佣累计账本、管理员动态微调与提现审批</h2>
+            <p class="sub" style="margin:4px 0 0">即使已有「老师×级别」协议价，管理员在确认入账前依然可以对任意单笔记录做动态加减奖惩：</p>
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button onclick="simAddStudentPayment()" style="background:#0284c7;color:#fff;border:none;padding:9px 14px;border-radius:8px;font-weight:700;cursor:pointer">
-              ➕ 1. 模拟学生微信缴费 + 老师锁档
-            </button>
             <button onclick="simTeacherWithdraw()" style="background:#16a34a;color:#fff;border:none;padding:9px 14px;border-radius:8px;font-weight:700;cursor:pointer">
-              💸 3. 老师一键申请提现 (全部可提现余额)
+              💸 3. 当前老师一键申请提现 (全部可提现余额)
             </button>
           </div>
         </div>
@@ -602,11 +632,11 @@
         <div class="flow-grid" style="margin-bottom:18px">
           <div class="node-box amber">
             <div style="font-size:12px;color:#94a3b8">⏳ 待管理员确认 (accrued)</div>
-            <div id="sim-accrued" style="font-size:24px;font-weight:800;color:#fbbf24;margin-top:4px">¥100.00</div>
+            <div id="sim-accrued" style="font-size:24px;font-weight:800;color:#fbbf24;margin-top:4px">¥0.00</div>
           </div>
           <div class="node-box green">
             <div style="font-size:12px;color:#94a3b8">✅ 可提现余额 (confirmed)</div>
-            <div id="sim-available" style="font-size:24px;font-weight:800;color:#4ade80;margin-top:4px">¥65.00</div>
+            <div id="sim-available" style="font-size:24px;font-weight:800;color:#4ade80;margin-top:4px">¥0.00</div>
           </div>
           <div class="node-box">
             <div style="font-size:12px;color:#94a3b8">🔄 提现申请中 (withdrawing)</div>
@@ -618,14 +648,14 @@
           </div>
         </div>
 
-        <h3 style="margin-bottom:8px">📋 老师名下报名返佣明细（管理员可在此直接修改金额并确认入账）</h3>
+        <h3 style="margin-bottom:8px">📋 当前老师名下报名返佣明细（管理员可在此二次调整金额并确认入账）</h3>
         <table>
           <thead>
             <tr>
               <th>报名单号 / 考生</th>
-              <th>报考级别 / 实缴考级费</th>
-              <th>默认返佣标准</th>
-              <th>管理员核定金额 (元) & 备注</th>
+              <th>报考级别 / 家长实缴报名费</th>
+              <th>按「老师×级别」初始返佣</th>
+              <th>管理员最终核定金额 (元) & 备注</th>
               <th>状态</th>
               <th>管理员操作 (步骤 2)</th>
             </tr>
@@ -633,7 +663,7 @@
           <tbody id="sim-ledger-body"></tbody>
         </table>
 
-        <h3 style="margin:20px 0 8px">🧾 老师提现申请单（管理员步骤 4：确认打款）</h3>
+        <h3 style="margin:20px 0 8px">🧾 当前老师提现申请单（管理员步骤 4：确认打款）</h3>
         <table>
           <thead>
             <tr>
@@ -653,13 +683,13 @@
   <script>
     const stepDetails = [
       {
-        title: "Step 1: 家长在微信小程序（腾讯境内）或校区 H5 填报并微信支付",
+        title: "Step 1: 家长在微信小程序（腾讯境内）或校区 H5 填报并按「老师×级别」微信支付",
         bullets: [
           "外网家长打开微信小程序（走腾讯境内云开发 wx.cloud + 微信支付）或校区内打开 https://mea.xgar.com.cn/app?tab=parent（直连上海 ubtxiaomi 100.64.0.4），全程 100% 在中国境内传输。",
-          "填写考生姓名、性别、出生日期、身份证号，选择报考专业与级别（如钢琴 5 级 = ¥480），上传标准二寸证件照并完成微信支付 (POST /payments/checkout)。",
+          "系统根据考生绑定的指导老师 (teacher_id) 与报考级别 (level 1-10) 自动匹配专属报名费（如张老师 5 级专属协议价 ¥450，李老师 5 级标准价 ¥480）并拉起微信支付。",
           "上海主机 ubtxiaomi 使用 AES-256-GCM 加密身份证号存入本地 PostgreSQL (learners)，并将二寸照存入本地 MinIO S3 (photos/{id_last4}_{name_cn}.jpg)。"
         ],
-        code: `POST /payments/checkout\n{\n  "registration_id": "reg_9508",\n  "teacher_id": "tch_zhang"\n}\n// 订单金额: ¥480.00 (48000分)，锁档后自动生成老师待确认返佣 ¥50.00`
+        code: `POST /payments/checkout\n{\n  "registration_id": "reg_9508",\n  "teacher_id": "tch_zhang"\n}\n// 自动命中 (tch_zhang, 5级) 协议价: 实收 ¥450.00，锁档后自动累计张老师 5 级协议返佣 ¥80.00`
       },
       {
         title: "Step 2: 家长提交报名 → 企微发送「零隐私脱敏」工单提醒",
@@ -671,13 +701,13 @@
         code: `POST https://wecom.xgar.com.cn/send/<RELAY_TOKEN>\n{\n  "msg": "**[考级助手] 报名状态变更**\\n> 报名单号: \`reg_9508\`\\n> 状态流转: 草稿 (Draft) → **待老师审核 (Submitted)**"\n}\n// 严禁包含姓名、身份证号或照片 URL (PIPL 合规)`
       },
       {
-        title: "Step 3: 老师一键确认锁档 → 自动累计老师待审返佣",
+        title: "Step 3: 老师一键确认锁档 → 按「老师×级别」累计返佣 + 管理员确认入账",
         bullets: [
           "老师在境内环境点开 https://mea.xgar.com.cn/app?tab=console (100.64.0.4) 查看待审核列表。",
-          "核对无误后点击「⚡ 一键确认并锁定 (submitted -> locked)」，系统冻结报名快照 snapshot_json，并自动在 teacher_concession_ledger 中为该老师累计一笔待确认返佣 (accrued)。",
-          "管理员可在后台按需调整返佣金额（如阶梯奖励 +¥15）并点击确认 (PATCH /concessions/:id/confirm)，老师即可申请提现。"
+          "核对无误后点击「⚡ 一键确认并锁定 (submitted -> locked)」，系统冻结报名快照 snapshot_json，并按该老师对应级别的协议标准在 teacher_concession_ledger 中自动累计一笔待确认返佣 (accrued)。",
+          "管理员可在后台直接确认或二次微调返佣金额（如阶梯奖励 +¥15）后点击确认 (PATCH /concessions/:id/confirm)，老师即可申请提现。"
         ],
-        code: `PATCH /concessions/cns_01/confirm\n{\n  "adjusted_amount_fen": 6500,\n  "adjustment_note": "满10人阶梯奖励 +¥15"\n}\n// 状态变为 confirmed (可提现余额 +¥65.00)`
+        code: `PATCH /concessions/cns_01/confirm\n{\n  "adjusted_amount_fen": 9500,\n  "adjustment_note": "张老师5级协议返佣 ¥80 + 满员奖励 ¥15"\n}\n// 状态变为 confirmed (可提现余额 +¥95.00)`
       },
       {
         title: "Step 4: 教务 SuperBatch 去重预检 + 一键导出官方 ZIP 包",
@@ -715,18 +745,105 @@
       btn.classList.add('active');
     }
 
-    // Interactive Concession Wallet Simulator
+    // Per-Teacher × Per-Grade Rate Cards & Concession Wallet Simulator
+    const defaultTiers = [
+      { key: '1-3级', sampleLevel: '钢琴 3级', defFee: 300, defConc: 30 },
+      { key: '4-6级', sampleLevel: '钢琴 5级', defFee: 480, defConc: 50 },
+      { key: '7-8级', sampleLevel: '古筝 7级', defFee: 580, defConc: 70 },
+      { key: '9-10级', sampleLevel: '小提琴 10级', defFee: 680, defConc: 90 }
+    ];
+
+    const teacherRateMatrix = {
+      tch_zhang: [
+        { fee: 280, conc: 50, note: '资深合伙：学生立减20 + 高返佣' },
+        { fee: 450, conc: 80, note: '资深合伙：学生立减30 + 5级返80' },
+        { fee: 550, conc: 100, note: '资深合伙：高年级协议价' },
+        { fee: 640, conc: 130, note: '资深合伙：满级高返佣' }
+      ],
+      tch_li: [
+        { fee: 300, conc: 30, note: '标准合作价' },
+        { fee: 480, conc: 50, note: '标准合作价' },
+        { fee: 580, conc: 70, note: '标准合作价' },
+        { fee: 680, conc: 90, note: '标准合作价' }
+      ],
+      tch_wang: [
+        { fee: 320, conc: 40, note: '外部挂靠含考务服务费' },
+        { fee: 500, conc: 60, note: '外部挂靠含考务服务费' },
+        { fee: 600, conc: 80, note: '外部挂靠含考务服务费' },
+        { fee: 700, conc: 100, note: '外部挂靠含考务服务费' }
+      ]
+    };
+
     let simLedger = [
-      { id: 'cns_101', reg: 'reg_9501 (陈小乐)', level: '钢琴 5级', fee: 480, defAmt: 50, adjAmt: 65, note: '满10人阶梯奖励+15元', status: 'confirmed' },
-      { id: 'cns_102', reg: 'reg_9502 (周星辰)', level: '古筝 7级', fee: 580, defAmt: 70, adjAmt: 70, note: '标准返佣', status: 'accrued' },
-      { id: 'cns_103', reg: 'reg_9503 (林小音)', level: '钢琴 3级', fee: 300, defAmt: 30, adjAmt: 30, note: '标准返佣', status: 'accrued' }
+      { id: 'cns_101', teacher: 'tch_zhang', reg: 'reg_9501 (陈小乐)', level: '钢琴 5级', fee: 450, defAmt: 80, adjAmt: 95, note: '资深合伙5级返80 + 满员奖15', status: 'confirmed' },
+      { id: 'cns_102', teacher: 'tch_zhang', reg: 'reg_9502 (周星辰)', level: '古筝 7级', fee: 550, defAmt: 100, adjAmt: 100, note: '资深合伙：高年级协议价', status: 'accrued' },
+      { id: 'cns_103', teacher: 'tch_li', reg: 'reg_9503 (林小音)', level: '钢琴 5级', fee: 480, defAmt: 50, adjAmt: 50, note: '标准合作价', status: 'accrued' },
+      { id: 'cns_104', teacher: 'tch_wang', reg: 'reg_9504 (赵小溪)', level: '小提琴 10级', fee: 700, defAmt: 100, adjAmt: 100, note: '外部挂靠含考务服务费', status: 'confirmed' }
     ];
     let simWithdrawals = [];
-    let simSeq = 104;
+    let simSeq = 105;
+
+    function getSelectedTeacher() {
+      const sel = document.getElementById('sim-teacher-select');
+      return sel ? sel.value : 'tch_zhang';
+    }
+
+    function updateRateCard(tierIdx) {
+      const tId = getSelectedTeacher();
+      const feeEl = document.getElementById('rc-fee-' + tierIdx);
+      const concEl = document.getElementById('rc-conc-' + tierIdx);
+      if (feeEl) teacherRateMatrix[tId][tierIdx].fee = Math.max(0, Number(feeEl.value) || 0);
+      if (concEl) teacherRateMatrix[tId][tierIdx].conc = Math.max(0, Number(concEl.value) || 0);
+    }
+
+    function simAddByTier(tierIdx) {
+      updateRateCard(tierIdx);
+      const tId = getSelectedTeacher();
+      const tier = defaultTiers[tierIdx];
+      const custom = teacherRateMatrix[tId][tierIdx];
+      const names = ['王小羽', '赵小溪', '孙小朗', '李小茉', '许小贝'];
+      const student = names[simSeq % names.length];
+      simLedger.unshift({
+        id: 'cns_' + simSeq,
+        teacher: tId,
+        reg: `reg_9${simSeq} (${student})`,
+        level: tier.sampleLevel,
+        fee: custom.fee,
+        defAmt: custom.conc,
+        adjAmt: custom.conc,
+        note: custom.note,
+        status: 'accrued'
+      });
+      simSeq++;
+      renderSimWallet();
+    }
 
     function renderSimWallet() {
+      const tId = getSelectedTeacher();
+      const rates = teacherRateMatrix[tId];
+
+      document.getElementById('sim-ratecard-body').innerHTML = defaultTiers.map((t, idx) => `
+        <tr>
+          <td><strong>${t.key}</strong> <span style="color:#94a3b8;font-size:12px">(例: ${t.sampleLevel})</span></td>
+          <td style="color:#94a3b8">收 ¥${t.defFee} / 返 ¥${t.defConc}</td>
+          <td>
+            ¥ <input id="rc-fee-${idx}" type="number" value="${rates[idx].fee}" onchange="updateRateCard(${idx})" style="width:72px;background:#0f172a;color:#38bdf8;border:1px solid #334155;border-radius:4px;padding:4px;font-weight:700">
+          </td>
+          <td>
+            ¥ <input id="rc-conc-${idx}" type="number" value="${rates[idx].conc}" onchange="updateRateCard(${idx})" style="width:72px;background:#0f172a;color:#4ade80;border:1px solid #334155;border-radius:4px;padding:4px;font-weight:700">
+          </td>
+          <td style="color:#cbd5e1;font-size:12px">${rates[idx].note}</td>
+          <td>
+            <button onclick="simAddByTier(${idx})" style="background:#0284c7;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">
+              ➕ 模拟报 ${t.sampleLevel} (收¥${rates[idx].fee}/返¥${rates[idx].conc})
+            </button>
+          </td>
+        </tr>
+      `).join('');
+
       let accrued = 0, avail = 0, withdrawing = 0, paid = 0;
-      simLedger.forEach(item => {
+      const teacherItems = simLedger.map((item, globalIdx) => ({ item, globalIdx })).filter(x => x.item.teacher === tId);
+      teacherItems.forEach(({ item }) => {
         if (item.status === 'accrued') accrued += item.adjAmt;
         if (item.status === 'confirmed') avail += item.adjAmt;
         if (item.status === 'withdrawing') withdrawing += item.adjAmt;
@@ -744,22 +861,22 @@
         return '<span class="badge-done">已打款结清 (paid_out)</span>';
       };
 
-      document.getElementById('sim-ledger-body').innerHTML = simLedger.map((item, i) => `
+      document.getElementById('sim-ledger-body').innerHTML = teacherItems.map(({ item, globalIdx }) => `
         <tr>
           <td><code>${item.id}</code><br>${item.reg}</td>
-          <td>${item.level}<br><span style="color:#94a3b8">实缴 ¥${item.fee}.00</span></td>
+          <td>${item.level}<br><span style="color:#38bdf8;font-weight:600">家长实缴 ¥${item.fee}.00</span></td>
           <td>¥${item.defAmt}.00</td>
           <td>
             ${item.status === 'accrued' || item.status === 'confirmed'
-              ? `<input id="adj-amt-${i}" type="number" value="${item.adjAmt}" style="width:70px;background:#0f172a;color:#38bdf8;border:1px solid #334155;border-radius:4px;padding:4px"> 元
-                 <input id="adj-note-${i}" type="text" value="${item.note}" style="width:140px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px">`
+              ? `<input id="adj-amt-${globalIdx}" type="number" value="${item.adjAmt}" style="width:70px;background:#0f172a;color:#4ade80;border:1px solid #334155;border-radius:4px;padding:4px;font-weight:700"> 元
+                 <input id="adj-note-${globalIdx}" type="text" value="${item.note}" style="width:160px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:4px">`
               : `<strong>¥${item.adjAmt}.00</strong> (${item.note})`
             }
           </td>
           <td>${statusBadge(item.status)}</td>
           <td>
             ${item.status === 'accrued' || item.status === 'confirmed'
-              ? `<button onclick="simAdminConfirm(${i})" style="background:#2563eb;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:12px">
+              ? `<button onclick="simAdminConfirm(${globalIdx})" style="background:#2563eb;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:12px">
                    ✅ ${item.status === 'accrued' ? '确认并改价入账' : '更新核定金额'}
                  </button>`
               : '—'}
@@ -767,9 +884,10 @@
         </tr>
       `).join('');
 
-      document.getElementById('sim-wd-body').innerHTML = simWithdrawals.length === 0
-        ? '<tr><td colspan="5" style="color:#94a3b8;text-align:center">暂无提现申请，点击上方「💸 3. 老师一键申请提现」体验</td></tr>'
-        : simWithdrawals.map((w, wi) => `
+      const tWds = simWithdrawals.map((w, wi) => ({ w, wi })).filter(x => x.w.teacher === tId);
+      document.getElementById('sim-wd-body').innerHTML = tWds.length === 0
+        ? '<tr><td colspan="5" style="color:#94a3b8;text-align:center">当前老师暂无提现申请，点击上方「💸 3. 当前老师一键申请提现」体验</td></tr>'
+        : tWds.map(({ w, wi }) => `
           <tr>
             <td><code>${w.id}</code></td>
             <td>${w.count} 笔报名</td>
@@ -784,48 +902,26 @@
         `).join('');
     }
 
-    function simAddStudentPayment() {
-      const names = ['王小羽', '赵小溪', '孙小朗', '李小茉'];
-      const levels = [
-        { name: '钢琴 5级', fee: 480, def: 50 },
-        { name: '小提琴 8级', fee: 580, def: 70 },
-        { name: '古筝 10级', fee: 680, def: 90 }
-      ];
-      const pick = levels[simSeq % levels.length];
-      const student = names[simSeq % names.length];
-      simLedger.unshift({
-        id: 'cns_' + simSeq,
-        reg: `reg_9${simSeq} (${student})`,
-        level: pick.name,
-        fee: pick.fee,
-        defAmt: pick.def,
-        adjAmt: pick.def,
-        note: '系统按级别自动累计',
-        status: 'accrued'
-      });
-      simSeq++;
-      renderSimWallet();
-    }
-
-    function simAdminConfirm(idx) {
-      const amtInput = document.getElementById('adj-amt-' + idx);
-      const noteInput = document.getElementById('adj-note-' + idx);
-      if (amtInput) simLedger[idx].adjAmt = Math.max(0, Number(amtInput.value) || 0);
-      if (noteInput) simLedger[idx].note = noteInput.value;
-      simLedger[idx].status = 'confirmed';
+    function simAdminConfirm(globalIdx) {
+      const amtInput = document.getElementById('adj-amt-' + globalIdx);
+      const noteInput = document.getElementById('adj-note-' + globalIdx);
+      if (amtInput) simLedger[globalIdx].adjAmt = Math.max(0, Number(amtInput.value) || 0);
+      if (noteInput) simLedger[globalIdx].note = noteInput.value;
+      simLedger[globalIdx].status = 'confirmed';
       renderSimWallet();
     }
 
     function simTeacherWithdraw() {
-      const eligible = simLedger.filter(i => i.status === 'confirmed' && i.adjAmt > 0);
+      const tId = getSelectedTeacher();
+      const eligible = simLedger.filter(i => i.teacher === tId && i.status === 'confirmed' && i.adjAmt > 0);
       if (eligible.length === 0) {
-        alert('当前没有「已确认可提现 (confirmed)」的返佣记录，请先由管理员点击「确认并改价入账」！');
+        alert('当前老师没有「已确认可提现 (confirmed)」的返佣记录，请先点击明细表中的「✅ 确认并改价入账」！');
         return;
       }
       const total = eligible.reduce((s, i) => s + i.adjAmt, 0);
       const wdId = 'wd_' + Date.now().toString().slice(-5);
       eligible.forEach(i => { i.status = 'withdrawing'; i.wdId = wdId; });
-      simWithdrawals.unshift({ id: wdId, count: eligible.length, total, status: 'requested', ref: '' });
+      simWithdrawals.unshift({ id: wdId, teacher: tId, count: eligible.length, total, status: 'requested', ref: '' });
       renderSimWallet();
     }
 

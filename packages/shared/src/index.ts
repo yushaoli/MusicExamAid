@@ -62,7 +62,9 @@ export type {
 } from './dedup';
 
 export {
+  normalizeLevelKey,
   getDefaultFeeRuleForLevel,
+  resolveTeacherGradeRate,
   formatRmbYuan,
   summarizeTeacherWallet,
 } from './concession-ledger';
@@ -71,9 +73,12 @@ export type {
   ConcessionLedgerStatus,
   WithdrawalStatus,
   ExamFeeRule,
+  TeacherGradeRateCard,
+  ResolvedTeacherGradeRate,
   PaymentOrderRecord,
   ConcessionLedgerRecord,
   TeacherWithdrawalRecord,
   TeacherWalletSummary,
 } from './concession-ledger';
+
 

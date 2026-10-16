@@ -16,12 +16,15 @@ import {
   computeMissingFlags,
   mapSnapshotToExportRow,
   formatPortraitPhotoZipPath,
-  getDefaultFeeRuleForLevel,
+  normalizeLevelKey,
+  resolveTeacherGradeRate,
   summarizeTeacherWallet,
 } from '@musicexamaid/shared';
 import type {
   RegistrationStatusType,
   RegistrationSnapshot,
+  TeacherGradeRateCard,
+  ResolvedTeacherGradeRate,
   PaymentOrderRecord,
   ConcessionLedgerRecord,
   TeacherWithdrawalRecord,
@@ -109,9 +112,46 @@ export class DomainRepository {
   private statusHistory: StoredStatusHistory[] = [];
   private archives = new Map<string, StoredArchive>();
   private exportBatches = new Map<string, StoredExportBatch>();
+  private teacherGradeRateCards = new Map<string, TeacherGradeRateCard>();
   private paymentOrders = new Map<string, PaymentOrderRecord>();
   private concessionLedger = new Map<string, ConcessionLedgerRecord>();
   private teacherWithdrawals = new Map<string, TeacherWithdrawalRecord>();
+
+  /**
+   * Upsert a per-teacher, per-grade (level 1..10) exam price + concession schedule entry.
+   */
+  upsertTeacherGradeRateCard(input: {
+    teacher_id: string;
+    level: string | number;
+    exam_fee_fen: number;
+    concession_fen: number;
+    note?: string;
+  }): TeacherGradeRateCard {
+    const levelKey = normalizeLevelKey(input.level);
+    const key = `${input.teacher_id}:${levelKey}`;
+    const card: TeacherGradeRateCard = {
+      teacher_id: input.teacher_id,
+      level: levelKey,
+      exam_fee_fen: Math.max(0, Math.round(input.exam_fee_fen)),
+      concession_fen: Math.max(0, Math.round(input.concession_fen)),
+      note: input.note,
+      updated_at: new Date().toISOString(),
+    };
+    this.teacherGradeRateCards.set(key, card);
+    return card;
+  }
+
+  /**
+   * Return the full Grade 1..10 resolved pricing & concession schedule for a specific teacher.
+   */
+  getTeacherGradeRateSchedule(teacherId = 'tch_default'): ResolvedTeacherGradeRate[] {
+    const cards = Array.from(this.teacherGradeRateCards.values());
+    const grades: ResolvedTeacherGradeRate[] = [];
+    for (let g = 1; g <= 10; g++) {
+      grades.push(resolveTeacherGradeRate(g, teacherId, cards));
+    }
+    return grades;
+  }
 
   createLearner(input: {
     id?: string;
@@ -318,7 +358,7 @@ export class DomainRepository {
 
   /**
    * Create and mark a WeChat Pay order paid for a registration.
-   * If the registration is already locked, immediately accrues the teacher's concession.
+   * Both exam fee and teacher concession are resolved by `(teacher_id, level)`.
    */
   payRegistrationOrder(input: {
     registration_id: string;
@@ -328,11 +368,16 @@ export class DomainRepository {
     const now = new Date().toISOString();
     const reg = this.registrations.get(input.registration_id);
     const levelStr = String(reg?.level ?? 5);
-    const feeRule = getDefaultFeeRuleForLevel(levelStr);
     const teacherId = input.teacher_id || reg?.teacher_id || 'tch_default';
     if (reg && input.teacher_id) {
       reg.teacher_id = input.teacher_id;
     }
+
+    const rate = resolveTeacherGradeRate(
+      levelStr,
+      teacherId,
+      Array.from(this.teacherGradeRateCards.values()),
+    );
 
     const existingOrder = Array.from(this.paymentOrders.values()).find(
       o => o.registration_id === input.registration_id,
@@ -342,6 +387,9 @@ export class DomainRepository {
       ? {
           ...existingOrder,
           teacher_id: teacherId,
+          level: rate.level,
+          amount_fen: rate.feeFen,
+          rate_source: rate.source,
           status: 'paid',
           wx_transaction_id: input.wx_transaction_id || existingOrder.wx_transaction_id || `wx_tx_${crypto.randomUUID().slice(0, 12)}`,
           paid_at: now,
@@ -352,7 +400,9 @@ export class DomainRepository {
           registration_id: input.registration_id,
           learner_id: reg?.learner_id || 'lrn_stub',
           teacher_id: teacherId,
-          amount_fen: feeRule.feeFen,
+          level: rate.level,
+          amount_fen: rate.feeFen,
+          rate_source: rate.source,
           status: 'paid',
           wx_transaction_id: input.wx_transaction_id || `wx_tx_${crypto.randomUUID().slice(0, 12)}`,
           paid_at: now,
@@ -371,8 +421,7 @@ export class DomainRepository {
 
   /**
    * Ensure a teacher concession ledger item is accrued once a registration is LOCKED.
-   * Even if the parent paid earlier or pays upon lock, this creates a single accrued entry
-   * per registration so Admin can confirm/adjust it before teacher withdrawal.
+   * Uses the `(teacher_id, level)` rate card so each teacher gets their specific grade rate.
    */
   ensureConcessionAccrued(registrationId: string): ConcessionLedgerRecord | undefined {
     const reg = this.registrations.get(registrationId);
@@ -386,11 +435,15 @@ export class DomainRepository {
     }
 
     const now = new Date().toISOString();
-    const rule = getDefaultFeeRuleForLevel(String(reg.level));
     const paidOrder = Array.from(this.paymentOrders.values()).find(
       o => o.registration_id === registrationId && o.status === 'paid',
     );
     const teacherId = paidOrder?.teacher_id || reg.teacher_id || 'tch_default';
+    const rate = resolveTeacherGradeRate(
+      reg.level,
+      teacherId,
+      Array.from(this.teacherGradeRateCards.values()),
+    );
 
     const record: ConcessionLedgerRecord = {
       id: existing?.id || `cns_${crypto.randomUUID()}`,
@@ -398,10 +451,12 @@ export class DomainRepository {
       registration_id: registrationId,
       payment_order_id: paidOrder?.id || `pay_auto_${registrationId}`,
       subject_id: reg.subject_id,
-      level: String(reg.level),
-      exam_fee_fen: paidOrder?.amount_fen ?? rule.feeFen,
-      default_amount_fen: rule.defaultConcessionFen,
-      adjusted_amount_fen: rule.defaultConcessionFen,
+      level: rate.level,
+      exam_fee_fen: paidOrder?.amount_fen ?? rate.feeFen,
+      default_amount_fen: rate.defaultConcessionFen,
+      adjusted_amount_fen: rate.defaultConcessionFen,
+      rate_source: rate.source,
+      adjustment_note: rate.note,
       status: 'accrued',
       created_at: existing?.created_at || now,
       updated_at: now,

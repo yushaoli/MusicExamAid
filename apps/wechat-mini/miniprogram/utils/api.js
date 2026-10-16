@@ -129,7 +129,11 @@ export const superBatchExportOnce = (super_batch_id) => callCloud('superBatchExp
 export const getDictSubjects = () => callCloud('getDictSubjects');
 export const getDictCycles = () => callCloud('getDictCycles');
 
-// ============ WeChat Pay & Teacher Accumulated Concessions ============
+// ============ WeChat Pay & Teacher Accumulated Concessions (Per-Teacher × Per-Grade) ============
+export const teacherRateCardsGet = (teacher_id = 'tch_default') =>
+  callCloud('teacherRateCardsGet', { teacher_id });
+export const adminUpsertTeacherRateCard = (teacher_id, level, exam_fee_fen, concession_fen, note = '') =>
+  callCloud('adminUpsertTeacherRateCard', { teacher_id, level, exam_fee_fen, concession_fen, note });
 export const paymentCheckout = (reg_id, teacher_id) =>
   callCloud('paymentCheckout', { reg_id, teacher_id });
 export const teacherConcessionWallet = (teacher_id = 'tch_default') =>
@@ -151,6 +155,7 @@ export default {
   instBatchCreate, instBatchList, instBatchGet, instBatchAddItems, instBatchRemoveItems, instBatchPreflight, instBatchSubmitToSuper,
   superIncomingInstBatchesList, superBatchCreate, superBatchGet, superBatchIngestInstitutionBatches, superBatchDedupRun, superBatchResolveConflict, superBatchPreflight, superBatchExportOnce,
   getDictSubjects, getDictCycles,
-  paymentCheckout, teacherConcessionWallet, adminConfirmConcession, teacherRequestWithdrawal, adminPayoutWithdrawal,
+  teacherRateCardsGet, adminUpsertTeacherRateCard, paymentCheckout, teacherConcessionWallet, adminConfirmConcession, teacherRequestWithdrawal, adminPayoutWithdrawal,
 };
+
 

@@ -1,4 +1,4 @@
--- Migration 002: WeChat Pay orders + Teacher accumulated concessions & withdrawal ledger
+-- Migration 002: WeChat Pay orders + Per-Teacher/Per-Grade Pricing & Concession Rate Cards + Withdrawal Ledger
 
 CREATE TABLE IF NOT EXISTS exam_fee_schedules (
   subject_id              TEXT NOT NULL,
@@ -7,6 +7,17 @@ CREATE TABLE IF NOT EXISTS exam_fee_schedules (
   default_concession_fen  INTEGER NOT NULL CHECK (default_concession_fen >= 0),
   updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (subject_id, level)
+);
+
+-- Per-teacher, per-grade (level 1..10) custom exam pricing & teacher concession schedule
+CREATE TABLE IF NOT EXISTS teacher_grade_rate_cards (
+  teacher_id      TEXT NOT NULL,
+  level           TEXT NOT NULL,
+  exam_fee_fen    INTEGER NOT NULL CHECK (exam_fee_fen >= 0),
+  concession_fen  INTEGER NOT NULL CHECK (concession_fen >= 0),
+  note            TEXT,
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (teacher_id, level)
 );
 
 CREATE TABLE IF NOT EXISTS payment_orders (

@@ -1,8 +1,10 @@
 /**
- * WeChat Pay Exam Checkout + Teacher Accumulated Concessions & Withdrawal Routes.
+ * WeChat Pay Exam Checkout + Per-Teacher/Per-Grade Pricing & Concession Rate Cards + Withdrawal Routes.
  *
- * - POST  /payments/checkout                        (Parent pays exam fee via WeChat Pay)
- * - GET   /concessions/wallet                       (Teacher/Admin views accumulated concessions & withdrawals)
+ * - GET   /concessions/rate-cards                   (Get Grade 1-10 pricing & concession matrix for a teacher)
+ * - PUT   /concessions/rate-cards                   (Admin sets per-teacher, per-grade exam_fee_fen & concession_fen)
+ * - POST  /payments/checkout                        (Parent pays exam fee via WeChat Pay at teacher+grade price)
+ * - GET   /concessions/wallet                       (Teacher/Admin views accumulated concessions, rate cards & withdrawals)
  * - PATCH /concessions/:ledger_id/confirm           (Admin confirms & optionally adjusts amount on the fly)
  * - POST  /concessions/withdrawals                  (Teacher requests withdrawal of confirmed balance)
  * - PATCH /concessions/withdrawals/:id/payout       (Admin approves & marks withdrawal paid out)
@@ -13,7 +15,70 @@ import { formatRmbYuan } from '@musicexamaid/shared';
 import { dispatchWeComAlert } from './integrations';
 
 export async function paymentConcessionRoutes(app: FastifyInstance): Promise<void> {
-  // 1. Parent WeChat Pay checkout
+  // 0. Per-Teacher × Per-Grade Rate Card Schedule (GET & PUT)
+  app.get(
+    '/concessions/rate-cards',
+    async (
+      req: FastifyRequest<{ Querystring: { teacher_id?: string } }>,
+      reply: FastifyReply,
+    ) => {
+      const teacherId = req.query?.teacher_id || 'tch_default';
+      const schedule = app.store.getTeacherGradeRateSchedule(teacherId).map(r => ({
+        ...r,
+        fee_yuan: formatRmbYuan(r.feeFen),
+        concession_yuan: formatRmbYuan(r.defaultConcessionFen),
+      }));
+      return reply.code(200).send({
+        teacher_id: teacherId,
+        grades: schedule,
+      });
+    },
+  );
+
+  app.put(
+    '/concessions/rate-cards',
+    async (
+      req: FastifyRequest<{
+        Body: {
+          teacher_id?: string;
+          level?: string | number;
+          exam_fee_fen?: number;
+          concession_fen?: number;
+          note?: string;
+        };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const body = req.body ?? {};
+      if (
+        !body.teacher_id ||
+        body.level === undefined ||
+        body.exam_fee_fen === undefined ||
+        body.concession_fen === undefined
+      ) {
+        return reply.code(400).send({
+          error: 'VALIDATION_ERROR',
+          message: 'teacher_id, level, exam_fee_fen, and concession_fen are required',
+        });
+      }
+
+      const card = app.store.upsertTeacherGradeRateCard({
+        teacher_id: body.teacher_id,
+        level: body.level,
+        exam_fee_fen: Number(body.exam_fee_fen),
+        concession_fen: Number(body.concession_fen),
+        note: body.note,
+      });
+
+      return reply.code(200).send({
+        ...card,
+        exam_fee_yuan: formatRmbYuan(card.exam_fee_fen),
+        concession_yuan: formatRmbYuan(card.concession_fen),
+      });
+    },
+  );
+
+  // 1. Parent WeChat Pay checkout (priced by teacher_id + grade level)
   app.post(
     '/payments/checkout',
     async (
@@ -65,6 +130,11 @@ export async function paymentConcessionRoutes(app: FastifyInstance): Promise<voi
     ) => {
       const teacherId = req.query?.teacher_id || 'tch_default';
       const wallet = app.store.getTeacherConcessionWallet(teacherId);
+      const rateSchedule = app.store.getTeacherGradeRateSchedule(teacherId).map(r => ({
+        ...r,
+        fee_yuan: formatRmbYuan(r.feeFen),
+        concession_yuan: formatRmbYuan(r.defaultConcessionFen),
+      }));
       return reply.code(200).send({
         teacher_id: teacherId,
         summary: {
@@ -74,6 +144,7 @@ export async function paymentConcessionRoutes(app: FastifyInstance): Promise<voi
           withdrawing_yuan: formatRmbYuan(wallet.summary.withdrawing_fen),
           paid_out_yuan: formatRmbYuan(wallet.summary.paid_out_fen),
         },
+        rate_schedule: rateSchedule,
         ledger: wallet.ledger,
         withdrawals: wallet.withdrawals,
       });
