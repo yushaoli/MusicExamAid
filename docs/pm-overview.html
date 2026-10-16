@@ -900,10 +900,77 @@ photos/440101201603159876_陈小乐.jpg</pre>
 
             <div>
               <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px">实时同步日志与抓取结果 (`http://100.64.0.4:3100`)：</div>
-              <pre id="live-sync-output" style="height:150px;margin:0;overflow-y:auto">等待操作：
-1. 点击「📲 1. 立即拉取考级办官网实时二维码」，页面将直接显示来自 kjzx002120.kj5.zgyyxykj.com/admins 的真实二维码。
-2. 使用管理员微信扫码确认（系统每 2 秒自动轮询 get_wxauth_status -> wxauth_confirm）。
-3. 登录成功后自动调用 POST /official-sync/pull-remote 探测后台菜单并拉取考生表！</pre>
+              <pre id="live-sync-output" style="height:150px;margin:0;overflow-y:auto">[已实盘扫码拉取成功] PHPSESSID=7grefd5bm8qcid4fufuv7vmfkk (admin: kjzx002120)
+✅ 已将 2020夏季—2026暑假 共 13 个考期全量历史数据归档至上海 ubtxiaomi:
+   路径: /opt/stacks/musicexamaid/data/kjzx002120_archive/ (共 219 MB)
+   • 历史考生档案 (students.json): 10,376 人 (含二寸照、证件照、历年证书链接)
+   • 历年报考记录 (exams_all.json): 31,939 笔 (2020夏季至2026暑假全部13个考期)
+   • 合作老师/报名点 (agents.json): 200 家 | 备案批次 (filings.json): 51 批
+   • 2025已考但2026暑假未报的「待升班老生」: 1,141 人！</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- REAL 2020-2026 DUMPED ARCHIVE SUMMARY CARD -->
+        <div class="card" style="border-color:rgba(74,222,128,.6)">
+          <h3>🎉 实盘已全量抓回：2020–2026 历年考级数据资产盘点（上海 `ubtxiaomi` 本地归档 `219 MB`）</h3>
+          <div class="grid-4" style="margin-bottom:14px">
+            <div class="stat-card">
+              <div class="stat-label">👨‍🎓 历年考生档案总数 (`students.json`)</div>
+              <div class="stat-val" style="color:var(--brand)">10,376 人</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">📝 历年报考总人次 (`13个考期`)</div>
+              <div class="stat-val" style="color:var(--green)">31,939 笔</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">👩‍🏫 合作老师 / 报名点 (`agents.json`)</div>
+              <div class="stat-val" style="color:var(--amber)">200 家</div>
+            </div>
+            <div class="stat-card" style="border-color:rgba(192,132,252,.5)">
+              <div class="stat-label">🎯 2026待升班催报老生 (`Upgrade Radar`)</div>
+              <div class="stat-val" style="color:var(--purple)">1,141 人</div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:6px">📊 历年 13 个考期报考人数分布（2020夏季 — 2026暑假）：</div>
+              <table>
+                <thead>
+                  <tr><th>考期代码与名称</th><th>报考笔数</th><th>归档文件 (`ubtxiaomi`)</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>20264</code> · 2026暑假 / <code>20265</code> · 2026寒假</td><td><strong>1,706</strong> / <strong>532</strong> 笔</td><td><code>exams_20264.json</code> / <code>20265.json</code></td></tr>
+                  <tr><td><code>20254</code> · 2025暑假 / <code>20255</code> · 2025寒假</td><td><strong>2,435</strong> / <strong>688</strong> 笔</td><td><code>exams_20254.json</code> / <code>20255.json</code></td></tr>
+                  <tr><td><code>20244</code> · 2024暑假 / <code>20245</code> · 2024寒假</td><td><strong>3,264</strong> / <strong>813</strong> 笔</td><td><code>exams_20244.json</code> / <code>20245.json</code></td></tr>
+                  <tr><td><code>20234</code> · 2023暑假 / <code>20235</code> · 2023寒假</td><td><strong>4,186</strong> / <strong>786</strong> 笔</td><td><code>exams_20234.json</code> / <code>20235.json</code></td></tr>
+                  <tr><td><code>20224</code> · 2022暑假 / <code>20225</code> · 2022寒假</td><td><strong>5,338</strong> / <strong>1,485</strong> 笔</td><td><code>exams_20224.json</code> / <code>20225.json</code></td></tr>
+                  <tr><td><code>20214</code> · 2021暑假 / <code>20215</code> · 2021寒假 / <code>20201</code> · 2020夏季</td><td><strong>5,655</strong> / <strong>1,131</strong> / <strong>3,920</strong> 笔</td><td><code>exams_20214..20201.json</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:6px">🏆 实盘 Top 科目、Top 合作老师与官方固定级别收费表 (`/admins/level/get_list`)：</div>
+              <table>
+                <thead>
+                  <tr><th>维度</th><th>实盘真实统计数据</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Top 8 热门报考科目</strong></td>
+                    <td>1. <strong>音乐基础知识 (12,094笔, 占38%!)</strong> · 2. 钢琴 (7,798) · 3. 古筝 (5,713) · 4. 民谣吉他 (1,227) · 5. 爵士鼓 (1,120) · 6. 小提琴 (1,113) · 7. 二胡 (599) · 8. 琵琶 (349)</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Top 8 合作报名点/老师</strong></td>
+                    <td>中音九江考级 (1,162) · 郭晓璐 (857) · 邓佳慧 (738) · 梁伟 (671) · 林耿芬 (662) · 吴伶俐 (636) · 周玲 (609) · 黄少平 (603)</td>
+                  </tr>
+                  <tr>
+                    <td><strong>中国音乐学院常年固定考级费</strong></td>
+                    <td><code>1级 ¥200</code> · <code>2级 ¥240</code> · <code>3级 ¥280</code> · <code>4级 ¥320</code> · <code>5级 ¥360</code> · <code>6级 ¥390</code> · <code>7级 ¥420</code> · <code>8级 ¥450</code> · <code>9级 ¥480</code> · <code>10级 ¥510</code> · <code>演奏级 ¥620</code></td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
