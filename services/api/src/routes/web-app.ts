@@ -233,8 +233,9 @@ const WEB_APP_HTML = `<!DOCTYPE html>
 
   <!-- Quick Role Sandbox Bar so Admin/Tester can switch between Admin, Teacher & Parent accounts in 1 click -->
   <div class="role-switcher-bar">
-    <div><strong>🧪 账号角色沙盒切换器 (点击体验不同链接权限隔离)：</strong></div>
+    <div><strong>🧪 视角一键切换：</strong></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <a class="role-chip" id="chip-mom" href="/app?tab=mom" style="background:#fef3c7;border-color:#f59e0b;color:#92400e;font-weight:700;font-size:13.5px">👵 0. 妈妈/日常大字极简台 (只留3个大按钮)</a>
       <a class="role-chip" id="chip-admin" href="/app?role=admin&tab=console">👑 1. 考级办管理员 (全权限)</a>
       <a class="role-chip" id="chip-t999" href="/app?invite=t_inv_999_testdemo&tab=teacher">👩‍🏫 2. 测试张老师专席 (999琴行隔离)</a>
       <a class="role-chip" id="chip-t068" href="/app?invite=t_inv_068_acb20f36&tab=teacher">👩‍🏫 3. 实盘黄蓝老师专席 (068隔离)</a>
@@ -399,11 +400,11 @@ const WEB_APP_HTML = `<!DOCTYPE html>
             </label>
             <label class="addon-row">
               <span>
-                <input type="checkbox" class="p-addon-cb" value="growth_archive_frame" data-price="19.9" data-market="88" onchange="recalcParentCheckout()" />
+                <input type="checkbox" class="p-addon-cb" value="growth_archive_frame" data-price="29.9" data-market="88" onchange="recalcParentCheckout()" />
                 <strong>🏅 定制胡桃木国音考级证书荣誉相框 (顺丰包邮) + 星光成长档案卡</strong>
                 <small style="color:var(--muted)">(<del>琴行零售价 ¥88</del>)</small>
               </span>
-              <span><span class="badge badge-upgrade" style="margin-right:6px">考生补贴价</span><strong style="color:var(--primary-dark)">+¥19.90</strong></span>
+              <span><span class="badge badge-upgrade" style="margin-right:6px">考生补贴价</span><strong style="color:var(--primary-dark)">+¥29.90</strong></span>
             </label>
           </div>
         </div>
@@ -687,9 +688,74 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         <div class="grid" id="adm-archive-breakdown">正在加载实盘统计...</div>
       </div>
     </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 0: MOM / ELDER-FRIENDLY GIANT-FONT 3-STEP WORKBENCH             -->
+    <!-- =================================================================== -->
+    <section id="tab-mom" class="hidden" style="font-size:19px;line-height:1.6">
+      <div class="card" style="background:#ecfdf5;border:3px solid #16a34a;padding:18px 20px">
+        <div style="font-size:22px;font-weight:800;color:#065f46">🛡️ 妈妈/日常极简大字工作台（放心点，绝不会改坏官网任何资料！）</div>
+        <div style="font-size:17px;color:#047857;margin-top:6px">
+          以前您要手动帮老师查孩子考到几级、手动改照片名字、用计算器算退费；现在<strong>只需要下面 3 个大按钮</strong>，点一下就能直接粘贴到微信发给老师和家长！
+        </div>
+      </div>
+
+      <!-- STEP 1: GIANT STUDENT LOOKUP -->
+      <div class="card" style="border:3px solid #2563eb;padding:20px">
+        <div style="font-size:22px;font-weight:800;color:#1e40af;margin-bottom:10px">
+          1️⃣ 第一步：老师/家长问「孩子以前考了几级？」（1秒查清，不用开电脑官网）
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <input id="mom-search-input" placeholder="在这里输入孩子姓名（例如：李仕泓、张）" value="李仕泓"
+            style="flex:1;min-width:240px;font-size:22px;padding:14px 16px;border:2px solid #2563eb;border-radius:12px;font-weight:700"
+            onkeydown="if(event.key==='Enter') momSearchStudent()" />
+          <button class="btn-primary" onclick="momSearchStudent()" style="font-size:21px;padding:14px 28px;border-radius:12px">
+            🔍 点这里查孩子
+          </button>
+        </div>
+        <div id="mom-search-results" style="margin-top:16px"></div>
+      </div>
+
+      <!-- STEP 2: SEND WECHAT LINK TO TEACHER -->
+      <div class="card" style="border:3px solid #7c3aed;padding:20px">
+        <div style="font-size:22px;font-weight:800;color:#5b21b6;margin-bottom:8px">
+          2️⃣ 第二步：老师要报名表？（点一下复制链接发微信，家长自己填表+自动剪二寸照）
+        </div>
+        <div style="font-size:17px;color:#475569;margin-bottom:12px">
+          发给对应的老师后，家长填的所有报名学生都会<strong>自动归到这位老师名下</strong>，身份证号和标准二寸白底照系统自动帮您检查好：
+        </div>
+        <div style="margin-bottom:12px">
+          <input id="mom-teacher-filter" placeholder="输入老师名字快速找老师（如：黄庆华、胡杰友、张）..."
+            style="font-size:20px;padding:12px 16px;border:2px solid #7c3aed;border-radius:10px"
+            oninput="renderMomTeacherCards()" />
+        </div>
+        <div id="mom-teacher-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">
+          正在加载常合作的琴行老师...
+        </div>
+      </div>
+
+      <!-- STEP 3: 1-CLICK EXPORT & OFFICIAL QR SYNC -->
+      <div class="card" style="border:3px solid #d97706;padding:20px">
+        <div style="font-size:22px;font-weight:800;color:#92400e;margin-bottom:10px">
+          3️⃣ 第三步：报名截止后，一键打包交给国音官网 & 自动算好老师退费
+        </div>
+        <div style="font-size:17px;color:#78350f;margin-bottom:14px">
+          不用再一张张改照片名字（系统已全部自动改成 <code>身份证号_姓名.jpg</code>），也不用按计算器算每个老师退多少钱：
+        </div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap">
+          <button class="btn-primary" onclick="downloadZipBundle()" style="font-size:20px;padding:16px 24px;border-radius:12px">
+            📦 1. 一键下载「国音官网 Excel 汇总表 + 全套二寸照压缩包」
+          </button>
+          <button class="btn-wecom" onclick="switchTab('console');openQrSyncModal()" style="font-size:20px;padding:16px 24px;border-radius:12px">
+            📱 2. 打开手机微信扫一扫同步国音官网
+          </button>
+        </div>
+      </div>
+    </section>
   </div>
 
   <nav class="bottom-nav">
+    <button id="nav-mom" class="nav-btn" onclick="switchTab('mom')" style="color:#b45309;font-weight:800">👵 妈妈大字台</button>
     <button id="nav-parent" class="nav-btn active" onclick="switchTab('parent')">📝 我要报名</button>
     <button id="nav-archive" class="nav-btn" onclick="switchTab('archive')">🏅 考级档案</button>
     <button id="nav-teacher" class="nav-btn" onclick="switchTab('teacher')">👩‍🏫 合作老师专席</button>
@@ -798,18 +864,112 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       setTimeout(() => el.classList.add('hidden'), 3400);
     }
 
+    let cachedMomTeachers = [];
+
+    async function momSearchStudent() {
+      const q = document.getElementById('mom-search-input')?.value.trim() || '';
+      const box = document.getElementById('mom-search-results');
+      if (!box) return;
+      box.innerHTML = '<div style="font-size:20px;color:#1e40af;font-weight:700">⏳ 正在帮您查找孩子档案...</div>';
+      try {
+        const res = await fetch('/official-sync/student-lookup?q=' + encodeURIComponent(q) + '&limit=6').then(r => r.json());
+        if (!res.items || res.items.length === 0) {
+          box.innerHTML = '<div style="font-size:20px;color:#b91c1c;font-weight:700">未找到这个名字，请核对有没有同音字（或只输入姓氏试试）。</div>';
+          return;
+        }
+        box.innerHTML = res.items.map(s => {
+          const up = s.recommended_upgrade;
+          const upText = up
+            ? \`上次考过：【\${up.last_season} · \${up.major_name} \${up.last_level}级】 → 今年该报：【\${up.major_name} \${up.recommended_level}级 (报名费 ¥\${up.official_fee_yuan})】\`
+            : '暂无往年等级记录';
+          const theoryNote = s.missing_music_theory ? \`（🔔 提醒：该生还没考过《音基\${s.recommended_theory_level || 1}级》）\` : '';
+          const wechatReply = encodeURIComponent(
+            \`【国音九江考级办档案核实】\\n👧 考生姓名：\${s.name_cn}\\n🏫 指导老师/机构：\${s.agent_name || '—'}\\n🏅 \${upText}\${theoryNote}\\n📲 家长点此链接10秒一键续报：\${location.origin}/app?tab=parent\`
+          );
+          const examsList = (s.exams || []).map(e => {
+            const scoreStr = e.score_total != null ? \`（考官打分：\${e.score_total}/50分）\` : '';
+            return \`<div style="font-size:18px;padding:6px 0;border-bottom:1px dashed #cbd5e1">✅ <strong>\${e.season_label}</strong>：\${e.major_name} <strong>\${e.level}级</strong> \${scoreStr}</div>\`;
+          }).join('');
+          return \`
+            <div style="border:2px solid #93c5fd;background:#f8fafc;border-radius:14px;padding:16px;margin-bottom:14px">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+                <div>
+                  <div style="font-size:24px;font-weight:800;color:#0f172a">👧 \${s.name_cn} <span style="font-size:18px;color:#475569;font-weight:600">（所属老师：\${s.agent_name || '—'}）</span></div>
+                  <div style="font-size:20px;color:#047857;font-weight:700;margin-top:6px">🎯 \${upText}</div>
+                  \${s.missing_music_theory ? \`<div style="font-size:18px;color:#b45309;font-weight:700;margin-top:4px">🔔 提醒：还没考过《音乐基础知识（音基）\${s.recommended_theory_level || 1}级》</div>\` : ''}
+                </div>
+                <button class="btn-primary" style="font-size:19px;padding:12px 20px;border-radius:10px" onclick="copyTextUri('\${wechatReply}')">
+                  📋 点一下复制结果发微信
+                </button>
+              </div>
+              <div style="margin-top:10px;background:#fff;padding:10px 14px;border-radius:10px;border:1px solid #e2e8f0">
+                \${examsList || '暂无考次记录'}
+              </div>
+            </div>
+          \`;
+        }).join('');
+      } catch (e) {
+        box.innerHTML = '<div style="font-size:19px;color:red">查询出错，请稍后再试</div>';
+      }
+    }
+
+    async function loadMomTeacherList() {
+      if (cachedMomTeachers.length === 0) {
+        try {
+          const res = await fetch('/official-sync/partner-agents').then(r => r.json());
+          cachedMomTeachers = res.items || [];
+        } catch {}
+      }
+      renderMomTeacherCards();
+    }
+
+    function renderMomTeacherCards() {
+      const box = document.getElementById('mom-teacher-list');
+      if (!box) return;
+      const kw = (document.getElementById('mom-teacher-filter')?.value || '').trim();
+      const filtered = cachedMomTeachers
+        .filter(a => !kw || (a.name && a.name.includes(kw)) || (a.manager && a.manager.includes(kw)) || String(a.code || '').includes(kw))
+        .slice(0, 12);
+      if (filtered.length === 0) {
+        box.innerHTML = '<div style="font-size:19px;color:#64748b">没找到这位老师，请换个字试试</div>';
+        return;
+      }
+      box.innerHTML = filtered.map(a => {
+        const pUrl = \`\${location.origin}/app?ref=\${a.parent_referral_code}&tab=parent\`;
+        const tUrl = \`\${location.origin}/app?invite=\${a.invite_token}&tab=teacher\`;
+        const msgForTeacher = encodeURIComponent(
+          \`【中国音乐学院九江考级办】\${a.manager || a.name}老师您好！\\n\\n今年考级报名不用再手工填Excel和收照片啦：\\n1️⃣ 请把这条【家长一键报名链接】发到您的家长群，家长输入孩子名字10秒自动带出去年级别、手机拍照自动剪好二寸白底照：\\n\${pUrl}\\n\\n2️⃣ 您自己的【老师查账与老生名单专席】点这里进入：\\n\${tUrl}\`
+        );
+        return \`
+          <div style="border:2px solid #ddd6fe;background:#faf5ff;border-radius:12px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:10px">
+            <div>
+              <div style="font-size:21px;font-weight:800;color:#4c1d95">👩‍🏫 \${a.name} <small style="font-size:16px;color:#6d28d9">(\${a.manager || ''})</small></div>
+              <div style="font-size:16px;color:#64748b;margin-top:4px">历年累计考生：<strong>\${a.distinct_students} 人</strong> (\${a.total_exams} 考次)</div>
+            </div>
+            <button class="btn-purple" style="font-size:18px;padding:12px 16px;border-radius:10px;width:100%" onclick="copyTextUri('\${msgForTeacher}')">
+              📋 复制报名链接发给「\${a.name}」
+            </button>
+          </div>
+        \`;
+      }).join('');
+    }
+
     function switchTab(tab) {
-      if (currentSession.role === 'parent' && (tab === 'teacher' || tab === 'console')) {
+      if (currentSession.role === 'parent' && (tab === 'teacher' || tab === 'console' || tab === 'mom')) {
         tab = 'parent';
       }
-      if (currentSession.role === 'teacher' && tab === 'console') {
+      if (currentSession.role === 'teacher' && (tab === 'console' || tab === 'mom')) {
         tab = 'teacher';
       }
-      ['parent', 'archive', 'teacher', 'console'].forEach(t => {
+      ['mom', 'parent', 'archive', 'teacher', 'console'].forEach(t => {
         document.getElementById('tab-' + t)?.classList.toggle('hidden', t !== tab);
         document.getElementById('nav-' + t)?.classList.toggle('active', t === tab);
       });
       refreshData();
+      if (tab === 'mom') {
+        momSearchStudent();
+        loadMomTeacherList();
+      }
       if (tab === 'archive') searchHistoricalStudent('archive');
       if (tab === 'teacher') initTeacherTab();
       if (tab === 'console') {
@@ -1564,8 +1724,15 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         if (!initialTab) initialTab = 'parent';
       }
 
+      const modeParam = params.get('mode') || '';
+      if (modeParam === 'mom') initialTab = 'mom';
+      if (initialTab === 'mom') {
+        document.getElementById('chip-admin')?.classList.remove('active');
+        document.getElementById('chip-mom')?.classList.add('active');
+      }
+
       recalcParentCheckout();
-      switchTab(['parent', 'archive', 'teacher', 'console'].includes(initialTab) ? initialTab : 'parent');
+      switchTab(['mom', 'parent', 'archive', 'teacher', 'console'].includes(initialTab) ? initialTab : 'parent');
       searchHistoricalStudent('parent');
     })();
   </script>

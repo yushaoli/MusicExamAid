@@ -98,9 +98,9 @@ export const VALUE_ADDED_CATALOG: Readonly<Record<ValueAddedAddonId, ValueAddedA
     subtitle_cn: '生成 1-10 级专属电子喜报海报 + 刻名实木证书装裱框顺丰寄家（成本价补贴）',
     category: 'commemorative_merch',
     market_price_fen: 8800,  // 市面定制实木相框 ¥88.00
-    price_fen: 1990,         // 本中心在籍考生专享补贴价 ¥19.90
+    price_fen: 2990,         // 本中心在籍考生专享补贴价 ¥29.90
     teacher_share_fen: 0,
-    platform_profit_fen: 790, // after ~¥12 physical frame + shipping cost
+    platform_profit_fen: 1790, // after ~¥12 physical frame + shipping cost
     exclusive_to_registered_students: true,
   },
 };
