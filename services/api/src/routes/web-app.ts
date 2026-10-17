@@ -1238,18 +1238,19 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           return;
         }
         resBox.innerHTML = rows.slice(0, 10).map(r => \`
-          <div style="background:#fff;border:1.5px solid #86efac;border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;font-size:18px">
+          <div style="background:\${r.is_highest_for_major ? '#ffffff' : '#f8fafc'};border:\${r.is_highest_for_major ? '2px solid #16a34a' : '1px dashed #cbd5e1'};border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;font-size:18px;opacity:\${r.is_highest_for_major ? '1' : '0.78'}">
             <div>
               <span class="badge badge-confirmed" style="font-size:14px">\${r.source === 'live_look_score' ? '🌐 官网 look_score 实时' : '⚡ 本考点成绩库'}</span>
+              \${r.is_highest_for_major ? \`<span class="badge" style="background:#fef3c7;color:#92400e;font-size:14px;font-weight:800">🏆 \${r.major_name}最高等级（推荐上传）</span>\` : \`<span class="badge" style="background:#e2e8f0;color:#475569;font-size:13px">⚪ 往期较低等级（已有更高证书）</span>\`}
               <strong>\${r.student_name}</strong> \${r.birthday ? \`(生日:\${r.birthday} · 老师:\${r.agent_name || '—'})\` : ''}
               ｜ <strong>\${r.major_name} \${r.pass_level}级</strong>
               ｜ 考试时间：<strong>\${r.exam_time_label}</strong> (发证日: <code>\${r.derived_issue_date}</code>)
               ｜ 结果：<strong style="color:#15803d">\${r.score_result}</strong>
               \${r.cert_no ? \`｜ 18位证书号：<code style="font-weight:800;color:#1d4ed8">\${r.cert_no}</code>\` : ''}
             </div>
-            <button class="btn-primary" style="font-size:17px;padding:8px 16px;border-radius:8px"
+            <button class="\${r.is_highest_for_major ? 'btn-primary' : 'btn-outline'}" style="font-size:17px;padding:8px 16px;border-radius:8px"
               onclick="momGenerateLookScoreImageAndFill('\${r.student_name}', '\${r.sex || '女'}', '\${r.major_name}', '\${r.pass_level}', '\${r.exam_time_label}', '\${r.exam_way_label}', '\${r.score_result}', '\${r.derived_issue_date}', '\${r.cert_no || ''}', '')">
-              🪄 一键生成完整《成绩查询合格图》并填入\${r.target_cert_index === 1 ? '【证书2·音基】' : '【证书1·专业】'}
+              🪄 一键生成《\${r.major_name}\${r.pass_level}级》合格图并填入\${r.target_cert_index === 1 ? '【证书2·音基】' : '【证书1·专业】'}
             </button>
           </div>
         \`).join('');
@@ -1407,13 +1408,13 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           const discoveredHtml = (s.auto_discovered_certs || []).length > 0
             ? \`<div style="margin-top:10px;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:10px;padding:10px 14px">
                 <div style="font-size:17px;font-weight:800;color:#1e3a8a;margin-bottom:6px">
-                  💡 从该生往期历史中自动提取到以下【已合格旧证书】，点一下即可自动填入上方【本期当期报考】的证书槽：
+                  🏆 已按专业自动筛选【各门乐器最高等级证书 + 音基最高等级证书】（兼学多门乐器时均保留各自最高级），点一下即可填入【本期当期报考】：
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
                   \${(s.auto_discovered_certs || []).map(dc => \`
-                    <button class="btn-outline btn-sm" style="font-size:16px;background:#fff;border-color:#2563eb;color:#1d4ed8;font-weight:700"
+                    <button class="btn-outline btn-sm" style="font-size:16px;background:#fff;border:2px solid \${dc.matches_current_term_major ? '#16a34a' : '#2563eb'};color:\${dc.matches_current_term_major ? '#047857' : '#1d4ed8'};font-weight:800"
                       onclick="momGenerateLookScoreImageAndFill('\${s.name_cn}', '\${s.sex || '女'}', '\${dc.major_name}', '\${dc.pass_level}', '\${dc.season_label}', '', '合格', '\${dc.date}', '\${dc.cert_no || ''}', '\${dc.picture_url || ''}')">
-                      🪄 提取往期「\${dc.major_name}\${dc.pass_level}级 (\${dc.season_label}\${dc.cert_no ? ' · ' + dc.cert_no : ''})」→ 填入本期【证书\${dc.cert_index + 1}】
+                      \${dc.role_tag || '🏆 最高等级'}：提取「\${dc.major_name}\${dc.pass_level}级 (\${dc.season_label}\${dc.cert_no ? ' · ' + dc.cert_no : ''})」→ 填入本期【证书\${dc.cert_index + 1}】
                     </button>
                   \`).join('')}
                 </div>

@@ -1719,53 +1719,93 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         const currentTermExams = allEx.filter(ex => Number(ex.season_code) === currentSeasonCode);
         const historicalExams = allEx.filter(ex => Number(ex.season_code) !== currentSeasonCode);
 
-        // Build auto_discovered_certs from historical passed exams & prior certs_json!
-        const discoveredMap = new Map<string, any>();
+        // Build auto_discovered_certs keeping ONLY the HIGHEST passed grade per distinct major_name
+        // (supports multiple instruments learned simultaneously + 音乐基础知识, while hiding superseded lower grades)
+        const currentMajors = new Set(currentTermExams.map(e => String(e.major_name || '').trim()));
+        const highestByMajor = new Map<string, any>();
+
+        const upsertHighestForMajor = (cand: {
+          source: string;
+          season_label: string;
+          major_name: string;
+          pass_level: number;
+          cert_no: string;
+          date: string;
+          school: string;
+          picture_url: string;
+        }) => {
+          const mName = String(cand.major_name || '').trim();
+          if (!mName || !cand.pass_level || cand.pass_level <= 0) return;
+          const prev = highestByMajor.get(mName);
+          const isTheory = mName.includes('音乐基础') || mName.includes('音基');
+          const matchesCurrentMajor = currentMajors.has(mName);
+          if (!prev || cand.pass_level > prev.pass_level) {
+            highestByMajor.set(mName, {
+              ...cand,
+              cert_no: cand.cert_no || prev?.cert_no || '',
+              picture_url: cand.picture_url || prev?.picture_url || '',
+              cert_index: isTheory ? 1 : 0,
+              is_highest_for_major: true,
+              matches_current_term_major: matchesCurrentMajor,
+              role_tag: isTheory
+                ? '🎵 音基最高等级 (填证书2)'
+                : matchesCurrentMajor
+                  ? '🎯 当期同专业最高等级 (填证书1)'
+                  : '🎸 兼修其它乐器最高等级 (填证书1)',
+            });
+          } else if (prev && cand.pass_level === prev.pass_level) {
+            if (!prev.cert_no && cand.cert_no && String(cand.cert_no).startsWith('21')) {
+              prev.cert_no = cand.cert_no;
+            }
+            if (!prev.picture_url && cand.picture_url) {
+              prev.picture_url = cand.picture_url;
+            }
+          }
+        };
+
         for (const ex of historicalExams) {
           if (ex.pass_level || ex.cert_no) {
             const isSummer = String(ex.season_label || '').includes('暑') || String(ex.season_code || '').endsWith('4');
             const yr = ex.apply_year || String(ex.season_code || '2025').slice(0, 4);
             const derivedDate = `${yr}-${isSummer ? '10-24' : '04-24'}`;
-            const key = `${ex.major_name}_${ex.pass_level || ex.level}`;
-            if (!discoveredMap.has(key)) {
-              discoveredMap.set(key, {
-                source: '本考点往期成绩库 (look_score 同源)',
-                season_label: ex.season_label,
-                major_name: ex.major_name,
-                pass_level: ex.pass_level || ex.level,
-                cert_no: ex.cert_no || '',
-                date: derivedDate,
-                school: '中国音乐学院考级委员会',
-                picture_url: '',
-                cert_index: ex.major_name === '音乐基础知识' ? 1 : 0,
-              });
-            }
+            upsertHighestForMajor({
+              source: '本考点往期成绩库 (最高等级)',
+              season_label: ex.season_label,
+              major_name: ex.major_name,
+              pass_level: Number(ex.pass_level || ex.level || 0),
+              cert_no: ex.cert_no || '',
+              date: derivedDate,
+              school: '中国音乐学院考级委员会',
+              picture_url: '',
+            });
           }
           const cArr = Array.isArray(ex.certs_json) ? ex.certs_json : [];
           for (const c of cArr) {
             if (c && typeof c === 'object' && !Array.isArray(c) && (c.major_name || c.picture || c.no)) {
-              const key = `${c.major_name || '专业'}_${c.level || ''}`;
-              const existing = discoveredMap.get(key);
-              if (existing) {
-                if (!existing.picture_url && c.picture) existing.picture_url = c.picture;
-                if (!existing.cert_no && c.no && String(c.no).startsWith('21')) existing.cert_no = c.no;
-                if (c.date) existing.date = c.date;
-              } else {
-                discoveredMap.set(key, {
-                  source: `往期已传档案 (${ex.season_label})`,
-                  season_label: ex.season_label,
-                  major_name: c.major_name || ex.major_name,
-                  pass_level: Number(c.level || 1),
-                  cert_no: c.no || '',
-                  date: c.date || '2025-10-24',
-                  school: c.school || '中国音乐学院考级委员会',
-                  picture_url: c.picture || '',
-                  cert_index: String(c.major_name || '').includes('音乐基础') ? 1 : 0,
-                });
-              }
+              upsertHighestForMajor({
+                source: `往期已传档案 (${ex.season_label})`,
+                season_label: ex.season_label,
+                major_name: c.major_name || ex.major_name,
+                pass_level: Number(c.level || 1),
+                cert_no: c.no || '',
+                date: c.date || '2025-10-24',
+                school: c.school || '中国音乐学院考级委员会',
+                picture_url: c.picture || '',
+              });
             }
           }
         }
+
+        // Sort highest certs: 1) instrument matching current-term major, 2) other instruments (multi-instrument learner), 3) 音基
+        const highestCertsSorted = Array.from(highestByMajor.values()).sort((a, b) => {
+          const score = (x: any) =>
+            x.matches_current_term_major && x.cert_index === 0
+              ? 0
+              : x.cert_index === 0
+                ? 1
+                : 2;
+          return score(a) - score(b) || b.pass_level - a.pass_level;
+        });
 
         return {
           ...s,
@@ -1776,7 +1816,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           current_term_exams: currentTermExams,
           historical_exams: historicalExams.slice(0, 5),
           recent_exams: allEx.slice(0, 6),
-          auto_discovered_certs: Array.from(discoveredMap.values()),
+          auto_discovered_certs: highestCertsSorted,
         };
       });
 
@@ -2222,10 +2262,30 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         [name, `${name.slice(0, 2)}%`, idTail],
       );
 
+      // Compute highest passed grade per (student_id, major_name) so only the highest grade per instrument & 音基 is highlighted
+      const maxPassByStudentMajor = new Map<string, number>();
+      for (const r of localRes.rows) {
+        const isPass = Boolean(r.pass_level && Number(r.pass_level) > 0) || Boolean(r.cert_no);
+        if (!isPass) continue;
+        const lv = Number(r.pass_level || r.level || 0);
+        const key = `${r.student_id}_${r.major_name}`;
+        const prev = maxPassByStudentMajor.get(key) || 0;
+        if (lv > prev) maxPassByStudentMajor.set(key, lv);
+      }
+
+      const seenHighestKey = new Set<string>();
       const localRows = localRes.rows.map(r => {
         const isSummer = String(r.season_label || '').includes('暑') || String(r.season_code || '').endsWith('4');
         const yr = r.apply_year || String(r.season_code || '2025').slice(0, 4);
         const isPass = Boolean(r.pass_level && Number(r.pass_level) > 0) || Boolean(r.cert_no);
+        const pLevel = Number(r.pass_level || r.level);
+        const key = `${r.student_id}_${r.major_name}`;
+        const isHighestForMajor =
+          isPass &&
+          pLevel === (maxPassByStudentMajor.get(key) || 0) &&
+          !seenHighestKey.has(key);
+        if (isHighestForMajor) seenHighestKey.add(key);
+
         return {
           source: 'local_archive',
           exam_id: r.exam_id,
@@ -2237,16 +2297,28 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           agent_name: r.agent_name || '',
           major_name: r.major_name,
           level: Number(r.level),
-          pass_level: Number(r.pass_level || r.level),
+          pass_level: pLevel,
           exam_time_label: r.season_label ? `20${String(r.season_code).slice(2, 4)}年${String(r.season_label).replace(/^\d+/, '')}` : `${yr}年暑假`,
           season_label: r.season_label,
           derived_issue_date: `${yr}-${isSummer ? '10-24' : '04-24'}`,
           exam_way_label: String(r.major_name || '').includes('音乐基础') ? '音基考试' : '视频考试',
           is_pass: isPass ? 1 : 0,
+          is_highest_for_major: isHighestForMajor,
           score_result: isPass ? '合格' : r.status === 5 ? '审核/待考中' : '待出分',
           cert_no: r.cert_no || '',
           target_cert_index: String(r.major_name || '').includes('音乐基础') ? 1 : 0,
         };
+      });
+
+      // Sort so exact name + highest passed grade per instrument & 音基 appear first
+      localRows.sort((a, b) => {
+        const exactA = a.student_name === name ? 0 : 1;
+        const exactB = b.student_name === name ? 0 : 1;
+        if (exactA !== exactB) return exactA - exactB;
+        if (a.is_highest_for_major !== b.is_highest_for_major) {
+          return Number(b.is_highest_for_major) - Number(a.is_highest_for_major);
+        }
+        return b.exam_id - a.exam_id;
       });
 
       return reply.code(200).send({
