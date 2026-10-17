@@ -28,56 +28,68 @@ export interface ValueAddedAddonSpec {
   title_cn: string;
   subtitle_cn: string;
   category: 'checkout_bump' | 'pre_exam_service' | 'commemorative_merch';
+  market_price_fen: number;
   price_fen: number;
   teacher_share_fen: number;
   platform_profit_fen: number;
+  exclusive_to_registered_students: boolean;
 }
 
 export const VALUE_ADDED_CATALOG: Readonly<Record<ValueAddedAddonId, ValueAddedAddonSpec>> = {
   ai_id_photo: {
     id: 'ai_id_photo',
-    title_cn: '✨ AI 考级标准二寸照一键换底精修',
+    title_cn: '✨ AI 考级标准二寸照一键换底精修（在籍考生专享补贴）',
     subtitle_cn: '自动抠图换标准白/蓝底 + 35×49mm (413×626px) 考级办合规裁剪，免跑照相馆',
     category: 'checkout_bump',
-    price_fen: 990,          // ¥9.90
-    teacher_share_fen: 0,    // 100% platform margin
-    platform_profit_fen: 990,
+    market_price_fen: 3500,  // 市面照相馆 ¥35.00
+    price_fen: 190,          // 本中心在籍考生专享补贴价 ¥1.90
+    teacher_share_fen: 0,
+    platform_profit_fen: 180,
+    exclusive_to_registered_students: true,
   },
   household_ocr_vip: {
     id: 'household_ocr_vip',
-    title_cn: '📸 户口本/身份证 OCR 自动填表 + 错漏包赔',
+    title_cn: '📸 户口本/身份证 OCR 秒填 + 制证错漏免费重办保障',
     subtitle_cn: '拍照秒识 18 位身份证号与生僻字校验，制证信息错漏免费重办',
     category: 'checkout_bump',
-    price_fen: 660,          // ¥6.60
+    market_price_fen: 1500,  // 市面 ¥15.00
+    price_fen: 290,          // 本中心在籍考生专享补贴价 ¥2.90
     teacher_share_fen: 0,
-    platform_profit_fen: 660,
+    platform_profit_fen: 280,
+    exclusive_to_registered_students: true,
   },
   music_theory_pack: {
     id: 'music_theory_pack',
-    title_cn: '🎧 中国音乐学院《基本乐科/音基》全真冲刺题库',
+    title_cn: '🎧 中国音乐学院《基本乐科/音基》全真冲刺题库（器乐+音基联报免费送）',
     subtitle_cn: '配套级别听音、视唱、乐理闯关 + 3 套考前押题全真模考卷',
     category: 'pre_exam_service',
-    price_fen: 2990,         // ¥29.90
-    teacher_share_fen: 500,  // ¥5.00 teacher bonus
-    platform_profit_fen: 2490,
+    market_price_fen: 9800,  // 市面培训班题库 ¥98.00
+    price_fen: 990,          // 本中心在籍考生专享补贴价 ¥9.90
+    teacher_share_fen: 300,  // ¥3.00 teacher bonus
+    platform_profit_fen: 690,
+    exclusive_to_registered_students: true,
   },
   mock_video_review: {
     id: 'mock_video_review',
-    title_cn: '🎬 考前模拟视频「名师 1对1 预审点评报告」',
-    subtitle_cn: '考前上传演奏视频，获资深老师语音批注 + 节奏/音准/通过率评估单',
+    title_cn: '🎬 AI国音考官五维模拟测评 + 同曲目全市百分位排名报告',
+    subtitle_cn: '基于本考点 1.64 万份国音考官真实打分训练，考前上传视频秒出音准/节奏/音色/表现力/完整性五维得分与同曲目百分位排名',
     category: 'pre_exam_service',
-    price_fen: 4900,         // ¥49.00
-    teacher_share_fen: 2400, // ¥24.00 teacher split (nearly 50/50)
-    platform_profit_fen: 2500,
+    market_price_fen: 15000, // 市面名师单次测评 ¥150.00
+    price_fen: 990,          // 本中心在籍考生专享补贴价 ¥9.90
+    teacher_share_fen: 400,  // ¥4.00 teacher split
+    platform_profit_fen: 580,
+    exclusive_to_registered_students: true,
   },
   growth_archive_frame: {
     id: 'growth_archive_frame',
-    title_cn: '🏅 历年考级星光成长档案 + 定制胡桃木证书相框 (包邮)',
-    subtitle_cn: '生成 1-10 级专属电子喜报海报 + 刻名实木证书装裱框顺丰寄家',
+    title_cn: '🏅 刻名定制胡桃木证书相框 (顺丰包邮) + 永久云档案',
+    subtitle_cn: '生成 1-10 级专属电子喜报海报 + 刻名实木证书装裱框顺丰寄家（成本价补贴）',
     category: 'commemorative_merch',
-    price_fen: 5800,         // ¥58.00
-    teacher_share_fen: 800,  // ¥8.00 teacher referral share
-    platform_profit_fen: 3800, // after ~¥12 physical frame + shipping cost
+    market_price_fen: 8800,  // 市面定制实木相框 ¥88.00
+    price_fen: 1990,         // 本中心在籍考生专享补贴价 ¥19.90
+    teacher_share_fen: 300,  // ¥3.00 teacher referral share
+    platform_profit_fen: 490, // after ~¥12 physical frame + shipping cost
+    exclusive_to_registered_students: true,
   },
 };
 

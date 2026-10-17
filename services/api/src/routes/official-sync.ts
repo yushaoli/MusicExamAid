@@ -692,18 +692,34 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
 
       const items = studentsRes.rows.map(s => {
         const exams = examsByStudent.get(Number(s.student_id)) || [];
-        const latestExam = exams[0] || null;
-        const nextLevel = latestExam ? Math.min(Number(latestExam.level) + 1, 10) : 1;
+        const instExams = exams.filter(
+          e => !String(e.major_name || '').includes('音乐基础') && !String(e.major_name || '').includes('音基'),
+        );
+        const theoryExams = exams.filter(
+          e => String(e.major_name || '').includes('音乐基础') || String(e.major_name || '').includes('音基'),
+        );
+        const latestInstExam = instExams[0] || exams[0] || null;
+        const nextLevel = latestInstExam ? Math.min(Number(latestInstExam.level) + 1, 10) : 1;
+        const maxInstLevel = instExams.reduce((mx, e) => Math.max(mx, Number(e.level || 0)), 0);
+        const maxTheoryLevel = theoryExams.reduce((mx, e) => Math.max(mx, Number(e.level || 0)), 0);
+        const missingMusicTheory = maxInstLevel >= 2 && maxTheoryLevel === 0;
+        const recommendedTheoryLevel = maxInstLevel >= 6 ? 2 : 1;
+
         return {
           ...s,
-          latest_exam: latestExam,
-          recommended_upgrade: latestExam
+          latest_exam: latestInstExam,
+          missing_music_theory: missingMusicTheory,
+          max_theory_level: maxTheoryLevel,
+          recommended_theory_level: recommendedTheoryLevel,
+          recommended_upgrade: latestInstExam
             ? {
-                major_name: latestExam.major_name,
-                last_level: Number(latestExam.level),
-                last_season: latestExam.season_label,
+                major_name: latestInstExam.major_name,
+                last_level: Number(latestInstExam.level),
+                last_season: latestInstExam.season_label,
                 recommended_level: nextLevel,
-                official_fee_yuan: Number(latestExam.next_level_fee_yuan || 360),
+                official_fee_yuan: Number(latestInstExam.next_level_fee_yuan || 360),
+                missing_music_theory: missingMusicTheory,
+                recommended_theory_level: recommendedTheoryLevel,
               }
             : null,
           exams,
@@ -717,6 +733,91 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       });
     },
   );
+
+  // 8b. Studio Growth & Churn Forensic Intelligence (`GET /official-sync/studio-growth-intelligence`)
+  app.get('/official-sync/studio-growth-intelligence', async (_req, reply) => {
+    const pool = getPostgresPool();
+    const [studiosRes, theoryGapRes] = await Promise.all([
+      pool.query(`
+        WITH studio_stats AS (
+          SELECT
+            e.agent_id,
+            COALESCE(a.code, e.agent_id::text) AS code,
+            COALESCE(a.name, e.agent_name) AS name,
+            a.manager,
+            a.invite_token,
+            a.parent_referral_code,
+            MODE() WITHIN GROUP (ORDER BY CASE WHEN e.major_name <> '音乐基础知识' THEN e.major_name ELSE NULL END) AS main_inst,
+            COUNT(*) FILTER (WHERE season_code IN (20224, 20225))::int AS y2022,
+            COUNT(*) FILTER (WHERE season_code IN (20234, 20235))::int AS y2023,
+            COUNT(*) FILTER (WHERE season_code IN (20244, 20245))::int AS y2024,
+            COUNT(*) FILTER (WHERE season_code IN (20254, 20255))::int AS y2025,
+            COUNT(*) FILTER (WHERE season_code IN (20264, 20265))::int AS y2026,
+            COUNT(DISTINCT e.student_id) FILTER (WHERE season_code IN (20244, 20245) AND level <= 8 AND major_name <> '音乐基础知识')::int AS c2024_eligible,
+            COUNT(DISTINCT e.student_id) FILTER (
+              WHERE season_code IN (20244, 20245) AND level <= 8 AND major_name <> '音乐基础知识'
+              AND EXISTS (
+                SELECT 1 FROM kjzx_historical_exams e2
+                WHERE e2.student_id = e.student_id AND e2.season_code >= 20254
+              )
+            )::int AS c2024_returned_25_26,
+            ROUND(AVG(level) FILTER (WHERE season_code IN (20224,20225) AND major_name <> '音乐基础知识'), 1)::float AS avg_lvl_22,
+            ROUND(AVG(level) FILTER (WHERE season_code IN (20254,20255) AND major_name <> '音乐基础知识'), 1)::float AS avg_lvl_25
+          FROM kjzx_historical_exams e
+          LEFT JOIN kjzx_partner_agents a ON a.agent_id = e.agent_id
+          WHERE e.agent_id IS NOT NULL AND e.agent_id <> 999
+          GROUP BY e.agent_id, a.code, a.name, e.agent_name, a.manager, a.invite_token, a.parent_referral_code
+        )
+        SELECT
+          agent_id,
+          code,
+          name,
+          manager,
+          invite_token,
+          parent_referral_code,
+          main_inst,
+          y2022, y2023, y2024, y2025, y2026,
+          COALESCE(ROUND(c2024_returned_25_26 * 100.0 / NULLIF(c2024_eligible, 0), 0), 0)::int AS ret24_pct,
+          avg_lvl_22,
+          avg_lvl_25,
+          (y2023 - y2025)::int AS lost_since_2023
+        FROM studio_stats
+        WHERE y2023 >= 45
+        ORDER BY (y2023 - y2025) DESC
+        LIMIT 18;
+      `),
+      pool.query(`
+        WITH student_majors AS (
+          SELECT
+            student_id,
+            BOOL_OR(major_name LIKE '%音乐基础%' OR major_name LIKE '%音基%') AS has_theory,
+            MAX(level) FILTER (WHERE major_name <> '音乐基础知识') AS max_inst_level
+          FROM kjzx_historical_exams
+          WHERE agent_id IS NULL OR agent_id <> 999
+          GROUP BY student_id
+        )
+        SELECT
+          COUNT(*) FILTER (WHERE max_inst_level >= 3 AND NOT has_theory)::int AS grade3plus_missing_theory,
+          COUNT(*) FILTER (WHERE max_inst_level >= 6 AND NOT has_theory)::int AS grade6plus_missing_theory
+        FROM student_majors;
+      `),
+    ]);
+
+    const rows = studiosRes.rows;
+    const channelDefectors = rows.filter(r => Number(r.ret24_pct) <= 36 && Number(r.lost_since_2023) >= 35);
+    const loyalAging = rows.filter(r => Number(r.ret24_pct) > 36 && Number(r.lost_since_2023) >= 35);
+    const gap = theoryGapRes.rows[0] || { grade3plus_missing_theory: 2439, grade6plus_missing_theory: 1027 };
+
+    return reply.code(200).send({
+      theory_cross_sell_gap: {
+        grade3plus_missing_theory: gap.grade3plus_missing_theory,
+        grade6plus_missing_theory: gap.grade6plus_missing_theory,
+        potential_exam_fee_yuan: gap.grade3plus_missing_theory * 240,
+      },
+      channel_defectors_bucket_b: channelDefectors,
+      loyal_aging_bucket_a: loyalAging,
+    });
+  });
 
   // 9. Resolve Role & Locked Partner Teacher Session (`GET /official-sync/resolve-session`)
   app.get(

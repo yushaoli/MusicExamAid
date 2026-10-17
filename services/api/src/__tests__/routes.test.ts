@@ -636,10 +636,10 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     });
 
     // 4. Create student + Grade 6 registration and pay with 2 Order Bumps:
-    //    - ai_id_photo (+¥9.90 = 990 fen, teacher share ¥0)
-    //    - mock_video_review (+¥49.00 = 4900 fen, teacher share +¥24.00 = 2400 fen)
-    //    Expected Total Paid: 46000 + 990 + 4900 = 51890 fen (¥518.90)
-    //    Expected Teacher Concession when locked: 8500 + 2400 = 10900 fen (¥109.00)
+    //    - ai_id_photo (+¥1.90 = 190 fen, teacher share ¥0)
+    //    - mock_video_review (+¥9.90 = 990 fen, teacher share +¥4.00 = 400 fen)
+    //    Expected Total Paid: 46000 + 190 + 990 = 47180 fen (¥471.80)
+    //    Expected Teacher Concession when locked: 8500 + 400 = 8900 fen (¥89.00)
     const lrn = await app.inject({
       method: 'POST',
       url: '/learners',
@@ -674,11 +674,11 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
       },
     });
     assert.equal(payRes.statusCode, 201);
-    assert.equal(payRes.json().order.amount_fen, 51890);
-    assert.equal(payRes.json().order.amount_yuan, '¥518.90');
-    assert.equal(payRes.json().addon_breakdown.addons_fee_fen, 5890);
-    assert.equal(payRes.json().addon_breakdown.addons_teacher_bonus_fen, 2400);
-    assert.equal(payRes.json().addon_breakdown.platform_net_addon_profit_fen, 3490);
+    assert.equal(payRes.json().order.amount_fen, 47180);
+    assert.equal(payRes.json().order.amount_yuan, '¥471.80');
+    assert.equal(payRes.json().addon_breakdown.addons_fee_fen, 1180);
+    assert.equal(payRes.json().addon_breakdown.addons_teacher_bonus_fen, 400);
+    assert.equal(payRes.json().addon_breakdown.platform_net_addon_profit_fen, 760);
 
     await app.inject({
       method: 'PATCH',
@@ -695,8 +695,8 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
       method: 'GET',
       url: '/concessions/wallet?teacher_id=tch_zhang',
     });
-    assert.equal(walletRes.json().summary.accrued_fen, 10900);
-    assert.equal(walletRes.json().summary.accrued_yuan, '¥109.00');
+    assert.equal(walletRes.json().summary.accrued_fen, 8900);
+    assert.equal(walletRes.json().summary.accrued_yuan, '¥89.00');
 
     // 5. Evaluate Multi-Year Historical Student Upgrade Radar:
     //    - 周星辰 (already registered in 2025-summer -> excluded from radar)

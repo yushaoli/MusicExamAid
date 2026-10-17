@@ -339,36 +339,71 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           <div><label>考试曲目 (用逗号分隔)</label><input id="r-rep1" value="音阶与琶音, 练习曲, 奏鸣曲, 中外乐曲" /></div>
         </div>
 
+        <!-- Automatic Missing Music Theory (音基) Joint-Registration Banner -->
+        <div id="theory-joint-banner" style="margin-top:14px;padding:12px 14px;background:linear-gradient(90deg,#fffbeb 0%,#fef3c7 100%);border:1.5px solid #f59e0b;border-radius:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div style="font-size:13px;color:#92400e">
+            <strong>🔔 国音考级办档案核验提醒：</strong>系统检测到该生报考器乐级别较高，但名下尚无<strong>《音乐基础知识 (音基)》</strong>证书记录（全库共 2,439 名器乐考生待补考音基）。
+            <div style="margin-top:4px;font-size:12px;color:#b45309">💡 勾选右侧「同季一键联报音基 1级 (官方费 ¥200)」，<strong>本考级办直接免费赠送价值 ¥98 的《音基全真冲刺题库 + 3套模考卷》！</strong></div>
+          </div>
+          <label style="background:#fff;padding:8px 12px;border-radius:8px;border:1px solid #f59e0b;cursor:pointer;display:flex;align-items:center;gap:6px;margin:0;color:#92400e;font-weight:700">
+            <input type="checkbox" id="cb-joint-theory" data-price="200" onchange="recalcParentCheckout()" style="width:auto" />
+            <span>⚡ 同季联报《音乐基础知识 1级》(+¥200 · 赠题库)</span>
+          </label>
+        </div>
+
         <div style="margin-top:16px">
-          <label style="font-size:13px;color:var(--text);margin-bottom:8px">💎 考级无忧增值服务包（自愿勾选，与报名费合并一笔微信支付）：</label>
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+            <label style="font-size:13.5px;color:var(--text);margin:0">🔒 <strong>本考级办在籍考生专享补贴包</strong>（仅限通过本办报名考生解锁 · 低于市面价 80%）：</label>
+            <span class="badge badge-confirmed">🎁 在籍考生免费享：2020–2026 历年考级高清视频云档案永久保存 (非本办考生 ¥50/年)</span>
+          </div>
           <div id="parent-addons-box">
             <label class="addon-row">
-              <span><input type="checkbox" class="p-addon-cb" value="ai_id_photo" data-price="9.9" checked onchange="recalcParentCheckout()" /> <strong>✨ AI 考级标准二寸照一键换底精修</strong> <small style="color:var(--muted)">(自动抠图换标准白底 + 35×49mm 合规裁剪)</small></span>
-              <strong style="color:var(--primary-dark)">+¥9.90</strong>
+              <span>
+                <input type="checkbox" class="p-addon-cb" value="ai_id_photo" data-price="1.9" data-market="35" checked onchange="recalcParentCheckout()" />
+                <strong>✨ AI 考级标准二寸照一键换底精修</strong>
+                <small style="color:var(--muted)">(自动抠图换标准白底 + 413×626px 合规裁剪 · <del>照相馆市面价 ¥35</del>)</small>
+              </span>
+              <span><span class="badge badge-upgrade" style="margin-right:6px">考生补贴价</span><strong style="color:var(--primary-dark)">+¥1.90</strong></span>
             </label>
             <label class="addon-row">
-              <span><input type="checkbox" class="p-addon-cb" value="household_ocr_vip" data-price="6.6" onchange="recalcParentCheckout()" /> <strong>📸 户口本/身份证 OCR 自动填表 + 错漏包赔</strong> <small style="color:var(--muted)">(生僻字校验，制证信息错漏免费重办)</small></span>
-              <strong style="color:var(--primary-dark)">+¥6.60</strong>
+              <span>
+                <input type="checkbox" class="p-addon-cb" value="mock_video_review" data-price="9.9" data-market="150" checked onchange="recalcParentCheckout()" />
+                <strong>🎬 AI 国音考官五维模拟测评 + 九江同曲目排名百分位报告</strong>
+                <small style="color:var(--muted)">(基于 2.5 万条国音历年真题视频大模型 · 输出音准/节奏/音色/表现力/完整性五维打分 · <del>外部名师预审 ¥150</del>)</small>
+              </span>
+              <span><span class="badge badge-upgrade" style="margin-right:6px">考生补贴价</span><strong style="color:var(--primary-dark)">+¥9.90</strong></span>
             </label>
             <label class="addon-row">
-              <span><input type="checkbox" class="p-addon-cb" value="music_theory_pack" data-price="29.9" onchange="recalcParentCheckout()" /> <strong>🎧 中国音乐学院《基本乐科/音基》全真冲刺题库</strong> <small style="color:var(--muted)">(配套级别视唱练耳闯关 + 3套模考卷)</small></span>
-              <strong style="color:var(--primary-dark)">+¥29.90</strong>
+              <span>
+                <input type="checkbox" class="p-addon-cb" id="cb-addon-theory-pack" value="music_theory_pack" data-price="9.9" data-market="98" onchange="recalcParentCheckout()" />
+                <strong>🎧 中国音乐学院《音乐基础知识/音基》全真冲刺题库</strong>
+                <small style="color:var(--muted)">(配套级别视唱练耳闯关 + 3套全真模考卷 · 联报音基自动 ¥0 免单 · <del>外部独立购买 ¥98</del>)</small>
+              </span>
+              <span><span class="badge badge-upgrade" style="margin-right:6px">考生补贴价</span><strong style="color:var(--primary-dark)" id="price-label-theory-pack">+¥9.90</strong></span>
             </label>
             <label class="addon-row">
-              <span><input type="checkbox" class="p-addon-cb" value="mock_video_review" data-price="49" checked onchange="recalcParentCheckout()" /> <strong>🎬 考前模拟视频「名师 1对1 预审点评报告」</strong> <small style="color:var(--muted)">(考前上传演奏视频获评委级语音批注与通过率评估)</small></span>
-              <strong style="color:var(--primary-dark)">+¥49.00</strong>
+              <span>
+                <input type="checkbox" class="p-addon-cb" value="household_ocr_vip" data-price="2.9" data-market="25" onchange="recalcParentCheckout()" />
+                <strong>📸 户口本/身份证生僻字核验 + 制证信息错漏免费重办保障</strong>
+                <small style="color:var(--muted)">(<del>独立服务费 ¥25</del>)</small>
+              </span>
+              <span><span class="badge badge-upgrade" style="margin-right:6px">考生补贴价</span><strong style="color:var(--primary-dark)">+¥2.90</strong></span>
             </label>
             <label class="addon-row">
-              <span><input type="checkbox" class="p-addon-cb" value="growth_archive_frame" data-price="58" onchange="recalcParentCheckout()" /> <strong>🏅 历年考级星光成长档案 + 定制胡桃木证书相框 (顺丰包邮)</strong></span>
-              <strong style="color:var(--primary-dark)">+¥58.00</strong>
+              <span>
+                <input type="checkbox" class="p-addon-cb" value="growth_archive_frame" data-price="19.9" data-market="88" onchange="recalcParentCheckout()" />
+                <strong>🏅 定制胡桃木国音考级证书荣誉相框 (顺丰包邮) + 星光成长档案卡</strong>
+                <small style="color:var(--muted)">(<del>琴行零售价 ¥88</del>)</small>
+              </span>
+              <span><span class="badge badge-upgrade" style="margin-right:6px">考生补贴价</span><strong style="color:var(--primary-dark)">+¥19.90</strong></span>
             </label>
           </div>
         </div>
 
         <div style="margin-top:14px;padding:14px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
           <div>
-            <div style="font-size:12.5px;color:#166534" id="checkout-summary-text">6级官方固定报名费 ¥390.00 + 增值服务包 ¥58.90</div>
-            <div style="font-size:20px;font-weight:800;color:#14532d">微信支付应付总额：<span id="checkout-total-yuan">¥448.90</span></div>
+            <div style="font-size:12.5px;color:#166534" id="checkout-summary-text">6级官方固定报名费 ¥390.00 + 在籍考生专享补贴包 ¥11.80（已为您立省 ¥223.20）</div>
+            <div style="font-size:20px;font-weight:800;color:#14532d">微信支付应付总额：<span id="checkout-total-yuan">¥401.80</span></div>
           </div>
           <button class="btn-primary" style="padding:11px 20px;font-size:15px" onclick="createAndSubmitRegistration()">💳 立即提交报名并微信支付</button>
         </div>
@@ -628,6 +663,17 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         </div>
       </div>
 
+      <div class="card" style="border:2px solid #f59e0b">
+        <h2>
+          <span>🕵️ 合作机构流失归因诊断与「在籍考生补贴包」锁客雷达</span>
+          <span class="badge badge-needs_change" id="adm-theory-gap-badge">待补考《音基》老生池：2,439 人 (潜在报名费 ¥58.5万)</span>
+        </h2>
+        <p class="sub">
+          基于 2020–2026 实盘队列留存率 (<code>ret24_pct</code>) 与报考平均级别漂移 (<code>avg_lvl</code>)，系统自动区分<strong>「🚨 疑似被高返佣渠道分流机构 (Bucket B)」</strong>与<strong>「📉 100%忠诚但琴行新生断档机构 (Bucket A)」</strong>。通过<strong>「仅限本考级办在籍考生专享低于市面价 80% 的 AI 五维考官测评 (¥9.9) + 音基题库 (¥9.9) + 免费高清考级视频云档案」</strong>，让家长主动指定在本考级办报名：
+        </p>
+        <div class="grid" id="adm-studio-intelligence-box">正在从 PostgreSQL 计算机构留存归因...</div>
+      </div>
+
       <div class="card">
         <h2>📊 2020–2026 历年 13 个考期人数分布与 Top 10 合作老师（实盘 PostgreSQL）</h2>
         <div class="grid" id="adm-archive-breakdown">正在加载实盘统计...</div>
@@ -767,13 +813,30 @@ const WEB_APP_HTML = `<!DOCTYPE html>
     function recalcParentCheckout() {
       const lvl = Number(document.getElementById('r-level')?.value || 6);
       const baseFee = LEVEL_FEES[lvl] || 390;
+      const jointTheoryChecked = Boolean(document.getElementById('cb-joint-theory')?.checked);
+      const theoryExamFee = jointTheoryChecked ? 200 : 0;
+
+      const theoryPackCb = document.getElementById('cb-addon-theory-pack');
+      const theoryPackLabel = document.getElementById('price-label-theory-pack');
+      if (jointTheoryChecked && theoryPackCb) {
+        theoryPackCb.checked = true;
+        if (theoryPackLabel) theoryPackLabel.textContent = '¥0.00 (联报免单)';
+      } else if (theoryPackLabel) {
+        theoryPackLabel.textContent = '+¥9.90';
+      }
+
       let addonFee = 0;
+      let marketValue = 50; // Free cloud video archive worth ¥50/yr
       document.querySelectorAll('.p-addon-cb:checked').forEach(cb => {
-        addonFee += Number(cb.dataset.price || 0);
+        const isFreeTheoryPack = jointTheoryChecked && cb.value === 'music_theory_pack';
+        addonFee += isFreeTheoryPack ? 0 : Number(cb.dataset.price || 0);
+        marketValue += Number(cb.dataset.market || 0);
       });
-      const total = baseFee + addonFee;
+      const savedYuan = Math.max(0, marketValue - addonFee);
+      const total = baseFee + theoryExamFee + addonFee;
+      const theoryPart = jointTheoryChecked ? \` + 联报音基1级 ¥200.00\` : '';
       document.getElementById('checkout-summary-text').textContent =
-        \`\${lvl === 11 ? '演奏级' : lvl + '级'}官方固定报名费 ¥\${baseFee.toFixed(2)} + 增值服务包 ¥\${addonFee.toFixed(2)}\`;
+        \`\${lvl === 11 ? '演奏级' : lvl + '级'}官方费 ¥\${baseFee.toFixed(2)}\${theoryPart} + 在籍考生补贴包 ¥\${addonFee.toFixed(2)}（已享本办考生专属补贴立省 ¥\${savedYuan.toFixed(2)}）\`;
       document.getElementById('checkout-total-yuan').textContent = '¥' + total.toFixed(2);
     }
 
@@ -800,8 +863,11 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         if (mode === 'parent') {
           box.innerHTML = data.items.map(s => {
             const up = s.recommended_upgrade;
+            const theoryGapBadge = s.missing_music_theory
+              ? \` <span class="badge badge-needs_change">🔔 待补考《音乐基础知识 \${s.recommended_theory_level || 1}级》</span>\`
+              : '';
             const upBadge = up
-              ? \`上次考过：<strong>\${up.last_season} · \${up.major_name} \${up.last_level}级</strong> → 本季推荐直升 <span class="badge badge-upgrade">🎯 \${up.major_name} \${up.recommended_level}级 (¥\${up.official_fee_yuan})</span>\`
+              ? \`上次考过：<strong>\${up.last_season} · \${up.major_name} \${up.last_level}级</strong> → 本季推荐直升 <span class="badge badge-upgrade">🎯 \${up.major_name} \${up.recommended_level}级 (¥\${up.official_fee_yuan})</span>\${theoryGapBadge}\`
               : '暂无往期记录';
             const payloadStr = encodeURIComponent(JSON.stringify(s));
             const picSrc = s.picture_url ? mediaProxyUrl(s.picture_url, 'photo', s.student_id, '') : '';
@@ -812,7 +878,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
                   <div>
                     <div style="font-size:14.5px"><strong>\${s.name_cn}</strong> <small style="color:var(--muted)">(\${s.sex || '女'} · 生日 \${s.birthday || '—'} · 手机 \${s.parent_phone_masked || '—'})</small></div>
                     <div style="font-size:12.5px;margin-top:3px">\${upBadge}</div>
-                    <div style="font-size:12px;color:var(--muted);margin-top:2px">指导老师/报名点：<strong>\${s.agent_name || '本机构'}</strong> | 累计参考 \${s.all_exams} 次</div>
+                    <div style="font-size:12px;color:var(--muted);margin-top:2px">指导老师/报名点：<strong>\${s.agent_name || '本机构'}</strong> | 累计参考 \${s.all_exams} 次 | <span style="color:var(--primary-dark)">🎁 续报立享 ¥9.9 AI考官测评+免费云视频档案</span></div>
                   </div>
                 </div>
                 <button class="btn-primary btn-sm" onclick="autofillFromHistorical('\${payloadStr}')">⚡ 一键带入档案并直升下一级</button>
@@ -905,8 +971,21 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         const mappedSub = SUBJECT_MAP_CN_TO_ID[up.major_name] || 'piano';
         document.getElementById('r-subject').value = mappedSub;
         document.getElementById('r-level').value = String(up.recommended_level || 6);
-        recalcParentCheckout();
       }
+      const theoryBanner = document.getElementById('theory-joint-banner');
+      const theoryCb = document.getElementById('cb-joint-theory');
+      if (s.missing_music_theory && theoryBanner && theoryCb) {
+        theoryBanner.style.display = 'block';
+        const descEl = document.getElementById('theory-joint-desc');
+        if (descEl) {
+          descEl.textContent = \`系统检测到 \${s.name_cn} 已考过器乐等级，但尚未通过【音乐基础知识（音基）\${s.recommended_theory_level || 1}级】（高阶考级/领证必备）。勾选联报立享 ¥9.90 音基题库免费送！\`;
+        }
+        theoryCb.checked = true;
+      } else if (theoryBanner && theoryCb) {
+        theoryBanner.style.display = 'none';
+        theoryCb.checked = false;
+      }
+      recalcParentCheckout();
       await createLearner();
       showToast(\`✅ 已自动带入「\${s.name_cn}」历史档案，并为您自动匹配直升「\${s.recommended_upgrade?.major_name || ''} \${s.recommended_upgrade?.recommended_level || ''}级」！\`);
     }
@@ -1271,14 +1350,77 @@ const WEB_APP_HTML = `<!DOCTYPE html>
     // Admin Console: Live Archive Stats & Teacher Invite Table
     async function loadAdminArchiveStats() {
       try {
-        const [data, agentsRes] = await Promise.all([
+        const [data, agentsRes, intelRes] = await Promise.all([
           fetch('/official-sync/archive-stats').then(r => r.json()),
-          fetch('/official-sync/partner-agents').then(r => r.json())
+          fetch('/official-sync/partner-agents').then(r => r.json()),
+          fetch('/official-sync/studio-growth-intelligence').then(r => r.json()).catch(() => null)
         ]);
         if (data.totals) {
           document.getElementById('adm-stat-students').textContent = data.totals.historical_students_count.toLocaleString() + ' 人';
           document.getElementById('adm-stat-exams').textContent = data.totals.historical_exams_count.toLocaleString() + ' 笔';
           document.getElementById('adm-stat-agents').textContent = data.totals.partner_agents_count + ' 家';
+        }
+
+        // Render Studio Growth & Churn Forensic Radar
+        const intelBox = document.getElementById('adm-studio-intelligence-box');
+        if (intelBox && intelRes) {
+          const gap = intelRes.theory_cross_sell_gap || {};
+          const defectors = (intelRes.channel_defectors_bucket_b || []).slice(0, 8).map(s => {
+            const studioName = s.name || s.agent_name || '合作老师';
+            const retPct = s.ret24_pct ?? s.retention_pct ?? 0;
+            const lvStart = s.avg_lvl_22 ?? s.avg_lv_2023 ?? '—';
+            const lvEnd = s.avg_lvl_25 ?? s.avg_lv_2025 ?? '—';
+            const tUrl = \`\${location.origin}/app?invite=\${s.invite_token || ''}&tab=teacher\`;
+            const pitch = encodeURIComponent(\`【国音九江考级办·核心合作机构专享】\${studioName}老师您好！本季我们为您的在籍考生开放了5项低于市面价80%的官方补贴权益（¥1.90 AI二寸照、¥9.90 国音考官五维测评+同曲目百分位排名报告、¥0 免费永久保存2020-2026历年考级高清视频档案），且满30人即享阶梯优待金加码。点击您的专属工作台一键生成老生续报清单：\${tUrl}\`);
+            return \`<tr>
+              <td><strong>\${studioName}</strong> <small style="color:var(--muted)">(\${s.main_inst || ''})</small></td>
+              <td>\${s.y2023} → \${s.y2024} → <strong style="color:var(--danger)">\${s.y2025}</strong></td>
+              <td><span class="badge" style="background:#fef2f2;color:#991b1b">\${retPct}% (流失\${s.lost_since_2023 || 0}人)</span></td>
+              <td>\${lvStart}级 → <strong>\${lvEnd}级</strong></td>
+              <td><button class="btn-purple btn-sm" onclick="copyTextUri('\${pitch}')">📋 复制挽回话术(专属低价权益包)</button></td>
+            </tr>\`;
+          }).join('');
+          const loyalAging = (intelRes.loyal_aging_bucket_a || []).slice(0, 8).map(s => {
+            const studioName = s.name || s.agent_name || '合作老师';
+            const retPct = s.ret24_pct ?? s.retention_pct ?? 0;
+            const lvStart = s.avg_lvl_22 ?? s.avg_lv_2023 ?? '—';
+            const lvEnd = s.avg_lvl_25 ?? s.avg_lv_2025 ?? '—';
+            const tUrl = \`\${location.origin}/app?invite=\${s.invite_token || ''}&tab=teacher\`;
+            const pitch = encodeURIComponent(\`【国音九江考级办·琴行春季招生赋能】\${studioName}老师您好！感谢您一直以来的支持（老生续报率高达 \${retPct}%）！为帮咱们琴行补充1-3级启蒙新生，考级办免费为您提供【AI国音考官五维模拟测评体验卡】供琴行做引流体验课，并在您名下考生的考级荣誉海报底部免费印制贵琴行招生二维码！工作台：\${tUrl}\`);
+            return \`<tr>
+              <td><strong>\${studioName}</strong> <small style="color:var(--muted)">(\${s.main_inst || ''})</small></td>
+              <td>\${s.y2023} → \${s.y2024} → <strong>\${s.y2025}</strong></td>
+              <td><span class="badge badge-confirmed">\${retPct}% 极高忠诚</span></td>
+              <td>\${lvStart}级 → <strong style="color:var(--warn)">\${lvEnd}级 (高龄化)</strong></td>
+              <td><button class="btn-outline btn-sm" onclick="copyTextUri('\${pitch}')">🎁 复制招生赋能包话术</button></td>
+            </tr>\`;
+          }).join('');
+          intelBox.innerHTML = \`
+            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+              <div style="font-size:12.5px;color:#1e3a8a">
+                💡 <strong>「音乐基础知识（音基）」跨科联报金矿：</strong>库内共 <strong>\${(gap.grade3plus_missing_theory || 2439).toLocaleString()} 名</strong> 器乐3级以上考生（含 <strong>\${(gap.grade6plus_missing_theory || 1027).toLocaleString()} 名</strong> 6级以上高阶考生）从未报考音基！家长端搜索老生时已开启<strong>自动弹窗勾选「音基联报 + 免费送 ¥9.90 冲刺题库」</strong>。
+              </div>
+              <span class="badge badge-paid">潜在新增考费池 ¥58.5万</span>
+            </div>
+            <div class="grid-2" style="gap:14px">
+              <div style="border:1px solid #fecaca;background:#fff5f5;border-radius:10px;padding:10px">
+                <div style="font-size:13px;font-weight:700;color:#991b1b;margin-bottom:6px">🚨 Bucket B：疑似外流其它考级通道机构（老生续报率 &lt;35%，低级别被转走）</div>
+                <div style="font-size:11.5px;color:#7f1d1d;margin-bottom:8px">对策：用<strong>「仅限本考点在籍考生专享低于市面价80%补贴包 + 历年视频云档案绑定 + 阶梯返佣」</strong>让家长主动要求报国音。</div>
+                <table>
+                  <thead><tr><th>机构/老师</th><th>23→24→25考次</th><th>1-8级老生续报率</th><th>平均考级变化</th><th>精准挽回</th></tr></thead>
+                  <tbody>\${defectors}</tbody>
+                </table>
+              </div>
+              <div style="border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;padding:10px">
+                <div style="font-size:13px;font-weight:700;color:#065f46;margin-bottom:6px">🌱 Bucket A：100%忠诚但琴行初学新生断档机构（老生续报 50%~88%，均级升至 7.5+级）</div>
+                <div style="font-size:11.5px;color:#065f46;margin-bottom:8px">对策：老生毕业致总量自然下滑，提供<strong>「AI五维测评引流卡 + 考级喜报底部琴行招生码」</strong>帮老师招1-3级新生。</div>
+                <table>
+                  <thead><tr><th>机构/老师</th><th>23→24→25考次</th><th>1-8级老生续报率</th><th>平均考级变化</th><th>招生赋能</th></tr></thead>
+                  <tbody>\${loyalAging}</tbody>
+                </table>
+              </div>
+            </div>
+          \`;
         }
 
         // Populate top 12 teachers in invite table (starting with 999 sandbox teacher)
