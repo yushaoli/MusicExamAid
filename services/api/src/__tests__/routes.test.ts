@@ -606,7 +606,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
       url: '/value-added/catalog',
     });
     assert.equal(catRes.statusCode, 200);
-    assert.equal(catRes.json().items.length, 5);
+    assert.equal(catRes.json().items.length, 6);
 
     // 2. AI 2-Inch Standard Exam ID Photo Polish
     const photoRes = await app.inject({
@@ -635,11 +635,12 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
       },
     });
 
-    // 4. Create student + Grade 6 registration and pay with 2 Order Bumps:
-    //    - ai_id_photo (+¥1.90 = 190 fen, teacher share ¥0)
-    //    - mock_video_review (+¥9.90 = 990 fen, teacher share +¥4.00 = 400 fen)
-    //    Expected Total Paid: 46000 + 190 + 990 = 47180 fen (¥471.80)
-    //    Expected Teacher Concession when locked: 8500 + 400 = 8900 fen (¥89.00)
+    // 4. Create student + Grade 6 registration and pay with Order Bumps:
+    //    - ai_id_photo (+¥1.90 = 190 fen, teacher share ¥0, platform profit 180 fen)
+    //    - ai_video_review (+¥9.90 = 990 fen, teacher share ¥0, platform profit 990 fen)
+    //    - mock_video_review (+¥49.90 = 4990 fen, teacher share +¥29.90 = 2990 fen, platform profit 2000 fen)
+    //    Expected Total Paid: 46000 + 190 + 990 + 4990 = 52170 fen (¥521.70)
+    //    Expected Teacher Concession when locked: 8500 + 2990 = 11490 fen (¥114.90)
     const lrn = await app.inject({
       method: 'POST',
       url: '/learners',
@@ -670,15 +671,15 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
       payload: {
         registration_id: regId,
         teacher_id: 'tch_zhang',
-        addon_ids: ['ai_id_photo', 'mock_video_review'],
+        addon_ids: ['ai_id_photo', 'ai_video_review', 'mock_video_review'],
       },
     });
     assert.equal(payRes.statusCode, 201);
-    assert.equal(payRes.json().order.amount_fen, 47180);
-    assert.equal(payRes.json().order.amount_yuan, '¥471.80');
-    assert.equal(payRes.json().addon_breakdown.addons_fee_fen, 1180);
-    assert.equal(payRes.json().addon_breakdown.addons_teacher_bonus_fen, 400);
-    assert.equal(payRes.json().addon_breakdown.platform_net_addon_profit_fen, 760);
+    assert.equal(payRes.json().order.amount_fen, 52170);
+    assert.equal(payRes.json().order.amount_yuan, '¥521.70');
+    assert.equal(payRes.json().addon_breakdown.addons_fee_fen, 6170);
+    assert.equal(payRes.json().addon_breakdown.addons_teacher_bonus_fen, 2990);
+    assert.equal(payRes.json().addon_breakdown.platform_net_addon_profit_fen, 3170);
 
     await app.inject({
       method: 'PATCH',
@@ -695,8 +696,8 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
       method: 'GET',
       url: '/concessions/wallet?teacher_id=tch_zhang',
     });
-    assert.equal(walletRes.json().summary.accrued_fen, 8900);
-    assert.equal(walletRes.json().summary.accrued_yuan, '¥89.00');
+    assert.equal(walletRes.json().summary.accrued_fen, 11490);
+    assert.equal(walletRes.json().summary.accrued_yuan, '¥114.90');
 
     // 5. Evaluate Multi-Year Historical Student Upgrade Radar:
     //    - 周星辰 (already registered in 2025-summer -> excluded from radar)

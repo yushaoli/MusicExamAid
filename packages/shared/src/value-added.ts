@@ -20,6 +20,7 @@ export type ValueAddedAddonId =
   | 'ai_id_photo'
   | 'household_ocr_vip'
   | 'music_theory_pack'
+  | 'ai_video_review'
   | 'mock_video_review'
   | 'growth_archive_frame';
 
@@ -60,24 +61,35 @@ export const VALUE_ADDED_CATALOG: Readonly<Record<ValueAddedAddonId, ValueAddedA
   },
   music_theory_pack: {
     id: 'music_theory_pack',
-    title_cn: '🎧 中国音乐学院《基本乐科/音基》全真冲刺题库（器乐+音基联报免费送）',
+    title_cn: '🎧 中国音乐学院《基本乐科/音基》全真冲刺题库',
     subtitle_cn: '配套级别听音、视唱、乐理闯关 + 3 套考前押题全真模考卷',
     category: 'pre_exam_service',
     market_price_fen: 9800,  // 市面培训班题库 ¥98.00
-    price_fen: 990,          // 本中心在籍考生专享补贴价 ¥9.90
-    teacher_share_fen: 300,  // ¥3.00 teacher bonus
-    platform_profit_fen: 690,
+    price_fen: 1990,         // 本中心在籍考生专享补贴价 ¥19.90
+    teacher_share_fen: 0,
+    platform_profit_fen: 1990,
+    exclusive_to_registered_students: true,
+  },
+  ai_video_review: {
+    id: 'ai_video_review',
+    title_cn: '🤖 方案1：AI 国音考官五维模拟测评 + 同曲目全市百分位排名报告',
+    subtitle_cn: '基于本考点 1.64 万份国音考官真实五维打分大模型，上传视频秒出音准/节奏/音色/表现力/完整性得分与同曲目百分位排名',
+    category: 'pre_exam_service',
+    market_price_fen: 6800,  // 市面智能测评 ¥68.00
+    price_fen: 990,          // 在籍考生专享价 ¥9.90 (无分成，100%平台纯利)
+    teacher_share_fen: 0,
+    platform_profit_fen: 990,
     exclusive_to_registered_students: true,
   },
   mock_video_review: {
     id: 'mock_video_review',
-    title_cn: '🎬 AI国音考官五维模拟测评 + 同曲目全市百分位排名报告',
-    subtitle_cn: '基于本考点 1.64 万份国音考官真实打分训练，考前上传视频秒出音准/节奏/音色/表现力/完整性五维得分与同曲目百分位排名',
+    title_cn: '👨‍🏫 方案2：真人名师 1对1 考前视频精评指导报告（含老师分润 ¥29.90）',
+    subtitle_cn: '考前上传演奏视频，由资深考级指导名师逐句语音/文字批注 + 考前冲刺纠错处方单',
     category: 'pre_exam_service',
     market_price_fen: 15000, // 市面名师单次测评 ¥150.00
-    price_fen: 990,          // 本中心在籍考生专享补贴价 ¥9.90
-    teacher_share_fen: 400,  // ¥4.00 teacher split
-    platform_profit_fen: 580,
+    price_fen: 4990,         // 在籍考生专享价 ¥49.90
+    teacher_share_fen: 2990, // ¥29.90 直接计入老师优待金账本
+    platform_profit_fen: 2000, // ¥20.00 平台净收益
     exclusive_to_registered_students: true,
   },
   growth_archive_frame: {
@@ -87,8 +99,8 @@ export const VALUE_ADDED_CATALOG: Readonly<Record<ValueAddedAddonId, ValueAddedA
     category: 'commemorative_merch',
     market_price_fen: 8800,  // 市面定制实木相框 ¥88.00
     price_fen: 1990,         // 本中心在籍考生专享补贴价 ¥19.90
-    teacher_share_fen: 300,  // ¥3.00 teacher referral share
-    platform_profit_fen: 490, // after ~¥12 physical frame + shipping cost
+    teacher_share_fen: 0,
+    platform_profit_fen: 790, // after ~¥12 physical frame + shipping cost
     exclusive_to_registered_students: true,
   },
 };

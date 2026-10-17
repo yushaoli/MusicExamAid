@@ -367,19 +367,27 @@ const WEB_APP_HTML = `<!DOCTYPE html>
             </label>
             <label class="addon-row">
               <span>
-                <input type="checkbox" class="p-addon-cb" value="mock_video_review" data-price="9.9" data-market="150" checked onchange="recalcParentCheckout()" />
-                <strong>🎬 AI 国音考官五维模拟测评 + 九江同曲目排名百分位报告</strong>
-                <small style="color:var(--muted)">(基于 2.5 万条国音历年真题视频大模型 · 输出音准/节奏/音色/表现力/完整性五维打分 · <del>外部名师预审 ¥150</del>)</small>
+                <input type="checkbox" class="p-addon-cb" value="ai_video_review" data-price="9.9" data-market="68" checked onchange="recalcParentCheckout()" />
+                <strong>🤖 评点方案1：AI 国音考官五维模拟测评 + 九江同曲目百分位排名报告</strong>
+                <small style="color:var(--muted)">(基于 1.64 万份国音考官真实五维打分大模型 · 秒出音准/节奏/音色/表现力/完整性得分 · <del>市面智能测评 ¥68</del>)</small>
               </span>
-              <span><span class="badge badge-upgrade" style="margin-right:6px">考生补贴价</span><strong style="color:var(--primary-dark)">+¥9.90</strong></span>
+              <span><span class="badge badge-upgrade" style="margin-right:6px">AI补贴价</span><strong style="color:var(--primary-dark)">+¥9.90</strong></span>
             </label>
             <label class="addon-row">
               <span>
-                <input type="checkbox" class="p-addon-cb" id="cb-addon-theory-pack" value="music_theory_pack" data-price="9.9" data-market="98" onchange="recalcParentCheckout()" />
-                <strong>🎧 中国音乐学院《音乐基础知识/音基》全真冲刺题库</strong>
-                <small style="color:var(--muted)">(配套级别视唱练耳闯关 + 3套全真模考卷 · 联报音基自动 ¥0 免单 · <del>外部独立购买 ¥98</del>)</small>
+                <input type="checkbox" class="p-addon-cb" value="mock_video_review" data-price="49.9" data-market="150" onchange="recalcParentCheckout()" />
+                <strong>👨‍🏫 评点方案2：真人名师 1对1 考前视频精评指导报告</strong>
+                <small style="color:var(--muted)">(资深考级名师逐句语音/文字批注 + 考前冲刺纠错单 · 含指导老师劳务分润 ¥29.90 · <del>市面名师预审 ¥150</del>)</small>
               </span>
-              <span><span class="badge badge-upgrade" style="margin-right:6px">考生补贴价</span><strong style="color:var(--primary-dark)" id="price-label-theory-pack">+¥9.90</strong></span>
+              <span><span class="badge badge-paid" style="margin-right:6px">名师精评</span><strong style="color:var(--primary-dark)">+¥49.90</strong></span>
+            </label>
+            <label class="addon-row">
+              <span>
+                <input type="checkbox" class="p-addon-cb" id="cb-addon-theory-pack" value="music_theory_pack" data-price="19.9" data-market="98" onchange="recalcParentCheckout()" />
+                <strong>🎧 中国音乐学院《音乐基础知识/音基》全真冲刺题库</strong>
+                <small style="color:var(--muted)">(配套级别视唱练耳闯关 + 3套全真模考卷 · <del>外部独立购买 ¥98</del>)</small>
+              </span>
+              <span><span class="badge badge-upgrade" style="margin-right:6px">考生补贴价</span><strong style="color:var(--primary-dark)" id="price-label-theory-pack">+¥19.90</strong></span>
             </label>
             <label class="addon-row">
               <span>
@@ -822,7 +830,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         theoryPackCb.checked = true;
         if (theoryPackLabel) theoryPackLabel.textContent = '¥0.00 (联报免单)';
       } else if (theoryPackLabel) {
-        theoryPackLabel.textContent = '+¥9.90';
+        theoryPackLabel.textContent = '+¥19.90';
       }
 
       let addonFee = 0;
