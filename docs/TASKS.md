@@ -24,4 +24,4 @@
 
 ## Next Up (Optional External Console Cutover)
 - [ ] Add `WECOM_RELAY_TOKEN` to `/opt/stacks/musicexamaid/infra/.env.shared` on `ubtxiaomi` if anonymous WeCom push notifications are desired
-- [ ] Open `apps/wechat-mini` in WeChat DevTools to publish the dual-mode Mainland Mini Program (`wxaf3466a310a8bd07`)
+- [ ] Open `apps/wechat-mini` in WeChat DevTools to publish the dual-mode Mainland Mini Program (`wx_mini_program_appid`)

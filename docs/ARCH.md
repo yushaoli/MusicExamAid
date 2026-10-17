@@ -1,7 +1,7 @@
 # MusicExamAid Architecture
 
 ## Target structure
-- `apps/wechat-mini/` : WeChat Mini Program client (`appid: wxaf3466a310a8bd07`) wired to `https://mea.xgar.com.cn/rpc/:action`
+- `apps/wechat-mini/` : WeChat Mini Program client (`appid: wx_mini_program_appid`) wired to `https://mea.xgar.com.cn/rpc/:action`
 - `services/api/` : Fastify backend API + WeChat Service Account H5 Web Tool (`/app`) + `/rpc/:action` bridge + WeChat MP/WeCom webhooks
 - `services/worker/` : async jobs (export generation, file processing)
 - `packages/shared/` : shared types, validators, state machine, AES-256-GCM snapshot crypto, Template v2.1 CSV & ZIP bundle builder, WeChat/WeCom helpers

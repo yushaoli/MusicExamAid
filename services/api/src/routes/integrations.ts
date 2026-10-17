@@ -214,7 +214,7 @@ export async function integrationRoutes(app: FastifyInstance): Promise<void> {
       const templateId =
         process.env.WECHAT_MP_REVIEW_TEMPLATE_ID || 'stub_review_template_id';
       const miniProgramAppId =
-        process.env.WECHAT_MINI_APPID || 'wxaf3466a310a8bd07';
+        process.env.WECHAT_MINI_APPID || 'stub_mini_appid';
 
       const payload = buildServiceAccountTemplatePayload({
         mpOpenId: body.mp_openid,

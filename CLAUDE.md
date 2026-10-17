@@ -25,7 +25,7 @@ Follow [`/Users/flintstone/.agents/COLLABORATION.md`](/Users/flintstone/.agents/
 | :--- | :--- |
 | `packages/shared/` | `@musicexamaid/shared` — Zod env config (`env-config.ts`), registration status machine with 1-click lock (`registration-status.ts`), AES-256-GCM snapshot encryption & Template v2.1 CSV mapper (`snapshot-crypto.ts`), SuperBatch dedup engine (`dedup.ts`), PKZIP roster+photo bundler (`zip-bundle.ts`), and WeChat MP / WeCom helpers (`wechat-wecom.ts`). |
 | `services/api/` | `@musicexamaid/api` — Fastify 5 API, WeChat Service Account H5 Web Tool (`GET /app`), zero-rewrite Mini Program RPC bridge (`POST /rpc/:action`), portrait photo upload (`POST /learners/:id/photo`), SuperBatch dedup preflight (`POST /exports/dedup-preflight`), CSV/ZIP exports, and PostgreSQL migration/pool (`store/postgres.ts`). |
-| `apps/wechat-mini/` | WeChat Mini Program (`wxaf3466a310a8bd07`) with `miniprogram/utils/api.js` pointing to `https://mea.xgar.com.cn/rpc/:action`. |
+| `apps/wechat-mini/` | WeChat Mini Program (`wx_mini_program_appid`) with `miniprogram/utils/api.js` pointing to `https://mea.xgar.com.cn/rpc/:action`. |
 | `infra/` | `migrations/001_initial_schema.sql`, `.env.shared` (`100.64.0.4` / `ubtxiaomi` tailnet IP), and `Caddyfile.xgar.snippet` (`derp-sgr` / `47.130.165.104`). |
 | `docs/` | `DESIGN_RECONCILIATION.md`, `PRD.md`, `ARCH.md`, `TASKS.md`, `openapi.yaml`, `agent-coordination.md`. |
 

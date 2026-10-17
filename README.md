@@ -1,6 +1,6 @@
 # 考级助手 / MusicExamAid (v2.3)
 
-WeChat Service Account (微信服务号) H5 Tool, WeCom (企业微信) Teacher/Admin Console, and WeChat Mini Program (`wxaf3466a310a8bd07`) for music exam registration, review, 1-click snapshot locking, and official Template v2.1 roster + portrait photo ZIP export, hosted on `xgar.com.cn` (`ubtxiaomi.ts.xgar.com.cn`).
+WeChat Service Account (微信服务号) H5 Tool, WeCom (企业微信) Teacher/Admin Console, and WeChat Mini Program (`wx_mini_program_appid`) for music exam registration, review, 1-click snapshot locking, and official Template v2.1 roster + portrait photo ZIP export, hosted on `xgar.com.cn` (`ubtxiaomi.ts.xgar.com.cn`).
 
 ## Key Capabilities
 1. **WeChat Service Account H5 Web Tool (`GET /app`)**:

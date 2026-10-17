@@ -985,7 +985,7 @@ photos/440101201603159876_陈小乐.jpg</pre>
             <div>
               <h3 style="margin:0">📱 微信内一键「🔄 Sync」免摄像头确认模拟器（`snsapi_base` 静默核验 + `PHPSESSID` 保活）</h3>
               <p class="sub" style="margin:4px 0 0">
-                官网二维码解码后实为：<code>https://gzh.zgyyxykj.com/wx_qrcode/?time=1gqTe0&amp;token=w0EQTWW-Ro&amp;sign=...</code> → <code>302</code> 跳转至 <code>open.weixin.qq.com/...?appid=wxe12eca6f457eafe1&amp;scope=snsapi_base</code>
+                官网二维码解码后实为：<code>https://gzh.zgyyxykj.com/wx_qrcode/?time=1gqTe0&amp;token=w0EQTWW-Ro&amp;sign=...</code> → <code>302</code> 跳转至 <code>open.weixin.qq.com/...?appid=wx_official_kjzx_appid&amp;scope=snsapi_base</code>
               </p>
             </div>
             <div style="display:flex;gap:8px;align-items:center">
@@ -1474,7 +1474,7 @@ photos/440101201603159876_陈小乐.jpg</pre>
       modal.style.display = 'none';
       badge.className = 'badge-done';
       badge.textContent = '🟢 PHPSESSID 已授权保活 (下次免确认)';
-      log.innerHTML = `<span style="color:#4ade80;font-weight:700">✅ [微信 snsapi_base 身份确认成功 + 全量同步完成]</span> 微信客户端已向考级办公众号 (<code>wxe12eca6f457eafe1</code>) 完成 <code>snsapi_base</code> 核验 → <code>ubtxiaomi</code> 捕获 <code>scan_status === 4</code> 并执行 <code>wxauth_confirm</code> → 已缓存 <code>PHPSESSID=sess_kjzx_89a1</code> 并拉取合并全部考生数据！<strong>现在再次点击「🔄 Sync」将直接免确认秒级同步！</strong>`;
+      log.innerHTML = `<span style="color:#4ade80;font-weight:700">✅ [微信 snsapi_base 身份确认成功 + 全量同步完成]</span> 微信客户端已向考级办公众号 (<code>wx_official_kjzx_appid</code>) 完成 <code>snsapi_base</code> 核验 → <code>ubtxiaomi</code> 捕获 <code>scan_status === 4</code> 并执行 <code>wxauth_confirm</code> → 已缓存 <code>PHPSESSID=sess_kjzx_89a1</code> 并拉取合并全部考生数据！<strong>现在再次点击「🔄 Sync」将直接免确认秒级同步！</strong>`;
     }
 
     function resetWeChatSyncSession() {

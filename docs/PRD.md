@@ -9,7 +9,7 @@ Provide a low-friction workflow across **WeChat Service Account (微信服务号
    - Push **Template Messages (模板消息)** to parents whenever a registration needs changes (`needs_change`), is confirmed (`confirmed`), or is locked (`locked`).
 2. **WeCom (`https://wecom.xgar.com.cn/send/<token>`)**:
    - Real-time markdown push notifications to teachers, institution admins, and super operators when registrations are submitted or export bundles are generated.
-3. **WeChat Mini Program (`apps/wechat-mini`, `wxaf3466a310a8bd07`)**:
+3. **WeChat Mini Program (`apps/wechat-mini`, `wx_mini_program_appid`)**:
    - Connected to `https://mea.xgar.com.cn/rpc/:action` via zero-rewrite RPC bridge; also serves student practice workflows (`音乐基础知识`, `乐器陪练`, `水平评估`).
 
 ## Primary users

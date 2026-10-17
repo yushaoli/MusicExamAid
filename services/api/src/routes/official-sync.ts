@@ -45,7 +45,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         qr_payload_pattern:
           'https://gzh.zgyyxykj.com/wx_qrcode/?time=<time>&token=<wxauth_token>&sign=<md5>',
         wechat_redirect:
-          'https://open.weixin.qq.com/connect/oauth2/authorize?appid=wxe12eca6f457eafe1&redirect_uri=https://gzh.zgyyxykj.com/wx_qrcode/login&response_type=code&scope=snsapi_base#wechat_redirect',
+          `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${process.env.KJZX_OFFICIAL_WX_APPID || '<official_wx_appid>'}&redirect_uri=https://gzh.zgyyxykj.com/wx_qrcode/login&response_type=code&scope=snsapi_base#wechat_redirect`,
       },
     });
   });

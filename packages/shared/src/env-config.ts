@@ -40,7 +40,7 @@ const ConfigSchema = z.object({
     .default('https://mea.xgar.com.cn'),
 
   // WeChat Mini Program
-  WECHAT_MINI_APPID: z.string().optional().default('wxaf3466a310a8bd07'),
+  WECHAT_MINI_APPID: z.string().optional().default(''),
   WECHAT_MINI_SECRET: z.string().optional().default(''),
 
   // WeChat Service Account (服务号 / 公众号)
@@ -51,7 +51,7 @@ const ConfigSchema = z.object({
   WECHAT_MP_REVIEW_TEMPLATE_ID: z.string().optional().default(''),
 
   // WeCom (企业微信)
-  WECOM_CORPID: z.string().optional().default('wwdf0a37a3059d0f1c'),
+  WECOM_CORPID: z.string().optional().default(''),
   WECOM_AGENTID: z.string().optional().default('1000004'),
   WECOM_SECRET: z.string().optional().default(''),
   WECOM_RELAY_URL: z

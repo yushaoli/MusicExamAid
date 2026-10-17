@@ -36,7 +36,7 @@
     "swc": false,
     "disableSWC": true
   },
-  "appid": "wxaf3466a310a8bd07",
+  "appid": "wx_mini_program_appid",
   "projectname": "MusicExamAid",
   "compileType": "miniprogram",
   "condition": {},
