@@ -7,6 +7,7 @@
  * - POST /official-sync/consolidate   (Merge & deduplicate Official Website + Helper registrations & accrue teacher concessions)
  */
 
+import * as crypto from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   OFFICIAL_PORTAL_BASE_URL,
@@ -17,6 +18,7 @@ import {
   type ChannelRegistrationInput,
 } from '@musicexamaid/shared';
 import { getPostgresPool } from '../store/postgres';
+import { minioClient } from '../store/minio';
 
 // Server-side cached official portal session (`PHPSESSID`) so subsequent "Sync" clicks
 // reuse the authenticated session without re-prompting WeChat confirmation until expiry.
@@ -841,6 +843,310 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(200).send({
         bound: true,
         agent: rows[0],
+      });
+    },
+  );
+
+  // Helper: Read-through buffer from Aliyun OSS / zgyyxykj to local MinIO S3 (`100.64.0.4:9010`)
+  const ALLOWED_MEDIA_HOSTS = new Set([
+    'tlskkj.oss-cn-hangzhou.aliyuncs.com',
+    'v.zgyyxykj.com',
+  ]);
+
+  async function bufferRemoteMediaToMinio(
+    sourceUrl: string,
+    meta?: { student_id?: number | null; exam_id?: number | null; media_type?: string },
+  ): Promise<{
+    buf: Buffer;
+    contentType: string;
+    s3Key: string;
+    cacheStatus: 'HIT' | 'MISS-BUFFERED';
+  }> {
+    const parsedUrl = new URL(sourceUrl);
+    if (!ALLOWED_MEDIA_HOSTS.has(parsedUrl.hostname)) {
+      throw new Error(`Disallowed media host: ${parsedUrl.hostname}`);
+    }
+
+    const pool = getPostgresPool();
+    const existing = await pool.query(
+      `SELECT s3_key, content_type FROM kjzx_media_cache WHERE source_url = $1`,
+      [sourceUrl],
+    );
+
+    if (existing.rows[0]) {
+      const s3Key = String(existing.rows[0].s3_key);
+      const cachedBuf = await minioClient.getObject(s3Key);
+      if (cachedBuf) {
+        await pool.query(
+          `UPDATE kjzx_media_cache SET hit_count = hit_count + 1, last_hit_at = NOW() WHERE source_url = $1`,
+          [sourceUrl],
+        );
+        return {
+          buf: cachedBuf,
+          contentType: String(existing.rows[0].content_type || 'video/mp4'),
+          s3Key,
+          cacheStatus: 'HIT',
+        };
+      }
+    }
+
+    // Cache Miss: Fetch from remote OSS and store in local MinIO S3 on ubtxiaomi
+    const upstreamRes = await fetch(sourceUrl);
+    if (!upstreamRes.ok) {
+      throw new Error(`Upstream fetch failed: HTTP ${upstreamRes.status}`);
+    }
+    const arrayBuf = await upstreamRes.arrayBuffer();
+    const buf = Buffer.from(arrayBuf);
+    const ext = parsedUrl.pathname.endsWith('.mp4')
+      ? 'mp4'
+      : parsedUrl.pathname.endsWith('.png')
+        ? 'png'
+        : 'jpg';
+    const contentType =
+      upstreamRes.headers.get('content-type') ||
+      (ext === 'mp4' ? 'video/mp4' : 'image/jpeg');
+    const mediaType =
+      meta?.media_type || (ext === 'mp4' ? 'video' : 'photo');
+    const urlHash = crypto.createHash('sha256').update(sourceUrl).digest('hex').slice(0, 20);
+    const baseName = parsedUrl.pathname.split('/').pop() || `asset.${ext}`;
+    const s3Key = `kjzx_cache/${mediaType}/${urlHash}_${baseName}`;
+
+    await minioClient.putObject(s3Key, buf, contentType);
+    await pool.query(
+      `
+      INSERT INTO kjzx_media_cache (source_url, s3_key, media_type, content_type, size_bytes, student_id, exam_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (source_url) DO UPDATE
+      SET s3_key       = EXCLUDED.s3_key,
+          size_bytes   = EXCLUDED.size_bytes,
+          last_hit_at  = NOW(),
+          hit_count    = kjzx_media_cache.hit_count + 1
+      `,
+      [
+        sourceUrl,
+        s3Key,
+        mediaType,
+        contentType,
+        buf.length,
+        meta?.student_id ?? null,
+        meta?.exam_id ?? null,
+      ],
+    );
+
+    return {
+      buf,
+      contentType,
+      s3Key,
+      cacheStatus: 'MISS-BUFFERED',
+    };
+  }
+
+  // 11. Read-Through Video & Photo Proxy with HTTP Range Support (`GET /official-sync/media-proxy`)
+  app.get(
+    '/official-sync/media-proxy',
+    async (
+      req: FastifyRequest<{
+        Querystring: {
+          url?: string;
+          student_id?: string;
+          exam_id?: string;
+          type?: string;
+        };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const sourceUrl = (req.query?.url || '').trim();
+      if (!sourceUrl) {
+        return reply.code(400).send({
+          error: 'VALIDATION_ERROR',
+          message: 'Query parameter url is required',
+        });
+      }
+
+      try {
+        const { buf, contentType, s3Key, cacheStatus } = await bufferRemoteMediaToMinio(
+          sourceUrl,
+          {
+            student_id: req.query?.student_id ? Number(req.query.student_id) : null,
+            exam_id: req.query?.exam_id ? Number(req.query.exam_id) : null,
+            media_type: req.query?.type,
+          },
+        );
+
+        reply.header('X-Media-Cache', cacheStatus);
+        reply.header('X-Minio-S3-Key', s3Key);
+        reply.header('Accept-Ranges', 'bytes');
+        reply.header('Content-Type', contentType);
+
+        const rangeHeader = req.headers.range;
+        if (rangeHeader && rangeHeader.startsWith('bytes=')) {
+          const [startStr, endStr] = rangeHeader.replace('bytes=', '').split('-');
+          const start = Math.max(0, parseInt(startStr, 10) || 0);
+          const end = endStr
+            ? Math.min(buf.length - 1, parseInt(endStr, 10))
+            : buf.length - 1;
+          const chunk = buf.subarray(start, end + 1);
+          reply.header('Content-Range', `bytes ${start}-${end}/${buf.length}`);
+          reply.header('Content-Length', String(chunk.length));
+          return reply.code(206).send(chunk);
+        }
+
+        reply.header('Content-Length', String(buf.length));
+        return reply.code(200).send(buf);
+      } catch (err) {
+        return reply.code(502).send({
+          error: 'MEDIA_PROXY_ERROR',
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+  );
+
+  // 12. Query Local MinIO S3 Media Cache Statistics (`GET /official-sync/media-cache-stats`)
+  app.get('/official-sync/media-cache-stats', async (_req, reply) => {
+    const pool = getPostgresPool();
+    const [summaryRes, recentRes] = await Promise.all([
+      pool.query(`
+        SELECT
+          COUNT(*)::int AS total_cached_files,
+          COUNT(*) FILTER (WHERE media_type = 'video')::int AS cached_videos,
+          COUNT(*) FILTER (WHERE media_type != 'video')::int AS cached_photos,
+          COALESCE(SUM(size_bytes), 0)::bigint AS total_size_bytes,
+          COALESCE(SUM(hit_count), 0)::int AS total_hits
+        FROM kjzx_media_cache
+      `),
+      pool.query(`
+        SELECT source_url, s3_key, media_type, content_type, size_bytes, student_id, exam_id, hit_count, cached_at
+        FROM kjzx_media_cache
+        ORDER BY last_hit_at DESC
+        LIMIT 15
+      `),
+    ]);
+
+    const summary = summaryRes.rows[0] || {};
+    const totalBytes = Number(summary.total_size_bytes || 0);
+    return reply.code(200).send({
+      total_cached_files: Number(summary.total_cached_files || 0),
+      cached_videos: Number(summary.cached_videos || 0),
+      cached_photos: Number(summary.cached_photos || 0),
+      total_size_bytes: totalBytes,
+      total_size_mb: Number((totalBytes / (1024 * 1024)).toFixed(2)),
+      total_hits: Number(summary.total_hits || 0),
+      recent_items: recentRes.rows,
+    });
+  });
+
+  // 13. Batch Pre-Buffer Student Videos & Photos into Local MinIO S3 (`POST /official-sync/media-prebuffer`)
+  app.post(
+    '/official-sync/media-prebuffer',
+    async (
+      req: FastifyRequest<{
+        Body?: {
+          student_id?: number;
+          exam_id?: number;
+          agent_id?: number;
+          season_code?: number;
+          include_videos?: boolean;
+          limit?: number;
+        };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const pool = getPostgresPool();
+      const body = req.body ?? {};
+      const includeVideos = body.include_videos ?? true;
+      const limit = Math.min(Math.max(Number(body.limit || 6), 1), 30);
+
+      const { rows } = await pool.query(
+        `
+        SELECT e.exam_id, e.student_id, e.student_name, e.major_name, e.level, e.season_label,
+               e.videos_json, s.picture_url
+        FROM kjzx_historical_exams e
+        LEFT JOIN kjzx_historical_students s ON s.student_id = e.student_id
+        WHERE ($1::int IS NULL OR e.student_id = $1::int)
+          AND ($2::int IS NULL OR e.exam_id = $2::int)
+          AND ($3::int IS NULL OR e.agent_id = $3::int)
+          AND ($4::int IS NULL OR e.season_code = $4::int)
+          AND (e.videos_json != '{}'::jsonb OR s.picture_url IS NOT NULL)
+        ORDER BY e.season_code DESC, e.exam_id DESC
+        LIMIT $5::int
+        `,
+        [
+          body.student_id ?? null,
+          body.exam_id ?? null,
+          body.agent_id ?? null,
+          body.season_code ?? null,
+          limit,
+        ],
+      );
+
+      const results: Array<{
+        student_name: string;
+        media_type: string;
+        title: string;
+        s3_key: string;
+        size_mb: number;
+        cache_status: string;
+        proxy_url: string;
+      }> = [];
+
+      for (const row of rows) {
+        if (row.picture_url && String(row.picture_url).startsWith('http')) {
+          try {
+            const r = await bufferRemoteMediaToMinio(String(row.picture_url), {
+              student_id: Number(row.student_id),
+              exam_id: Number(row.exam_id),
+              media_type: 'photo',
+            });
+            results.push({
+              student_name: row.student_name,
+              media_type: 'photo',
+              title: `${row.student_name}-二寸照`,
+              s3_key: r.s3Key,
+              size_mb: Number((r.buf.length / (1024 * 1024)).toFixed(2)),
+              cache_status: r.cacheStatus,
+              proxy_url: `/official-sync/media-proxy?url=${encodeURIComponent(String(row.picture_url))}&student_id=${row.student_id}&type=photo`,
+            });
+          } catch {
+            // ignore broken upstream image
+          }
+        }
+
+        if (includeVideos && row.videos_json && typeof row.videos_json === 'object') {
+          const vObj = row.videos_json as Record<string, { url?: string; title?: string }>;
+          for (const clip of Object.values(vObj).slice(0, 2)) {
+            if (clip?.url && String(clip.url).startsWith('http')) {
+              try {
+                const r = await bufferRemoteMediaToMinio(String(clip.url), {
+                  student_id: Number(row.student_id),
+                  exam_id: Number(row.exam_id),
+                  media_type: 'video',
+                });
+                results.push({
+                  student_name: row.student_name,
+                  media_type: 'video',
+                  title: `${row.student_name}-${row.major_name}${row.level}级-${clip.title || '演奏视频'}`,
+                  s3_key: r.s3Key,
+                  size_mb: Number((r.buf.length / (1024 * 1024)).toFixed(2)),
+                  cache_status: r.cacheStatus,
+                  proxy_url: `/official-sync/media-proxy?url=${encodeURIComponent(String(clip.url))}&student_id=${row.student_id}&exam_id=${row.exam_id}&type=video`,
+                });
+              } catch {
+                // ignore broken upstream video
+              }
+            }
+          }
+        }
+      }
+
+      const totalBufferedMb = Number(
+        results.reduce((acc, x) => acc + x.size_mb, 0).toFixed(2),
+      );
+
+      return reply.code(200).send({
+        buffered_count: results.length,
+        total_buffered_mb: totalBufferedMb,
+        items: results,
       });
     },
   );

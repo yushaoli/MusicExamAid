@@ -387,12 +387,28 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       <div class="card">
         <h2>
           <span>🏅 2020–2026 历年考级星光档案库</span>
-          <span class="badge badge-confirmed">支持证书编号、曲目与考级视频回放</span>
+          <span class="badge badge-confirmed">支持本地 MinIO 视频加速回放与一键预缓存</span>
         </h2>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
           <input id="archive-search-input" style="flex:1;min-width:220px" placeholder="输入考生姓名 / 拼音 / 手机号查询历年全部考级记录" value="樊澍雨" onkeydown="if(event.key==='Enter')searchHistoricalStudent('archive')" />
           <button class="btn-wecom" onclick="searchHistoricalStudent('archive')">🔍 查询历年考级档案</button>
         </div>
+
+        <!-- In-Page Local MinIO Video Player Drawer -->
+        <div id="local-video-drawer" class="hidden" style="margin-bottom:14px;padding:14px;background:#0f172a;color:#fff;border-radius:12px;border:1px solid #334155">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+            <div>
+              <span class="badge badge-confirmed" id="local-video-cache-badge">🚀 本地 MinIO 穿透加速 (首次播放自动落盘上海服务器)</span>
+              <strong id="local-video-title" style="margin-left:8px;font-size:14px">考级演奏视频回放</strong>
+            </div>
+            <div style="display:flex;gap:6px">
+              <a id="local-video-raw-link" href="#" target="_blank" style="text-decoration:none"><button class="btn-outline btn-sm" style="background:#1e293b;color:#e2e8f0;border-color:#475569">🔗 原画直链</button></a>
+              <button class="btn-outline btn-sm" style="background:#1e293b;color:#e2e8f0;border-color:#475569" onclick="closeLocalVideoPlayer()">✖ 关闭播放器</button>
+            </div>
+          </div>
+          <video id="local-video-player" controls playsinline style="width:100%;max-height:420px;border-radius:8px;background:#000"></video>
+        </div>
+
         <div id="archive-lookup-results">正在加载历年考级档案...</div>
       </div>
 
@@ -580,6 +596,38 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         <div id="console-reg-list">加载中...</div>
       </div>
 
+      <!-- Local MinIO Media Cache Center -->
+      <div class="card" style="border:2px solid #16a34a">
+        <h2>
+          <span>🗄️ 上海服务器 (<code>ubtxiaomi MinIO S3</code>) 考级视频与证件照本地镜像中心</span>
+          <span style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn-primary btn-sm" onclick="prebufferBatchMedia('20264', 6)">📥 批量预缓存 2026春季 考级视频 (6条)</button>
+            <button class="btn-outline btn-sm" onclick="loadMediaCacheStats()">🔄 刷新缓存统计</button>
+          </span>
+        </h2>
+        <p class="sub">
+          采用「<strong>穿透缓存 (Read-Through Proxy) + 按需批量预热 (Pre-Buffer)</strong>」双引擎：任何老师或家长在 H5 点击播放考级视频或查看二寸证件照时，上海服务器会自动从官网阿里云 OSS 拉取并永久存入本地 <code>MinIO (100.64.0.4:9010/musicexamaid-dev/kjzx_cache/)</code>，支持 HTTP Range <code>206 Partial Content</code> 拖动进度条秒开，且不会瞬间撑爆 316GB 磁盘空间。
+        </p>
+        <div class="grid-4" id="adm-media-cache-stats">
+          <div class="stat-box">
+            <div class="stat-label">🎬 历史视频库总量</div>
+            <div class="stat-val" id="mc-total-videos">66,214 条</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">⚡ 已缓存在本地 MinIO 视频</div>
+            <div class="stat-val" style="color:var(--primary-dark)" id="mc-cached-videos">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">🖼️ 已缓存在本地二寸证件照</div>
+            <div class="stat-val" style="color:var(--wecom)" id="mc-cached-photos">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">💾 本地 MinIO 已占用空间</div>
+            <div class="stat-val" style="color:var(--purple)" id="mc-cached-mb">— MB</div>
+          </div>
+        </div>
+      </div>
+
       <div class="card">
         <h2>📊 2020–2026 历年 13 个考期人数分布与 Top 10 合作老师（实盘 PostgreSQL）</h2>
         <div class="grid" id="adm-archive-breakdown">正在加载实盘统计...</div>
@@ -620,6 +668,75 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       locked_agent: null
     };
 
+    function mediaProxyUrl(rawUrl, type, studentId, examId) {
+      if (!rawUrl) return '';
+      const p = new URLSearchParams();
+      p.set('url', rawUrl);
+      if (type) p.set('type', type);
+      if (studentId) p.set('student_id', String(studentId));
+      if (examId) p.set('exam_id', String(examId));
+      return '/official-sync/media-proxy?' + p.toString();
+    }
+
+    function playVideoLocally(encodedUrl, encodedTitle, studentId, examId) {
+      const rawUrl = decodeURIComponent(encodedUrl);
+      const title = decodeURIComponent(encodedTitle);
+      const proxyUrl = mediaProxyUrl(rawUrl, 'video', studentId, examId);
+      const drawer = document.getElementById('local-video-drawer');
+      const player = document.getElementById('local-video-player');
+      document.getElementById('local-video-title').textContent = title;
+      document.getElementById('local-video-raw-link').href = rawUrl;
+      drawer.classList.remove('hidden');
+      player.src = proxyUrl;
+      player.play().catch(() => {});
+      drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      showToast('🎬 正在通过上海本地 MinIO 缓存通道播放：' + title);
+    }
+
+    function closeLocalVideoPlayer() {
+      const player = document.getElementById('local-video-player');
+      player.pause();
+      player.removeAttribute('src');
+      document.getElementById('local-video-drawer').classList.add('hidden');
+    }
+
+    async function prebufferStudentVideos(studentId, studentName) {
+      showToast(\`⏳ 正在将「\${studentName}」历年全部考级视频与证件照下载缓存至上海本地 MinIO...\`);
+      try {
+        const res = await fetch('/official-sync/media-prebuffer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ student_id: Number(studentId), limit: 15 })
+        }).then(r => r.json());
+        showToast(\`✅ 「\${studentName}」本地缓存完成：共 \${res.buffered_count || 0} 个视频/照片 (\${res.total_buffered_mb || 0} MB) 已落盘上海 MinIO！\`);
+      } catch (e) {
+        showToast('缓存请求异常: ' + e.message);
+      }
+    }
+
+    async function prebufferBatchMedia(seasonCode, limit) {
+      showToast(\`⏳ 正在后台批量拉取 \${seasonCode} 考季前 \${limit} 条视频至本地 MinIO...\`);
+      const res = await fetch('/official-sync/media-prebuffer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ season_code: seasonCode, limit: Number(limit || 6) })
+      }).then(r => r.json());
+      showToast(\`✅ 批量预缓存完成：共缓存 \${res.buffered_count || 0} 个媒体文件 (\${res.total_buffered_mb || 0} MB)！\`);
+      loadMediaCacheStats();
+    }
+
+    async function loadMediaCacheStats() {
+      try {
+        const st = await fetch('/official-sync/media-cache-stats').then(r => r.json());
+        if (document.getElementById('mc-total-videos')) {
+          document.getElementById('mc-total-videos').textContent = '66,214 条';
+          document.getElementById('mc-cached-videos').textContent = (st.cached_videos || 0) + ' 条';
+          document.getElementById('mc-cached-photos').textContent = (st.cached_photos || 0) + ' 张';
+          document.getElementById('mc-cached-mb').textContent = (st.total_size_mb || 0) + ' MB';
+        }
+      } catch {}
+    }
+
     function showToast(msg) {
       const el = document.getElementById('toast');
       el.textContent = msg;
@@ -641,7 +758,10 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       refreshData();
       if (tab === 'archive') searchHistoricalStudent('archive');
       if (tab === 'teacher') initTeacherTab();
-      if (tab === 'console') loadAdminArchiveStats();
+      if (tab === 'console') {
+        loadAdminArchiveStats();
+        loadMediaCacheStats();
+      }
     }
 
     function recalcParentCheckout() {
@@ -684,10 +804,11 @@ const WEB_APP_HTML = `<!DOCTYPE html>
               ? \`上次考过：<strong>\${up.last_season} · \${up.major_name} \${up.last_level}级</strong> → 本季推荐直升 <span class="badge badge-upgrade">🎯 \${up.major_name} \${up.recommended_level}级 (¥\${up.official_fee_yuan})</span>\`
               : '暂无往期记录';
             const payloadStr = encodeURIComponent(JSON.stringify(s));
+            const picSrc = s.picture_url ? mediaProxyUrl(s.picture_url, 'photo', s.student_id, '') : '';
             return \`
               <div class="item-row" style="background:#fff;padding:10px 12px;border-radius:10px;border:1px solid #bbf7d0;margin-bottom:8px">
                 <div style="display:flex;gap:12px;align-items:center">
-                  \${s.picture_url ? \`<img src="\${s.picture_url}" style="width:46px;height:60px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" />\` : ''}
+                  \${picSrc ? \`<img src="\${picSrc}" style="width:46px;height:60px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" />\` : ''}
                   <div>
                     <div style="font-size:14.5px"><strong>\${s.name_cn}</strong> <small style="color:var(--muted)">(\${s.sex || '女'} · 生日 \${s.birthday || '—'} · 手机 \${s.parent_phone_masked || '—'})</small></div>
                     <div style="font-size:12.5px;margin-top:3px">\${upBadge}</div>
@@ -701,13 +822,22 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         } else {
           box.innerHTML = data.items.map(s => {
             const examsHtml = (s.exams || []).map(e => {
+              let titlesArr = [];
               let titles = '';
               try {
                 const parsed = JSON.parse(e.exam_titles || '[]');
-                titles = Array.isArray(parsed) ? parsed.filter(Boolean).join(' / ') : e.exam_titles;
+                titlesArr = Array.isArray(parsed) ? parsed.filter(Boolean) : [e.exam_titles];
+                titles = titlesArr.join(' / ');
               } catch { titles = e.exam_titles || ''; }
               const videoKeys = e.videos_json ? Object.keys(e.videos_json) : [];
-              const firstVideoUrl = videoKeys.length > 0 && e.videos_json[videoKeys[0]] ? e.videos_json[videoKeys[0]].url : null;
+              const videoButtonsHtml = videoKeys.map((k, idx) => {
+                const vObj = e.videos_json[k];
+                if (!vObj || !vObj.url) return '';
+                const pieceName = titlesArr[idx] || \`曲目\${idx + 1}\`;
+                const encUrl = encodeURIComponent(vObj.url);
+                const encTitle = encodeURIComponent(\`\${s.name_cn} · \${e.season_label} \${e.major_name}\${e.level}级 · 《\${pieceName}》\`);
+                return \`<button class="btn-wecom btn-sm" onclick="playVideoLocally('\${encUrl}', '\${encTitle}', \${s.student_id}, \${e.exam_id})">🎬 本地播放曲目\${idx + 1}</button>\`;
+              }).join('');
               return \`
                 <div style="padding:8px 10px;background:#f8fafc;border-radius:8px;border:1px solid var(--border);margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
                   <div>
@@ -716,21 +846,25 @@ const WEB_APP_HTML = `<!DOCTYPE html>
                     <span style="font-size:12px;color:var(--muted);margin-left:8px">准考证号: \${e.exam_no || '—'} | 备案批次: \${e.filing_code || '—'}</span>
                     \${titles ? \`<div style="font-size:12px;color:#475569;margin-top:3px">🎵 考试曲目：\${titles}</div>\` : ''}
                   </div>
-                  <div style="display:flex;gap:6px">
-                    \${firstVideoUrl ? \`<a href="\${firstVideoUrl}" target="_blank" style="text-decoration:none"><button class="btn-wecom btn-sm">🎬 播放考级视频 (\${videoKeys.length}首)</button></a>\` : ''}
+                  <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    \${videoButtonsHtml}
                   </div>
                 </div>
               \`;
             }).join('');
 
+            const picSrc = s.picture_url ? mediaProxyUrl(s.picture_url, 'photo', s.student_id, '') : '';
             return \`
               <div style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;background:#fff">
-                <div style="display:flex;gap:14px;align-items:center">
-                  \${s.picture_url ? \`<img src="\${s.picture_url}" style="width:52px;height:68px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" />\` : ''}
-                  <div>
-                    <div style="font-size:16px;font-weight:700">\${s.name_cn} <span style="font-size:12px;font-weight:400;color:var(--muted)">(\${s.pinyin || ''} · 证件号 \${s.id_card_masked || ''})</span></div>
-                    <div style="font-size:12.5px;color:var(--muted);margin-top:4px">所属机构/指导老师：<strong>\${s.agent_name || '—'}</strong> | 历史共参加国音考级 <strong>\${(s.exams || []).length}</strong> 次</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+                  <div style="display:flex;gap:14px;align-items:center">
+                    \${picSrc ? \`<img src="\${picSrc}" style="width:52px;height:68px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" />\` : ''}
+                    <div>
+                      <div style="font-size:16px;font-weight:700">\${s.name_cn} <span style="font-size:12px;font-weight:400;color:var(--muted)">(\${s.pinyin || ''} · 证件号 \${s.id_card_masked || ''})</span></div>
+                      <div style="font-size:12.5px;color:var(--muted);margin-top:4px">所属机构/指导老师：<strong>\${s.agent_name || '—'}</strong> | 历史共参加国音考级 <strong>\${(s.exams || []).length}</strong> 次</div>
+                    </div>
                   </div>
+                  <button class="btn-primary btn-sm" onclick="prebufferStudentVideos(\${s.student_id}, '\${s.name_cn}')">📥 一键缓存该生全部视频到本地 MinIO</button>
                 </div>
                 <div style="margin-top:10px">\${examsHtml || '<div style="font-size:12px;color:var(--muted)">暂无关联考次</div>'}</div>
               </div>
