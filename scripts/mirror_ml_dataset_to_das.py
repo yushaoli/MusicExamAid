@@ -4,19 +4,21 @@ MusicExamAid — Polite, Rate-Limited ML Video Dataset Mirror Worker
 ==================================================================
 Safely mirrors the 25,301 live China Conservatory exam videos (seasons 20235..20265)
 from `tlskkj.oss-cn-hangzhou.aliyuncs.com` to `/mnt/DAS1T/musicexamaid_ml_dataset`
-without risking account or IP bans:
+with full 5-Dimensional Adjudicator Scores (`score_yinzhun`, `score_jiezou`,
+`score_yinse`, `score_biaoxianli`, `score_wanzhengxing`), `score_total` (0..50),
+structured rubric tags (`review_text`), and narrative critiques (`self_review_text`).
 
 Anti-Ban & Bandwidth Safety Controls:
 1. Zero Portal Auth Touch: Downloads directly from static OSS URLs; never touches
    `kjzx002120` login/session endpoints.
 2. Zero 404 Log Noise: Filters strictly to live seasons (`season_code >= 20235`),
    never probing expired 2020-2023summer objects.
-3. Rescue Order (`oldest-live-first`): Mirrors `20235` (2023寒假) -> `20244` (2024暑假)
-   -> `20245` -> `20254` -> `20255` -> `20264` -> `20265` before upstream OSS lifecycle
-   rules expire older seasons.
-4. Single-Stream Bandwidth Throttling (`--workers 1 --max-kbps 1500`):
+3. Scored-First + Rescue Order (`oldest-live-first`): Within each live season
+   (`20235` -> `20244` -> ... -> `20265`), prioritizes clips that have official 5-D
+   adjudicator scores & rubric critiques first!
+4. Single-Stream Bandwidth Throttling (`--max-kbps 1500`):
    Streams in 64 KB chunks capped at ~1.5 MB/s (matching normal HTML5 <video>
-   playback), with 3.5s-8.5s random human jitter between clips and a 45s pause
+   playback), with 4.0s-9.0s random human jitter between clips and a 45s pause
    every 40 clips.
 5. Circuit Breaker on 403/429/5xx: Exponential backoff (5m -> 15m -> 60m) and
    automatic halt if upstream ever signals rate limiting.
@@ -35,6 +37,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 DATASET_ROOT_DEFAULT = "/mnt/DAS1T/musicexamaid_ml_dataset"
+ARCHIVE_EXAMS_JSON = "/opt/stacks/musicexamaid/data/kjzx002120_archive/exams_all.json"
 LIVE_SEASONS_ASC = ["20235", "20244", "20245", "20254", "20255", "20264", "20265"]
 
 BROWSER_USER_AGENTS = [
@@ -53,6 +56,98 @@ def classify_clip_category(title: str, clip_idx: int) -> str:
     return "repertoire"
 
 
+def backfill_scores_into_postgres(exams_json_path: str = ARCHIVE_EXAMS_JSON) -> int:
+    p = Path(exams_json_path)
+    if not p.exists():
+        print(f"Archive JSON not found at {exams_json_path}, skipping backfill.")
+        return 0
+
+    with open(p, "r", encoding="utf-8") as f:
+        d = json.load(f)
+    rows = d["rows"] if isinstance(d, dict) and "rows" in d else d
+
+    sql_lines = [
+        "BEGIN;",
+        "ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS score_json JSONB DEFAULT '{}'::jsonb;",
+        "ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS score_total INTEGER;",
+        "ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS score_yinzhun INTEGER;",
+        "ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS score_jiezou INTEGER;",
+        "ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS score_yinse INTEGER;",
+        "ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS score_biaoxianli INTEGER;",
+        "ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS score_wanzhengxing INTEGER;",
+        "ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS review_text TEXT;",
+        "ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS self_review_text TEXT;",
+        "ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS review_teacher_name VARCHAR(64);",
+        "ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS is_excellent INTEGER DEFAULT 0;",
+        "ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS is_reject INTEGER DEFAULT 0;",
+        "ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS reject_reason TEXT;",
+    ]
+
+    def q(val: object) -> str:
+        if val is None or val == "":
+            return "NULL"
+        s = str(val).replace("'", "''")
+        return f"'{s}'"
+
+    def qi(val: object) -> str:
+        if val is None:
+            return "NULL"
+        s = str(val).strip()
+        if not s or not s.lstrip("-").isdigit():
+            return "NULL"
+        return str(int(s))
+
+    updated = 0
+    for r in rows:
+        eid = int(r["id"])
+        sc_raw = str(r.get("score") or "").strip()
+        sobj = {}
+        if sc_raw.startswith("{"):
+            try:
+                sobj = json.loads(sc_raw)
+            except Exception:
+                sobj = {}
+        yz = qi(sobj.get("score_yinzhun"))
+        jz = qi(sobj.get("score_jiezou"))
+        ys = qi(sobj.get("score_yinse"))
+        bxl = qi(sobj.get("score_biaoxianli"))
+        wzx = qi(sobj.get("score_wanzhengxing"))
+        nums = [int(x) for x in (yz, jz, ys, bxl, wzx) if x != "NULL"]
+        tot = str(sum(nums)) if nums else "NULL"
+        rt = str(r.get("review_text") or "").strip()
+        srt = str(r.get("self_review_text") or "").strip()
+        rtn = str(r.get("review_teacher_name") or "").strip()
+        exc = int(r.get("is_excellent") or 0)
+        rej = int(r.get("is_reject") or 0)
+        rejr = str(r.get("reject_reson") or "").strip()
+
+        if nums or rt or srt or rtn or exc or rej or rejr:
+            sql_lines.append(
+                f"UPDATE kjzx_historical_exams SET "
+                f"score_json={q(json.dumps(sobj, ensure_ascii=False))}::jsonb, "
+                f"score_total={tot}, score_yinzhun={yz}, score_jiezou={jz}, score_yinse={ys}, "
+                f"score_biaoxianli={bxl}, score_wanzhengxing={wzx}, review_text={q(rt)}, "
+                f"self_review_text={q(srt)}, review_teacher_name={q(rtn)}, "
+                f"is_excellent={exc}, is_reject={rej}, reject_reason={q(rejr)} "
+                f"WHERE exam_id={eid};"
+            )
+            updated += 1
+
+    sql_lines.append("COMMIT;")
+    cmd = [
+        "docker",
+        "exec",
+        "-i",
+        "devhub-postgres",
+        "sh",
+        "-c",
+        'psql -U "$POSTGRES_USER" -d musicexamaid_dev -q',
+    ]
+    subprocess.run(cmd, input="\n".join(sql_lines), text=True, capture_output=True, check=True)
+    print(f"Backfilled {updated} exam rows with 5-D sub-scores & adjudicator reviews into PostgreSQL.")
+    return updated
+
+
 def export_manifest_from_postgres(dataset_root: Path) -> Path:
     dataset_root.mkdir(parents=True, exist_ok=True)
     manifest_path = dataset_root / "manifest_all_clips.jsonl"
@@ -66,8 +161,20 @@ def export_manifest_from_postgres(dataset_root: Path) -> Path:
       'season_label', e.season_label,
       'major_name', e.major_name,
       'level', e.level,
+      'pass_level', e.pass_level,
       'exam_titles', e.exam_titles,
       'videos_json', e.videos_json,
+      'score_total', e.score_total,
+      'score_yinzhun', e.score_yinzhun,
+      'score_jiezou', e.score_jiezou,
+      'score_yinse', e.score_yinse,
+      'score_biaoxianli', e.score_biaoxianli,
+      'score_wanzhengxing', e.score_wanzhengxing,
+      'review_text', e.review_text,
+      'self_review_text', e.self_review_text,
+      'review_teacher_name', e.review_teacher_name,
+      'is_excellent', e.is_excellent,
+      'is_reject', e.is_reject,
       'sex', s.sex,
       'birth_year', CASE WHEN length(s.birthday) >= 4 THEN substring(s.birthday from 1 for 4) ELSE NULL END
     )::text
@@ -92,6 +199,8 @@ def export_manifest_from_postgres(dataset_root: Path) -> Path:
 
     total_clips = 0
     live_clips = 0
+    live_scored_clips = 0
+    live_reviewed_clips = 0
     by_instrument: dict[str, int] = {}
     by_live_instrument: dict[str, int] = {}
     by_grade: dict[int, int] = {}
@@ -148,8 +257,22 @@ def export_manifest_from_postgres(dataset_root: Path) -> Path:
                     "clip_index": clip_idx,
                     "instrument_cn": major_name,
                     "grade_level": level,
+                    "pass_level": row.get("pass_level"),
                     "piece_title": raw_title or f"clip_{clip_idx}",
                     "clip_category": category,
+                    "score_total_50": row.get("score_total"),
+                    "score_5d": {
+                        "yinzhun_pitch": row.get("score_yinzhun"),
+                        "jiezou_rhythm": row.get("score_jiezou"),
+                        "yinse_tone": row.get("score_yinse"),
+                        "biaoxianli_expression": row.get("score_biaoxianli"),
+                        "wanzhengxing_completeness": row.get("score_wanzhengxing"),
+                    },
+                    "review_rubric_tags": row.get("review_text"),
+                    "review_narrative": row.get("self_review_text"),
+                    "adjudicator_name": row.get("review_teacher_name"),
+                    "is_excellent": row.get("is_excellent"),
+                    "is_reject": row.get("is_reject"),
                     "learner_anon_id": anon_id,
                     "learner_gender": row.get("sex"),
                     "learner_birth_year": birth_year,
@@ -166,6 +289,10 @@ def export_manifest_from_postgres(dataset_root: Path) -> Path:
                 total_clips += 1
                 if is_live_oss:
                     live_clips += 1
+                    if row.get("score_total") is not None:
+                        live_scored_clips += 1
+                    if row.get("review_text") or row.get("self_review_text"):
+                        live_reviewed_clips += 1
                     by_live_instrument[major_name] = by_live_instrument.get(major_name, 0) + 1
                 by_instrument[major_name] = by_instrument.get(major_name, 0) + 1
                 by_grade[level] = by_grade.get(level, 0) + 1
@@ -177,6 +304,8 @@ def export_manifest_from_postgres(dataset_root: Path) -> Path:
         "manifest_path": str(manifest_path),
         "total_labeled_video_clips": total_clips,
         "live_oss_video_clips_20235_20265": live_clips,
+        "live_clips_with_5d_numeric_scores": live_scored_clips,
+        "live_clips_with_adjudicator_reviews": live_reviewed_clips,
         "live_seasons_rescue_order": LIVE_SEASONS_ASC,
         "by_live_instrument": dict(sorted(by_live_instrument.items(), key=lambda kv: kv[1], reverse=True)),
         "by_instrument_all_years": dict(sorted(by_instrument.items(), key=lambda kv: kv[1], reverse=True)),
@@ -226,12 +355,13 @@ def throttled_stream_download(url: str, dest_path: Path, max_kbps: int) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Polite, Rate-Limited MusicExamAid ML Video Mirror Worker")
     parser.add_argument("--dataset-root", default=DATASET_ROOT_DEFAULT)
+    parser.add_argument("--backfill-scores", action="store_true", help="Backfill 5-D scores & adjudicator reviews from exams_all.json into Postgres")
     parser.add_argument("--export-manifest", action="store_true", help="Export full JSONL manifest from Postgres")
     parser.add_argument("--download", action="store_true", help="Run polite sequential downloader")
     parser.add_argument("--instrument", default="", help="Filter by instrument_cn (e.g. 钢琴, 古筝, 小提琴)")
     parser.add_argument("--grade", type=int, default=0, help="Filter by exact grade_level (1..11)")
     parser.add_argument("--season", default="", help="Filter by season_code prefix (default: all live seasons 20235..20265)")
-    parser.add_argument("--rescue-order", action="store_true", default=True, help="Download oldest live season (20235) first")
+    parser.add_argument("--rescue-order", action="store_true", default=True, help="Download oldest live season (20235) + scored clips first")
     parser.add_argument("--limit", type=int, default=0, help="Max NEW downloads in this run (0 = unlimited)")
     parser.add_argument("--max-kbps", type=int, default=1500, help="Per-stream bandwidth cap in KB/s (default: 1500 KB/s = 1.5 MB/s)")
     parser.add_argument("--sleep-min", type=float, default=3.5, help="Min sleep seconds between clips")
@@ -246,6 +376,9 @@ def main() -> None:
     manifest_path = dataset_root / "manifest_all_clips.jsonl"
     status_path = dataset_root / "mirror_status.json"
 
+    if args.backfill_scores:
+        backfill_scores_into_postgres()
+
     if args.export_manifest or not manifest_path.exists():
         export_manifest_from_postgres(dataset_root)
 
@@ -257,7 +390,6 @@ def main() -> None:
         for line in f:
             rec = json.loads(line)
             sc = str(rec.get("season_code") or "")
-            # Never touch expired <=20234 seasons unless explicitly forced
             if not args.season and sc not in LIVE_SEASONS_ASC:
                 continue
             if args.season and not sc.startswith(args.season):
@@ -269,9 +401,21 @@ def main() -> None:
             candidates.append(rec)
 
     if args.rescue_order:
-        # Sort by oldest live season first (20235 -> 20244 -> ... -> 20265), then exam_id ASC
+        # Sort by:
+        # 1. Oldest live season first (20235 -> 20244 -> ... -> 20265)
+        # 2. Has 5-D numeric score first (0 if scored else 1)
+        # 3. Has adjudicator review first (0 if reviewed else 1)
+        # 4. exam_id ASC, clip_index ASC
         season_rank = {s: idx for idx, s in enumerate(LIVE_SEASONS_ASC)}
-        candidates.sort(key=lambda r: (season_rank.get(str(r.get("season_code")), 99), int(r["exam_id"]), int(r["clip_index"])))
+        candidates.sort(
+            key=lambda r: (
+                season_rank.get(str(r.get("season_code")), 99),
+                0 if r.get("score_total_50") is not None else 1,
+                0 if (r.get("review_rubric_tags") or r.get("review_narrative")) else 1,
+                int(r["exam_id"]),
+                int(r["clip_index"]),
+            )
+        )
 
     downloaded = 0
     cached = 0
@@ -290,6 +434,7 @@ def main() -> None:
                 "max_kbps": args.max_kbps,
                 "jitter_sleep_sec": [args.sleep_min, args.sleep_max],
                 "coffee_break": f"{args.coffee_seconds}s every {args.coffee_every} clips",
+                "priority": "oldest_live_season_and_5D_scored_first",
             },
             "total_candidates_in_queue": len(candidates),
             "newly_downloaded": downloaded,
@@ -320,6 +465,8 @@ def main() -> None:
             "instrument_cn": rec["instrument_cn"],
             "grade_level": rec["grade_level"],
             "piece_title": rec["piece_title"],
+            "score_total_50": rec.get("score_total_50"),
+            "score_5d": rec.get("score_5d"),
         }
         write_status("downloading", clip_meta)
 
@@ -358,7 +505,6 @@ def main() -> None:
                 write_status("completed_limit_reached", clip_meta)
                 break
 
-            # Periodic coffee break every N clips
             if args.coffee_every > 0 and downloaded % args.coffee_every == 0:
                 pause_s = args.coffee_seconds + random.uniform(0, 15.0)
                 write_status("coffee_break_pause", {**clip_meta, "pause_sec": round(pause_s, 1)})
@@ -373,7 +519,6 @@ def main() -> None:
                 time.sleep(random.uniform(1.5, 3.0))
                 continue
 
-            # 403 / 429 / 5xx -> trigger circuit-breaker backoff
             consecutive_blocks += 1
             backoff_sec = min(3600, 300 * (3 ** (consecutive_blocks - 1)))
             err_msg = f"HTTP {he.code} on {rec['clip_id']} (block #{consecutive_blocks}); backing off {backoff_sec}s"

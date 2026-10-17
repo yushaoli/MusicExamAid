@@ -838,13 +838,27 @@ const WEB_APP_HTML = `<!DOCTYPE html>
                 const encTitle = encodeURIComponent(\`\${s.name_cn} · \${e.season_label} \${e.major_name}\${e.level}级 · 《\${pieceName}》\`);
                 return \`<button class="btn-wecom btn-sm" onclick="playVideoLocally('\${encUrl}', '\${encTitle}', \${s.student_id}, \${e.exam_id})">🎬 本地播放曲目\${idx + 1}</button>\`;
               }).join('');
+              const scoreHtml = e.score_total != null
+                ? \`<div style="margin-top:4px;font-size:12px;color:#065f46;background:#ecfdf5;border:1px solid #a7f3d0;padding:4px 8px;border-radius:6px;display:inline-block">
+                    🏆 <strong>考官五维评分：\${e.score_total}/50分</strong>
+                    （音准 <strong>\${e.score_yinzhun ?? '—'}</strong> · 节奏 <strong>\${e.score_jiezou ?? '—'}</strong> · 音色 <strong>\${e.score_yinse ?? '—'}</strong> · 表现力 <strong>\${e.score_biaoxianli ?? '—'}</strong> · 完整性 <strong>\${e.score_wanzhengxing ?? '—'}</strong>）
+                    \${e.pass_level ? \` · <span class="badge badge-confirmed">通过 \${e.pass_level}级</span>\` : ''}
+                  </div>\`
+                : (e.pass_level ? \`<div style="margin-top:4px"><span class="badge badge-confirmed">✅ 考官评定：通过 \${e.pass_level}级</span></div>\` : '');
+              const reviewHtml = (e.self_review_text || e.review_text)
+                ? \`<div style="margin-top:5px;font-size:12px;color:#334155;background:#fffbeb;border-left:3px solid #f59e0b;padding:5px 8px;border-radius:4px">
+                    💬 <strong>国音考官评语：</strong>\${(e.self_review_text || e.review_text || '').replace(/\\n/g, '；')}
+                  </div>\`
+                : '';
               return \`
                 <div style="padding:8px 10px;background:#f8fafc;border-radius:8px;border:1px solid var(--border);margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-                  <div>
+                  <div style="flex:1;min-width:260px">
                     <span class="badge badge-locked">\${e.season_label}</span>
                     <strong style="margin-left:6px">\${e.major_name} · \${e.level}级</strong>
                     <span style="font-size:12px;color:var(--muted);margin-left:8px">准考证号: \${e.exam_no || '—'} | 备案批次: \${e.filing_code || '—'}</span>
                     \${titles ? \`<div style="font-size:12px;color:#475569;margin-top:3px">🎵 考试曲目：\${titles}</div>\` : ''}
+                    \${scoreHtml}
+                    \${reviewHtml}
                   </div>
                   <div style="display:flex;gap:6px;flex-wrap:wrap">
                     \${videoButtonsHtml}
