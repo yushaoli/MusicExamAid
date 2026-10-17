@@ -39,7 +39,7 @@ const ALLOWED_ADMIN_WECHAT_OPENIDS: Record<
   'oTC3O6dI742xElST92sOKrpbIG0M': {
     admin_id: 1,
     admin_user: 'kjzx002120',
-    operator_label: '老妈 (朱老师)',
+    operator_label: '老妈 (谈老师)',
   },
 };
 
@@ -224,7 +224,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
               return reply.code(403).send({
                 authenticated: false,
                 error: 'UNAUTHORIZED_WECHAT_OPENID',
-                message: `该微信 (${verifiedOpenid}) 不在余绍立/杜薇/朱老师三人白名单内`,
+                message: `该微信 (${verifiedOpenid}) 不在余绍立/杜薇/谈老师三人白名单内`,
               });
             }
             verifiedOperatorLabel = matched.operator_label;
@@ -303,7 +303,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
 
       return reply.code(401).send({
         authorized: false,
-        message: '仅限【余绍立 / 老婆(杜薇) / 老妈(朱老师)】三人已绑定微信号扫码登录',
+        message: '仅限【余绍立 / 老婆(杜薇) / 老妈(谈老师)】三人已绑定微信号扫码登录',
       });
     },
   );

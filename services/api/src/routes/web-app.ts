@@ -698,7 +698,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
           <div>
             <div style="font-size:23px;font-weight:800;color:#065f46">
-              👵 考级办日常极简大字台 · <span id="mom-operator-badge" style="color:#047857">老妈 (朱老师) / 老婆专属微信台</span>
+              👵 考级办日常极简大字台 · <span id="mom-operator-badge" style="color:#047857">老妈 (谈老师) / 老婆专属微信台</span>
             </div>
             <div id="mom-wx-session-status" style="font-size:18px;color:#047857;margin-top:6px;font-weight:700">
               🟢 正在检查「江西小戈尔文化艺术有限公司考级办管理后台」微信连接状态...
@@ -708,7 +708,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
             <button class="btn-primary" style="font-size:19px;padding:12px 20px;border-radius:12px" onclick="momStartWeChatLogin()">
               📱 微信扫码连接国音后台 (扫一次全天通用)
             </button>
-            <button class="btn-outline" style="font-size:18px;padding:12px 16px;border-radius:12px;background:#fff;font-weight:700" onclick="momBindOperator('老妈 (朱老师)')">
+            <button class="btn-outline" style="font-size:18px;padding:12px 16px;border-radius:12px;background:#fff;font-weight:700" onclick="momBindOperator('老妈 (谈老师)')">
               👵 我是老妈 · 记住我
             </button>
             <button class="btn-outline" style="font-size:18px;padding:12px 16px;border-radius:12px;background:#fff;font-weight:700" onclick="momBindOperator('老婆')">
@@ -720,7 +720,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         <!-- Expandable Large WeChat QR Box for Mom / Wife -->
         <div id="mom-wx-qr-drawer" class="hidden" style="margin-top:16px;background:#ffffff;border:3px solid #16a34a;border-radius:16px;padding:20px;text-align:center">
           <div style="font-size:22px;font-weight:800;color:#065f46;margin-bottom:8px">
-            📱 请用【老妈（朱老师）】或【老婆】的手机微信扫一扫下方二维码
+            📱 请用【老妈（谈老师）】或【老婆】的手机微信扫一扫下方二维码
           </div>
           <div style="font-size:18px;color:#475569;margin-bottom:14px">
             扫完后在手机微信点一下「确认登录」，电脑和手机就自动连上国音考级后台了：
@@ -1084,7 +1084,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
 
         if (res.qr_image_base64) {
           imgBox.innerHTML = \`<img src="\${res.qr_image_base64}" style="width:232px;height:232px;object-fit:contain;border-radius:10px" />\`;
-          hintBox.textContent = '📱 请拿老妈（朱老师）或老婆的手机微信扫一扫上方二维码，并在手机上点「确认登录」';
+          hintBox.textContent = '📱 请拿老妈（谈老师）或老婆的手机微信扫一扫上方二维码，并在手机上点「确认登录」';
         } else {
           imgBox.textContent = '二维码获取失败，请再点一次';
           return;
@@ -2375,7 +2375,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       }, 2000);
     }
 
-    // Authorized 3-Person WeChat OpenID Gate (余绍立, 杜薇, 朱老师 only)
+    // Authorized 3-Person WeChat OpenID Gate (余绍立, 杜薇, 谈老师 only)
     let gatePollTimer = null;
     async function initFamilyAuthGate() {
       const params = new URLSearchParams(location.search);
@@ -2428,7 +2428,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         }).then(r => r.json());
         if (res.qr_image_base64) {
           box.innerHTML = \`<img src="\${res.qr_image_base64}" style="width:100%;height:100%;object-fit:contain;border-radius:10px" />\`;
-          status.textContent = '📱 仅限【余绍立 / 老婆(杜薇) / 老妈(朱老师)】三人微信扫码（手机端长按二维码点「识别图中二维码」即可）';
+          status.textContent = '📱 仅限【余绍立 / 老婆(杜薇) / 老妈(谈老师)】三人微信扫码（手机端长按二维码点「识别图中二维码」即可）';
           if (gatePollTimer) clearInterval(gatePollTimer);
           gatePollTimer = setInterval(async () => {
             try {
@@ -2548,7 +2548,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       <div style="font-size:16.5px;color:#334155;margin-bottom:16px;line-height:1.55">
         仅限已绑定的<strong>3个管理员微信号</strong>登录：<br/>
         <span style="display:inline-block;margin-top:6px;padding:4px 12px;border-radius:99px;background:#ecfdf5;color:#047857;font-weight:800;font-size:15px">
-          👑 余绍立 · 👩 杜薇 (老婆) · 👵 朱老师 (老妈)
+          👑 余绍立 · 👩 杜薇 (老婆) · 👵 谈老师 (老妈)
         </span>
       </div>
       <div id="gate-wx-qr-box" style="width:236px;height:236px;margin:0 auto 12px;border:3px solid #86efac;border-radius:14px;display:flex;align-items:center;justify-content:center;background:#f8fafc;font-size:16px;color:#047857;padding:8px">
