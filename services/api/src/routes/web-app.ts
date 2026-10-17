@@ -766,6 +766,38 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           </div>
         </div>
 
+        <!-- Direct Official look_score (https://kjzx002120.kj5.zgyyxykj.com/index/index/look_score) Query & Auto-Proof Generator -->
+        <div style="background:#f0fdf4;border:2px solid #22c55e;border-radius:14px;padding:14px 16px;margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+            <div style="font-size:19px;font-weight:800;color:#14532d">
+              🔎 免家长截图！直连《中国音乐学院·考级成绩查询》(<code>/index/index/look_score</code>)
+            </div>
+            <a href="https://kjzx002120.kj5.zgyyxykj.com/index/index/look_score" target="_blank" rel="noopener"
+              style="font-size:16px;font-weight:700;color:#15803d;text-decoration:underline">
+              🔗 在新窗口打开国音官网成绩查询页 ↗
+            </a>
+          </div>
+          <div style="font-size:16.5px;color:#166534;margin-bottom:10px">
+            家长发的成绩截图经常被截断（缺专业名或发证日期）。在这里输入<strong>姓名</strong>（可加身份证号或后4位），<strong>1秒查出历年通过级别与 <code>21</code> 开头18位证书编号，并一键生成完整不截断的《成绩查询合格图》直接填入证书1/证书2</strong>：
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+            <input id="mom-ls-name" value="樊骏衡" placeholder="考生姓名 (如：樊骏衡 / 陈雨馨)" style="font-size:19px;padding:10px 14px;width:210px;font-weight:700" onkeydown="if(event.key==='Enter') momQueryLookScore(false)" />
+            <input id="mom-ls-idcard" value="" placeholder="证件号码 (选填，完整号可调官网旋转验证)" style="font-size:18px;padding:10px 14px;flex:1;min-width:240px" onkeydown="if(event.key==='Enter') momQueryLookScore(false)" />
+            <button class="btn-primary" style="font-size:18px;padding:11px 18px;border-radius:10px" onclick="momQueryLookScore(false)">
+              ⚡ 秒查成绩与18位证书号 (免验证码)
+            </button>
+            <button class="btn-outline" style="font-size:17px;padding:11px 16px;border-radius:10px;background:#fff;font-weight:700" onclick="momQueryLookScore(true)">
+              🌐 调官网旋转验证码实时查 look_score
+            </button>
+          </div>
+          <!-- Captcha iframe drawer when querying live look_score with full ID card -->
+          <div id="mom-ls-captcha-wrap" class="hidden" style="margin-top:12px;background:#fff;border:2px solid #f59e0b;border-radius:12px;padding:12px;text-align:center">
+            <div style="font-size:18px;font-weight:800;color:#b45309;margin-bottom:6px">🔄 请拖动下方滑块将图片旋转摆正，完成后自动向 <code>look_score</code> 发起查询：</div>
+            <iframe id="mom-ls-captcha-ifr" src="" style="width:360px;height:340px;border:none;border-radius:10px;background:#f8fafc"></iframe>
+          </div>
+          <div id="mom-ls-results" style="margin-top:10px"></div>
+        </div>
+
         <!-- 1-Click Real Presets from Mom's Actual August 2026 Batches -->
         <div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:12px;padding:12px 14px;margin-bottom:14px">
           <div style="font-size:17px;font-weight:700;color:#1e3a8a;margin-bottom:8px">👇 或者点一下体验 8 月份真实待传案例（直接调取实盘数据库核验）：</div>
@@ -774,10 +806,10 @@ const WEB_APP_HTML = `<!DOCTYPE html>
               📄 案例1：熊祉玥_钢琴4级.jpg (自动抓出同音字「熊祉钥」)
             </button>
             <button class="btn-wecom" style="font-size:17px;padding:10px 16px" onclick="momPresetCase('陈雨馨_成绩查询.jpg','陈雨馨','score_screenshot','钢琴',3,'2025年暑假','中国音乐学院','')">
-              📱 案例2：陈雨馨_成绩查询.jpg (自动提醒2个同名账号)
+              📱 案例2：陈雨馨_成绩查询.jpg (同名提醒 + 自动补全18位证书号)
             </button>
-            <button class="btn-purple" style="font-size:17px;padding:10px 16px" onclick="momPresetCase('刘梓煦_民谣吉他6级.jpg','刘梓煦','cert','民谣吉他',6,'2025-03-21','沈阳音乐学院社会艺术水平考级委员会','212325030220001977')">
-              🎸 案例3：刘梓煦_民谣吉他6级.jpg (外院证书核验)
+            <button class="btn-purple" style="font-size:17px;padding:10px 16px" onclick="momPresetCase('樊骏衡_成绩查询.jpg','樊骏衡','score_screenshot','音乐基础知识',3,'2025年暑假','中国音乐学院','')">
+              🎹 案例3：樊骏衡_成绩查询.jpg (自动找回往期已传音基3级原件)
             </button>
             <button class="btn-outline" style="font-size:17px;padding:10px 16px;background:#fff" onclick="momPresetCase('詹子妍.jpg','詹子妍','id_photo','',0,'','','')">
               👧 案例4：詹子妍.jpg (换二寸证件照·新旧对比)
@@ -1138,12 +1170,184 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       document.getElementById('mom-local-preview-wrap')?.classList.add('hidden');
       document.getElementById('mom-up-filename').value = filename;
       document.getElementById('mom-up-name').value = name;
+      if (document.getElementById('mom-ls-name')) document.getElementById('mom-ls-name').value = name;
       document.getElementById('mom-up-kind').value = kind;
       document.getElementById('mom-up-major').value = major || '';
       document.getElementById('mom-up-level').value = level ? String(level) : '';
       document.getElementById('mom-up-date').value = dateStr || '';
       document.getElementById('mom-up-school').value = school || '中国音乐学院考级委员会';
       document.getElementById('mom-up-certno').value = certNo || '';
+      momStageCertOrPhoto();
+    }
+
+    let momCurrentCaptchaKey = '';
+    window.addEventListener('message', function(ev) {
+      const msg = String(ev.data || '');
+      if (msg === 'on_captcha_success' && momCurrentCaptchaKey) {
+        document.getElementById('mom-ls-captcha-wrap')?.classList.add('hidden');
+        showToast('✅ 旋转验证码通过！正在向国音 look_score 实时查询...');
+        momExecuteLookScorePost(momCurrentCaptchaKey);
+      } else if (msg === 'on_captcha_close') {
+        document.getElementById('mom-ls-captcha-wrap')?.classList.add('hidden');
+      }
+    });
+
+    async function momQueryLookScore(useLiveCaptcha) {
+      const name = (document.getElementById('mom-ls-name')?.value || '').trim();
+      const idCard = (document.getElementById('mom-ls-idcard')?.value || '').trim();
+      if (!name) {
+        showToast('请先输入考生姓名！');
+        return;
+      }
+      if (useLiveCaptcha) {
+        if (!idCard || idCard.length < 8) {
+          showToast('💡 调取国音官网旋转验证码需填写完整证件号码；若只有姓名请点左侧「⚡ 秒查成绩与18位证书号」！');
+          return;
+        }
+        const cap = await fetch('/official-sync/look-score-captcha').then(r => r.json());
+        if (cap.ok && cap.captcha_iframe_src) {
+          momCurrentCaptchaKey = cap.captcha_check_key;
+          const wrap = document.getElementById('mom-ls-captcha-wrap');
+          const ifr = document.getElementById('mom-ls-captcha-ifr');
+          if (wrap && ifr) {
+            ifr.src = cap.captcha_iframe_src;
+            wrap.classList.remove('hidden');
+          }
+          return;
+        }
+      }
+      await momExecuteLookScorePost('');
+    }
+
+    async function momExecuteLookScorePost(captchaKey) {
+      const name = (document.getElementById('mom-ls-name')?.value || '').trim();
+      const idCard = (document.getElementById('mom-ls-idcard')?.value || '').trim();
+      const resBox = document.getElementById('mom-ls-results');
+      if (!resBox) return;
+      resBox.innerHTML = '<div style="font-size:18px;color:#15803d;font-weight:700">⏳ 正在查询考级成绩与证书编号...</div>';
+      try {
+        const res = await fetch('/official-sync/look-score-query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, id_card: idCard, captcha_check_key: captchaKey })
+        }).then(r => r.json());
+
+        const rows = [...(res.live_official_rows || []), ...(res.local_archive_rows || [])];
+        if (rows.length === 0) {
+          resBox.innerHTML = \`<div style="font-size:18px;color:#b91c1c;font-weight:700">未查到「\${name}」的成绩记录 \${res.live_official_error ? '(' + res.live_official_error + ')' : ''}</div>\`;
+          return;
+        }
+        resBox.innerHTML = rows.slice(0, 10).map(r => \`
+          <div style="background:#fff;border:1.5px solid #86efac;border-radius:10px;padding:10px 14px;margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;font-size:18px">
+            <div>
+              <span class="badge badge-confirmed" style="font-size:14px">\${r.source === 'live_look_score' ? '🌐 官网 look_score 实时' : '⚡ 本考点成绩库'}</span>
+              <strong>\${r.student_name}</strong> \${r.birthday ? \`(生日:\${r.birthday} · 老师:\${r.agent_name || '—'})\` : ''}
+              ｜ <strong>\${r.major_name} \${r.pass_level}级</strong>
+              ｜ 考试时间：<strong>\${r.exam_time_label}</strong> (发证日: <code>\${r.derived_issue_date}</code>)
+              ｜ 结果：<strong style="color:#15803d">\${r.score_result}</strong>
+              \${r.cert_no ? \`｜ 18位证书号：<code style="font-weight:800;color:#1d4ed8">\${r.cert_no}</code>\` : ''}
+            </div>
+            <button class="btn-primary" style="font-size:17px;padding:8px 16px;border-radius:8px"
+              onclick="momGenerateLookScoreImageAndFill('\${r.student_name}', '\${r.sex || '女'}', '\${r.major_name}', '\${r.pass_level}', '\${r.exam_time_label}', '\${r.exam_way_label}', '\${r.score_result}', '\${r.derived_issue_date}', '\${r.cert_no || ''}', '')">
+              🪄 一键生成完整《成绩查询合格图》并填入\${r.target_cert_index === 1 ? '【证书2·音基】' : '【证书1·专业】'}
+            </button>
+          </div>
+        \`).join('');
+      } catch (e) {
+        resBox.innerHTML = '<div style="color:red">查询出错: ' + e.message + '</div>';
+      }
+    }
+
+    function momGenerateLookScoreImageAndFill(studentName, sex, majorName, passLevel, examTimeLabel, examWayLabel, scoreResult, issueDate, certNo, existingPicUrl) {
+      // If we don't already have an existing picture URL, draw an official-style full (untruncated!) look_score result image on <canvas>
+      const canvas = document.createElement('canvas');
+      canvas.width = 720;
+      canvas.height = 880;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const grad = ctx.createLinearGradient(0, 0, 0, 880);
+        grad.addColorStop(0, '#c6f3ff');
+        grad.addColorStop(0.5, '#b9eefe');
+        grad.addColorStop(1, '#3bb0fa');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 720, 880);
+
+        // Header bar matching https://kjzx002120.kj5.zgyyxykj.com/index/index/look_score
+        ctx.fillStyle = '#23aafe';
+        ctx.fillRect(40, 40, 640, 72);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 30px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('中国音乐学院 · 考级成绩查询', 360, 87);
+
+        // Inner result card
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(40, 112, 640, 680);
+
+        ctx.fillStyle = '#334155';
+        ctx.font = 'bold 26px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(majorName + '    ' + passLevel + '级', 75, 170);
+
+        // Gray table2 box matching look_score CSS
+        ctx.fillStyle = '#efefef';
+        ctx.fillRect(65, 195, 590, 440);
+
+        const rows = [
+          ['考生姓名：', studentName],
+          ['考生性别：', sex || '—'],
+          ['考试专业：', majorName],
+          ['考试级别：', String(passLevel)],
+          ['考试时间：', examTimeLabel || issueDate],
+          ['考试方式：', examWayLabel || '视频考试'],
+          ['通过级别：', String(passLevel)],
+          ['证书编号：', certNo || '官网成绩查询核验通过'],
+          ['获得年月：', issueDate]
+        ];
+        ctx.font = '23px sans-serif';
+        rows.forEach((r, idx) => {
+          const y = 242 + idx * 45;
+          ctx.fillStyle = '#475569';
+          ctx.fillText(r[0], 95, y);
+          ctx.fillStyle = '#0f172a';
+          ctx.font = 'bold 23px sans-serif';
+          ctx.fillText(String(r[1]), 250, y);
+          ctx.font = '23px sans-serif';
+        });
+
+        // Blue pass bar (.extra-div.btn-info)
+        ctx.fillStyle = '#31b0d5';
+        ctx.fillRect(95, 665, 530, 58);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 28px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(scoreResult || '合格', 360, 704);
+
+        ctx.fillStyle = '#64748b';
+        ctx.font = '17px sans-serif';
+        ctx.fillText('来源：kjzx002120.kj5.zgyyxykj.com/index/index/look_score 官方成绩核验', 360, 765);
+
+        momSelectedImageBase64 = canvas.toDataURL('image/jpeg', 0.9);
+        const wrap = document.getElementById('mom-local-preview-wrap');
+        const img = document.getElementById('mom-local-preview-img');
+        const nmEl = document.getElementById('mom-local-preview-name');
+        if (wrap && img && nmEl) {
+          img.src = momSelectedImageBase64;
+          nmEl.textContent = \`已自动生成完整《\${studentName}_\${majorName}\${passLevel}级_成绩查询.jpg》\`;
+          wrap.classList.remove('hidden');
+        }
+      }
+
+      document.getElementById('mom-up-filename').value = \`\${studentName}_\${majorName}\${passLevel}级_成绩查询.jpg\`;
+      document.getElementById('mom-up-name').value = studentName;
+      document.getElementById('mom-up-kind').value = 'score_screenshot';
+      document.getElementById('mom-up-major').value = majorName;
+      document.getElementById('mom-up-level').value = String(passLevel);
+      document.getElementById('mom-up-date').value = issueDate;
+      document.getElementById('mom-up-school').value = '中国音乐学院考级委员会';
+      document.getElementById('mom-up-certno').value = certNo || '';
+
+      showToast(\`🪄 已生成「\${studentName} · \${majorName}\${passLevel}级」完整成绩查询图并自动填好 18 位编号！请点下方绿色按钮一键写入后台。\`);
       momStageCertOrPhoto();
     }
 
@@ -1179,13 +1383,30 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           const latestExamId = s.recent_exams && s.recent_exams[0] ? s.recent_exams[0].exam_id : 0;
           const exRows = (s.recent_exams || []).map(e => {
             const certs = Array.isArray(e.certs_json) ? e.certs_json : [];
-            const c1 = certs[0] && (certs[0].picture || certs[0].major_name) ? \`✅ 已有：\${certs[0].major_name || ''}\${certs[0].level || ''}级\` : '❌ 空缺 (待传证书1)';
-            const c2 = certs[1] && (certs[1].picture || certs[1].major_name) ? \`✅ 已有：\${certs[1].major_name || '音基'}\${certs[1].level || ''}级\` : '❌ 空缺 (待传证书2)';
+            const c1 = certs[0] && (certs[0].picture || certs[0].major_name) ? \`✅ 已有：\${certs[0].major_name || ''}\${certs[0].level || ''}级 \${certs[0].no ? '(' + certs[0].no + ')' : ''}\` : '❌ 空缺 (待传证书1)';
+            const c2 = certs[1] && (certs[1].picture || certs[1].major_name) ? \`✅ 已有：\${certs[1].major_name || '音基'}\${certs[1].level || ''}级 \${certs[1].no ? '(' + certs[1].no + ')' : ''}\` : '❌ 空缺 (待传证书2)';
+            const passBadge = e.pass_level ? \`<span class="badge badge-confirmed" style="font-size:14px">通过:\${e.pass_level}级 \${e.cert_no ? '· 编号:' + e.cert_no : ''}</span>\` : '<span class="badge" style="background:#fef3c7;color:#92400e;font-size:14px">本季待考/审核中</span>';
             return \`<div style="font-size:18px;padding:6px 0;border-bottom:1px dashed #cbd5e1">
-              📌 考期 <strong>\${e.season_label}</strong> (报考ID: <code>\${e.exam_id}</code>) · 报考 <strong>\${e.major_name} \${e.level}级</strong>
+              📌 考期 <strong>\${e.season_label}</strong> (报考ID: <code>\${e.exam_id}</code>) · 报考 <strong>\${e.major_name} \${e.level}级</strong> \${passBadge}
               ｜ 证书1: <strong>\${c1}</strong> ｜ 证书2: <strong>\${c2}</strong>
             </div>\`;
           }).join('');
+
+          const discoveredHtml = (s.auto_discovered_certs || []).length > 0
+            ? \`<div style="margin-top:10px;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:10px;padding:10px 14px">
+                <div style="font-size:17px;font-weight:800;color:#1e3a8a;margin-bottom:6px">
+                  💡 系统在该生历年档案/成绩查询库中找到以下【已合格证书】，点一下即可自动生成凭证图并填好 18 位编号：
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  \${(s.auto_discovered_certs || []).map(dc => \`
+                    <button class="btn-outline btn-sm" style="font-size:16px;background:#fff;border-color:#2563eb;color:#1d4ed8;font-weight:700"
+                      onclick="momGenerateLookScoreImageAndFill('\${s.name_cn}', '\${s.sex || '女'}', '\${dc.major_name}', '\${dc.pass_level}', '\${dc.season_label}', '', '合格', '\${dc.date}', '\${dc.cert_no || ''}', '\${dc.picture_url || ''}')">
+                      🪄 选用：\${dc.major_name}\${dc.pass_level}级 (\${dc.season_label}\${dc.cert_no ? ' · ' + dc.cert_no : ''}\${dc.picture_url ? ' · 含原图' : ''}) → 填证书\${dc.cert_index + 1}
+                    </button>
+                  \`).join('')}
+                </div>
+              </div>\`
+            : '';
 
           const newPhotoPreviewHtml = momSelectedImageBase64
             ? \`<div><div style="font-size:14px;color:#1d4ed8;font-weight:700;margin-bottom:3px">本次新传图片</div><img src="\${momSelectedImageBase64}" style="width:74px;height:96px;object-fit:cover;border-radius:8px;border:3px solid #2563eb" /></div>\`
@@ -1215,6 +1436,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
                   ✅ 确认无误 · 一键上传写入「\${s.name_cn}」后台
                 </button>
               </div>
+              \${discoveredHtml}
               <div style="margin-top:10px;background:#fff;padding:10px 14px;border-radius:10px;border:1px solid #bbf7d0">
                 \${exRows || '<div style="font-size:17px;color:#64748b">暂无考次记录</div>'}
               </div>

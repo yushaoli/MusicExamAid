@@ -1524,13 +1524,13 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           ? `⚠️ 注意：库中有 ${exactRes.rows.length} 个同名「${matchedNameLabel}」账号（${exactRes.rows.map(r => `ID:${r.student_id} · 机构:${r.agent_name || '—'} · 生日:${r.birthday || '—'}`).join(' ｜ ')}），请核对机构与生日后再点确认！`
           : null;
 
-      // Fetch latest exam registrations for matched students
+      // Fetch latest exam registrations & passed certificates for matched students
       const studentIds = exactRes.rows.map(r => Number(r.student_id));
-      const examsByStudent: Record<number, unknown[]> = {};
+      const examsByStudent: Record<number, any[]> = {};
       if (studentIds.length > 0) {
         const exRes = await pool.query(
           `
-          SELECT exam_id, student_id, season_code, season_label, major_name, level, agent_id, agent_name, certs_json
+          SELECT exam_id, student_id, season_code, season_label, apply_year, major_name, level, pass_level, cert_no, status, is_made_cert, agent_id, agent_name, certs_json
           FROM kjzx_historical_exams
           WHERE student_id = ANY($1::int[])
           ORDER BY season_code DESC, exam_id DESC
@@ -1570,13 +1570,65 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           ...(duplicateWarning ? [duplicateWarning] : []),
           ...certNoWarnings,
         ],
-        matched_students: exactRes.rows.map(s => ({
-          ...s,
-          picture_proxy_url: s.picture_url
-            ? `/official-sync/media-proxy?url=${encodeURIComponent(String(s.picture_url))}&student_id=${s.student_id}&type=photo`
-            : null,
-          recent_exams: (examsByStudent[Number(s.student_id)] || []).slice(0, 4),
-        })),
+        matched_students: exactRes.rows.map(s => {
+          const allEx = examsByStudent[Number(s.student_id)] || [];
+          // Build auto_discovered_certs from prior passed exams & prior certs_json!
+          const discoveredMap = new Map<string, any>();
+          for (const ex of allEx) {
+            if (ex.pass_level || ex.cert_no) {
+              const isSummer = String(ex.season_label || '').includes('暑') || String(ex.season_code || '').endsWith('4');
+              const yr = ex.apply_year || String(ex.season_code || '2025').slice(0, 4);
+              const derivedDate = `${yr}-${isSummer ? '10-24' : '04-24'}`;
+              const key = `${ex.major_name}_${ex.pass_level || ex.level}`;
+              if (!discoveredMap.has(key)) {
+                discoveredMap.set(key, {
+                  source: '本考点历年成绩库 (look_score 同源)',
+                  season_label: ex.season_label,
+                  major_name: ex.major_name,
+                  pass_level: ex.pass_level || ex.level,
+                  cert_no: ex.cert_no || '',
+                  date: derivedDate,
+                  school: '中国音乐学院考级委员会',
+                  picture_url: '',
+                  cert_index: ex.major_name === '音乐基础知识' ? 1 : 0,
+                });
+              }
+            }
+            const cArr = Array.isArray(ex.certs_json) ? ex.certs_json : [];
+            for (const c of cArr) {
+              if (c && typeof c === 'object' && !Array.isArray(c) && (c.major_name || c.picture || c.no)) {
+                const key = `${c.major_name || '专业'}_${c.level || ''}`;
+                const existing = discoveredMap.get(key);
+                if (existing) {
+                  if (!existing.picture_url && c.picture) existing.picture_url = c.picture;
+                  if (!existing.cert_no && c.no && String(c.no).startsWith('21')) existing.cert_no = c.no;
+                  if (c.date) existing.date = c.date;
+                } else {
+                  discoveredMap.set(key, {
+                    source: `往期已传档案 (${ex.season_label})`,
+                    season_label: ex.season_label,
+                    major_name: c.major_name || ex.major_name,
+                    pass_level: Number(c.level || 1),
+                    cert_no: c.no || '',
+                    date: c.date || '2025-10-24',
+                    school: c.school || '中国音乐学院考级委员会',
+                    picture_url: c.picture || '',
+                    cert_index: String(c.major_name || '').includes('音乐基础') ? 1 : 0,
+                  });
+                }
+              }
+            }
+          }
+
+          return {
+            ...s,
+            picture_proxy_url: s.picture_url
+              ? `/official-sync/media-proxy?url=${encodeURIComponent(String(s.picture_url))}&student_id=${s.student_id}&type=photo`
+              : null,
+            recent_exams: allEx.slice(0, 6),
+            auto_discovered_certs: Array.from(discoveredMap.values()),
+          };
+        }),
         official_api_contract:
           inferredKind === 'id_photo'
             ? {
@@ -1865,5 +1917,168 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
     );
     return reply.code(200).send({ items: rows.rows });
   });
+
+  // =========================================================================
+  // 17. OFFICIAL CERTIFICATE / SCORE QUERY (`https://kjzx002120.kj5.zgyyxykj.com/index/index/look_score`)
+  //     Supports both:
+  //     - Instant local query across 31,939 historical exams (returns pass_level, 21... cert_no, date, score)
+  //     - Live proxy to `/admins/index/get_captcha_check_key` + `POST /index/index/look_score?debug=`
+  // =========================================================================
+  app.get('/official-sync/look-score-captcha', async (_req, reply) => {
+    try {
+      const r = await fetch(`${OFFICIAL_PORTAL_BASE_URL}/admins/index/get_captcha_check_key`, {
+        method: 'GET',
+      });
+      const j = (await r.json()) as {
+        error?: number;
+        captcha_check_key?: string;
+        src?: string;
+        msg?: string;
+      };
+      return reply.code(200).send({
+        ok: j.error === 0,
+        captcha_check_key: j.captcha_check_key || '',
+        captcha_iframe_src: j.src || '',
+        look_score_url: `${OFFICIAL_PORTAL_BASE_URL}/index/index/look_score`,
+      });
+    } catch (e: any) {
+      return reply.code(200).send({
+        ok: false,
+        error: e?.message || 'Failed to fetch captcha key',
+        look_score_url: `${OFFICIAL_PORTAL_BASE_URL}/index/index/look_score`,
+      });
+    }
+  });
+
+  app.post(
+    '/official-sync/look-score-query',
+    async (
+      req: FastifyRequest<{
+        Body: {
+          name?: string;
+          id_card?: string;
+          captcha_check_key?: string;
+        };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const pool = getPostgresPool();
+      const name = (req.body?.name || '').trim();
+      const idCard = (req.body?.id_card || '').trim();
+      const captchaKey = (req.body?.captcha_check_key || '').trim();
+
+      if (!name) {
+        return reply.code(400).send({ error: 'VALIDATION_ERROR', message: '请填写考生姓名' });
+      }
+
+      // 1) If captcha_check_key and full id_card are provided, query live `POST /index/index/look_score?debug=`
+      let liveOfficialRows: any[] = [];
+      let liveOfficialError: string | null = null;
+      if (captchaKey && idCard && !idCard.includes('*')) {
+        try {
+          const form = new URLSearchParams();
+          form.set('name', name);
+          form.set('id_card', idCard);
+          form.set('captcha_check_key', captchaKey);
+          const lRes = await fetch(`${OFFICIAL_PORTAL_BASE_URL}/index/index/look_score?debug=`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+              'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: form.toString(),
+          });
+          const lJson = (await lRes.json()) as { error?: number; msg?: string; data?: any[] };
+          if (lJson && lJson.error === 0 && Array.isArray(lJson.data)) {
+            const seasonDesc: Record<string, string> = {
+              '3': '春季', '1': '夏季', '2': '秋季', '0': '冬季', '4': '暑假', '5': '寒假', '9': '',
+            };
+            liveOfficialRows = lJson.data.map(d => {
+              const sLabel = `${d.apply_year}年${seasonDesc[String(d.is_summer)] || '暑假'}`;
+              const isSummer = String(d.is_summer) === '4' || String(d.is_summer) === '1';
+              return {
+                source: 'live_look_score',
+                student_name: d.student_name || name,
+                sex: d.sex || '',
+                major_name: d.major_name,
+                level: Number(d.level || 0),
+                pass_level: Number(d.pass_level || d.level || 0),
+                exam_time_label: sLabel,
+                derived_issue_date: `${d.apply_year}-${isSummer ? '10-24' : '04-24'}`,
+                exam_way_label:
+                  Number(d.exam_way) === 1
+                    ? '视频考试'
+                    : Number(d.exam_way) === 2
+                      ? '音基考试'
+                      : Number(d.exam_way) === 3
+                        ? 'AI智慧考试'
+                        : '现场考试',
+                is_pass: Number(d.is_pass ?? 1),
+                score_result: d.score || (d.is_pass ? '合格' : '待出分'),
+                cert_no: '',
+                target_cert_index: String(d.major_name || '').includes('音乐基础') ? 1 : 0,
+              };
+            });
+          } else if (lJson?.msg) {
+            liveOfficialError = lJson.msg;
+          }
+        } catch (err: any) {
+          liveOfficialError = err?.message || 'live look_score request failed';
+        }
+      }
+
+      // 2) Also query our local 31,939-exam PostgreSQL mirror (which has 18-digit `cert_no`, `pass_level`, `birthday`, `agent_name`, and needs NO captcha or full ID card!)
+      const idTail = idCard ? idCard.slice(-4) : '';
+      const localRes = await pool.query(
+        `
+        SELECT
+          e.exam_id, e.student_id, e.student_name, e.sex, e.birthday, e.id_card_masked,
+          e.agent_name, e.season_code, e.season_label, e.apply_year,
+          e.major_name, e.level, e.pass_level, e.cert_no, e.status, e.is_made_cert, e.certs_json
+        FROM kjzx_historical_exams e
+        WHERE (e.student_name = $1 OR e.student_name LIKE $2)
+          AND ($3 = '' OR e.id_card_masked LIKE '%' || $3)
+        ORDER BY e.season_code DESC, e.exam_id DESC
+        LIMIT 30
+        `,
+        [name, `${name.slice(0, 2)}%`, idTail],
+      );
+
+      const localRows = localRes.rows.map(r => {
+        const isSummer = String(r.season_label || '').includes('暑') || String(r.season_code || '').endsWith('4');
+        const yr = r.apply_year || String(r.season_code || '2025').slice(0, 4);
+        const isPass = Boolean(r.pass_level && Number(r.pass_level) > 0) || Boolean(r.cert_no);
+        return {
+          source: 'local_archive',
+          exam_id: r.exam_id,
+          student_id: r.student_id,
+          student_name: r.student_name,
+          sex: r.sex || '',
+          birthday: r.birthday || '',
+          id_card_masked: r.id_card_masked || '',
+          agent_name: r.agent_name || '',
+          major_name: r.major_name,
+          level: Number(r.level),
+          pass_level: Number(r.pass_level || r.level),
+          exam_time_label: r.season_label ? `20${String(r.season_code).slice(2, 4)}年${String(r.season_label).replace(/^\d+/, '')}` : `${yr}年暑假`,
+          season_label: r.season_label,
+          derived_issue_date: `${yr}-${isSummer ? '10-24' : '04-24'}`,
+          exam_way_label: String(r.major_name || '').includes('音乐基础') ? '音基考试' : '视频考试',
+          is_pass: isPass ? 1 : 0,
+          score_result: isPass ? '合格' : r.status === 5 ? '审核/待考中' : '待出分',
+          cert_no: r.cert_no || '',
+          target_cert_index: String(r.major_name || '').includes('音乐基础') ? 1 : 0,
+        };
+      });
+
+      return reply.code(200).send({
+        look_score_url: `${OFFICIAL_PORTAL_BASE_URL}/index/index/look_score`,
+        query: { name, id_card: idCard },
+        live_official_rows: liveOfficialRows,
+        live_official_error: liveOfficialError,
+        local_archive_rows: localRows,
+      });
+    },
+  );
 }
 
