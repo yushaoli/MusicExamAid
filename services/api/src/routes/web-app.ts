@@ -2374,8 +2374,114 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       }, 2000);
     }
 
+    // Authorized WeChat ID & Family Gate (prevents public access on public IP)
+    let gatePollTimer = null;
+    async function initFamilyAuthGate() {
+      const params = new URLSearchParams(location.search);
+      const urlKey = params.get('k') || params.get('key') || '';
+      const invite = params.get('invite') || params.get('invite_token') || '';
+      const ref = params.get('ref') || params.get('ref_agent') || '';
+      const savedToken = localStorage.getItem('mea_family_token') || '';
+
+      // Teacher/parent scoped invite links have their own strict single-agent isolation
+      if (invite || ref) return true;
+
+      try {
+        const res = await fetch('/official-sync/family-auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ passcode: urlKey, token: savedToken })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.family_token) localStorage.setItem('mea_family_token', data.family_token);
+          if (urlKey) {
+            params.delete('k');
+            params.delete('key');
+            const cleanUrl = location.pathname + (params.toString() ? '?' + params.toString() : '');
+            history.replaceState(null, '', cleanUrl);
+          }
+          document.getElementById('mea-auth-gate')?.classList.add('hidden');
+          return true;
+        }
+      } catch {}
+
+      // Show full-screen login gate and start WeChat QR verification
+      const gate = document.getElementById('mea-auth-gate');
+      if (gate) {
+        gate.classList.remove('hidden');
+        startGateWeChatQr();
+      }
+      return false;
+    }
+
+    async function startGateWeChatQr() {
+      const box = document.getElementById('gate-wx-qr-box');
+      const status = document.getElementById('gate-wx-qr-status');
+      if (!box || !status) return;
+      box.innerHTML = '正在加载授权微信二维码...';
+      try {
+        const res = await fetch('/official-sync/qr-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}'
+        }).then(r => r.json());
+        if (res.qr_image_base64) {
+          box.innerHTML = \`<img src="\${res.qr_image_base64}" style="width:100%;height:100%;object-fit:contain;border-radius:10px" />\`;
+          status.textContent = '📱 请使用【老妈(朱老师) / 老婆】已绑定的管理员微信扫码（手机端可长按二维码识别）';
+          if (gatePollTimer) clearInterval(gatePollTimer);
+          gatePollTimer = setInterval(async () => {
+            try {
+              const p = await fetch('/official-sync/wxauth-poll', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ php_sess_id: res.php_sess_id, wxauth_token: res.wxauth_token })
+              }).then(r => r.json());
+              if (p.authenticated) {
+                clearInterval(gatePollTimer);
+                if (p.family_token) localStorage.setItem('mea_family_token', p.family_token);
+                document.getElementById('mea-auth-gate')?.classList.add('hidden');
+                showToast('✅ 授权微信核验成功！已自动登录并记住本机');
+                location.reload();
+              } else if (p.scan_status === 2) {
+                status.textContent = '📲 已扫码！请在手机微信上点击「确认登录」...';
+              }
+            } catch {}
+          }, 2000);
+        }
+      } catch {
+        box.innerHTML = '请使用下方快捷口令登录';
+      }
+    }
+
+    async function submitGateFamilyPasscode(operatorName) {
+      const input = document.getElementById('gate-passcode-input');
+      const pass = (input ? input.value : '').trim();
+      const res = await fetch('/official-sync/family-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passcode: pass, operator: operatorName })
+      });
+      if (!res.ok) {
+        alert('口令不正确，请输入考级办6位机构号（002120）或用已绑定微信扫码');
+        return;
+      }
+      const data = await res.json();
+      if (data.family_token) localStorage.setItem('mea_family_token', data.family_token);
+      if (operatorName) {
+        localStorage.setItem('mea_operator_name', operatorName);
+        localStorage.setItem('mea_default_tab', 'mom');
+      }
+      if (gatePollTimer) clearInterval(gatePollTimer);
+      document.getElementById('mea-auth-gate')?.classList.add('hidden');
+      location.reload();
+    }
+
     // Bootstrap Session Role & Isolation from URL parameters
     (async function bootstrapSession() {
+      const authed = await initFamilyAuthGate();
+      if (!authed) return;
+
       const params = new URLSearchParams(location.search);
       const invite = params.get('invite') || params.get('invite_token') || '';
       const ref = params.get('ref') || params.get('ref_agent') || '';
@@ -2449,16 +2555,56 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       searchHistoricalStudent('parent');
     })();
   </script>
+
+  <!-- FULL-SCREEN AUTHORIZED WECHAT ID & FAMILY GATE OVERLAY -->
+  <div id="mea-auth-gate" style="position:fixed;inset:0;z-index:9999;background:#0f172a;display:flex;align-items:center;justify-content:center;padding:18px;overflow-y:auto">
+    <div style="background:#ffffff;max-width:500px;width:100%;border-radius:20px;padding:26px 22px;box-shadow:0 20px 50px rgba(0,0,0,0.5);text-align:center;border:3px solid #16a34a">
+      <div style="font-size:24px;font-weight:800;color:#065f46;margin-bottom:6px">
+        🔒 内部工作台 · 授权微信核验
+      </div>
+      <div style="font-size:16px;color:#475569;margin-bottom:16px;line-height:1.5">
+        本系统为内部私有工具，不对外公开。<br/>请使用<strong>已绑定管理员权限的微信</strong>扫码（或在手机微信内长按识别）：
+      </div>
+      <div id="gate-wx-qr-box" style="width:210px;height:210px;margin:0 auto 10px;border:3px solid #86efac;border-radius:14px;display:flex;align-items:center;justify-content:center;background:#f8fafc;font-size:15px;color:#047857;padding:8px">
+        正在加载微信核验码...
+      </div>
+      <div id="gate-wx-qr-status" style="font-size:16px;font-weight:700;color:#d97706;margin-bottom:18px">
+        ⏳ 等待授权管理员微信号扫码...
+      </div>
+      <div style="border-top:2px dashed #cbd5e1;padding-top:16px;text-align:left">
+        <div style="font-size:16px;font-weight:800;color:#1e293b;margin-bottom:8px;text-align:center">
+          📱 手机微信直接打开？输入内部6位机构号一键绑定本机：
+        </div>
+        <input id="gate-passcode-input" type="tel" placeholder="请输入6位机构编号 (如 002120)" style="font-size:20px;font-weight:800;text-align:center;padding:12px;border:2px solid #94a3b8;border-radius:12px;margin-bottom:12px" />
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <button class="btn-primary" style="font-size:18px;padding:13px 10px;border-radius:12px;width:100%" onclick="submitGateFamilyPasscode('老婆')">
+            👩 我是老婆 · 登录记住我
+          </button>
+          <button class="btn-wecom" style="font-size:18px;padding:13px 10px;border-radius:12px;width:100%" onclick="submitGateFamilyPasscode('老妈 (朱老师)')">
+            👵 我是老妈 · 登录记住我
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>`;
 
 export async function webAppRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/robots.txt', async (_req: FastifyRequest, reply: FastifyReply) => {
+    return reply
+      .code(200)
+      .header('content-type', 'text/plain; charset=utf-8')
+      .send('User-agent: *\nDisallow: /\n');
+  });
+
   app.get(
     '/app',
     async (_req: FastifyRequest, reply: FastifyReply) => {
       return reply
         .code(200)
         .header('content-type', 'text/html; charset=utf-8')
+        .header('x-robots-tag', 'noindex, nofollow, noarchive')
         .send(WEB_APP_HTML);
     },
   );

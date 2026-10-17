@@ -132,11 +132,21 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           wxauth_token,
           authenticated_at: new Date().toISOString(),
         };
+        const familyToken = crypto
+          .createHmac('sha256', process.env.SNAPSHOT_AES_KEY_HEX || 'mea_family_secret_002120')
+          .update('authorized_family_wechat_002120')
+          .digest('hex')
+          .slice(0, 32);
+        reply.header(
+          'set-cookie',
+          `mea_family_session=${familyToken}; Path=/; Max-Age=31536000; SameSite=Lax`,
+        );
         return reply.code(200).send({
           authenticated: true,
           php_sess_id,
           scan_status: 4,
           session_cached: true,
+          family_token: familyToken,
           confirm: confirmJson,
         });
       }
@@ -146,6 +156,46 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         php_sess_id,
         scan_status: Number(statusJson.scan_status ?? 0),
         raw: statusJson,
+      });
+    },
+  );
+
+  // 2b. Verify or issue authorized family WeChat / passcode session (`POST /official-sync/family-auth`)
+  app.post(
+    '/official-sync/family-auth',
+    async (
+      req: FastifyRequest<{
+        Body?: { passcode?: string; token?: string; operator?: string };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const expectedToken = crypto
+        .createHmac('sha256', process.env.SNAPSHOT_AES_KEY_HEX || 'mea_family_secret_002120')
+        .update('authorized_family_wechat_002120')
+        .digest('hex')
+        .slice(0, 32);
+      const body = req.body ?? {};
+      const cookieHeader = String(req.headers.cookie || '');
+      const hasValidCookie = cookieHeader.includes(`mea_family_session=${expectedToken}`);
+      const pass = String(body.passcode || '').trim().toLowerCase();
+      const validPasscodes = ['002120', 'kjzx002120', 'xgar002120'];
+
+      if (hasValidCookie || body.token === expectedToken || validPasscodes.includes(pass)) {
+        reply.header(
+          'set-cookie',
+          `mea_family_session=${expectedToken}; Path=/; Max-Age=31536000; SameSite=Lax`,
+        );
+        return reply.code(200).send({
+          authorized: true,
+          family_token: expectedToken,
+          operator: body.operator || '已授权家人微信',
+          has_official_wx_session: Boolean(cachedOfficialSession),
+        });
+      }
+
+      return reply.code(401).send({
+        authorized: false,
+        message: '请使用老妈(朱老师)/老婆已绑定的微信扫码，或输入考级办内部口令 (002120)',
       });
     },
   );
