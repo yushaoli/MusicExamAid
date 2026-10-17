@@ -2038,7 +2038,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         FROM kjzx_historical_exams e
         WHERE (e.student_name = $1 OR e.student_name LIKE $2)
           AND ($3 = '' OR e.id_card_masked LIKE '%' || $3)
-        ORDER BY e.season_code DESC, e.exam_id DESC
+        ORDER BY (CASE WHEN e.student_name = $1 THEN 0 ELSE 1 END), e.season_code DESC, e.exam_id DESC
         LIMIT 30
         `,
         [name, `${name.slice(0, 2)}%`, idTail],
