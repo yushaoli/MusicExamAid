@@ -693,10 +693,44 @@ const WEB_APP_HTML = `<!DOCTYPE html>
     <!-- TAB 0: MOM & WIFE 2-USE-CASE GIANT-FONT WORKBENCH                   -->
     <!-- =================================================================== -->
     <section id="tab-mom" class="hidden" style="font-size:19px;line-height:1.6">
+      <!-- WECHAT LOGIN & FAMILY IDENTITY BINDING CARD -->
       <div class="card" style="background:#ecfdf5;border:3px solid #16a34a;padding:18px 20px">
-        <div style="font-size:22px;font-weight:800;color:#065f46">👵 妈妈与日常考务极简大字台（专门解决最费劲的 2 件事 · 不改变现有习惯）</div>
-        <div style="font-size:17.5px;color:#047857;margin-top:6px">
-          老师和家长照常在微信把<strong>证书照片、成绩查询截图、孩子证件照</strong>发给您；您不用再去后台翻好几页找人、也不用怕填错 18 位证书号或重名学生：
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
+          <div>
+            <div style="font-size:23px;font-weight:800;color:#065f46">
+              👵 考级办日常极简大字台 · <span id="mom-operator-badge" style="color:#047857">老妈 (朱老师) / 老婆专属微信台</span>
+            </div>
+            <div id="mom-wx-session-status" style="font-size:18px;color:#047857;margin-top:6px;font-weight:700">
+              🟢 正在检查「江西小戈尔文化艺术有限公司考级办管理后台」微信连接状态...
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn-primary" style="font-size:19px;padding:12px 20px;border-radius:12px" onclick="momStartWeChatLogin()">
+              📱 微信扫码连接国音后台 (扫一次全天通用)
+            </button>
+            <button class="btn-outline" style="font-size:18px;padding:12px 16px;border-radius:12px;background:#fff;font-weight:700" onclick="momBindOperator('老妈 (朱老师)')">
+              👵 我是老妈 · 记住我
+            </button>
+            <button class="btn-outline" style="font-size:18px;padding:12px 16px;border-radius:12px;background:#fff;font-weight:700" onclick="momBindOperator('老婆')">
+              👩 我是老婆 · 记住我
+            </button>
+          </div>
+        </div>
+
+        <!-- Expandable Large WeChat QR Box for Mom / Wife -->
+        <div id="mom-wx-qr-drawer" class="hidden" style="margin-top:16px;background:#ffffff;border:3px solid #16a34a;border-radius:16px;padding:20px;text-align:center">
+          <div style="font-size:22px;font-weight:800;color:#065f46;margin-bottom:8px">
+            📱 请用【老妈（朱老师）】或【老婆】的手机微信扫一扫下方二维码
+          </div>
+          <div style="font-size:18px;color:#475569;margin-bottom:14px">
+            扫完后在手机微信点一下「确认登录」，电脑和手机就自动连上国音考级后台了：
+          </div>
+          <div id="mom-wx-qr-img" style="width:240px;height:240px;margin:0 auto;border:3px solid #86efac;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#047857;background:#f8fafc">
+            正在拉取国音后台二维码...
+          </div>
+          <div id="mom-wx-qr-hint" style="font-size:20px;font-weight:800;color:#d97706;margin-top:12px">
+            ⏳ 等待手机微信扫码确认中...
+          </div>
         </div>
       </div>
 
@@ -709,9 +743,32 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           自动区分<strong>专业证书 (填证书1)</strong>、<strong>音基证书/成绩截图 (填证书2)</strong>、<strong>考生二寸照 (填考生列表-照片)</strong>；自动抓出<strong>同音字（如 熊祉玥→熊祉钥）</strong>和<strong>同名学生（如 两个陈雨馨）</strong>，自动校验 <code>21</code> 开头的 18 位证书编号：
         </div>
 
+        <!-- Giant WeChat Photo Picker / Drag & Drop Zone -->
+        <div id="mom-drop-zone"
+          onclick="document.getElementById('mom-file-input').click()"
+          ondragover="event.preventDefault();this.style.background='#dbeafe'"
+          ondragleave="this.style.background='#eff6ff'"
+          ondrop="momHandleFileDrop(event)"
+          style="background:#eff6ff;border:3px dashed #2563eb;border-radius:16px;padding:18px;text-align:center;cursor:pointer;margin-bottom:14px">
+          <input type="file" id="mom-file-input" accept="image/*" style="display:none" onchange="momHandleFileSelect(this.files)" />
+          <div style="font-size:22px;font-weight:800;color:#1d4ed8">
+            📂 点这里从手机相册/电脑选微信收到的照片（或直接把微信照片拖进来）
+          </div>
+          <div style="font-size:17px;color:#475569;margin-top:4px">
+            支持证书照片（如 <code>熊祉玥_钢琴4级.jpg</code>）、手机成绩查询截图、或孩子二寸证件照（如 <code>詹子妍.jpg</code>）
+          </div>
+          <div id="mom-local-preview-wrap" class="hidden" style="margin-top:12px;display:inline-flex;align-items:center;gap:14px;background:#fff;padding:10px 16px;border-radius:12px;border:2px solid #60a5fa">
+            <img id="mom-local-preview-img" src="" style="height:96px;border-radius:8px;border:1px solid #cbd5e1" />
+            <div style="text-align:left">
+              <div style="font-size:18px;font-weight:800;color:#1e40af" id="mom-local-preview-name">已选照片</div>
+              <div style="font-size:15px;color:#047857">✅ 已就绪，核对下方考生后点绿色按钮即可一键上传</div>
+            </div>
+          </div>
+        </div>
+
         <!-- 1-Click Real Presets from Mom's Actual August 2026 Batches -->
-        <div style="background:#eff6ff;border:1.5px dashed #60a5fa;border-radius:12px;padding:12px 14px;margin-bottom:14px">
-          <div style="font-size:17px;font-weight:700;color:#1e3a8a;margin-bottom:8px">👇 点一下体验真实案例（直接调取实盘数据库核验）：</div>
+        <div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:12px;padding:12px 14px;margin-bottom:14px">
+          <div style="font-size:17px;font-weight:700;color:#1e3a8a;margin-bottom:8px">👇 或者点一下体验 8 月份真实待传案例（直接调取实盘数据库核验）：</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
             <button class="btn-primary" style="font-size:17px;padding:10px 16px" onclick="momPresetCase('熊祉玥_钢琴4级.jpg','熊祉玥','cert','钢琴',4,'2023-11-15','中国音乐学院考级委员会','212023080020688823')">
               📄 案例1：熊祉玥_钢琴4级.jpg (自动抓出同音字「熊祉钥」)
@@ -730,16 +787,16 @@ const WEB_APP_HTML = `<!DOCTYPE html>
 
         <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px">
           <div>
-            <label style="font-size:17px">① 拖入图片或文件名</label>
+            <label style="font-size:17px">① 图片文件名</label>
             <input id="mom-up-filename" value="熊祉玥_钢琴4级.jpg" style="font-size:19px;padding:11px;font-weight:700" />
           </div>
           <div>
-            <label style="font-size:17px">② 考生姓名 (可只填姓)</label>
-            <input id="mom-up-name" value="熊祉玥" style="font-size:19px;padding:11px;font-weight:700" />
+            <label style="font-size:17px">② 考生姓名 (找不着可只填姓)</label>
+            <input id="mom-up-name" value="熊祉玥" style="font-size:19px;padding:11px;font-weight:700" onkeydown="if(event.key==='Enter') momStageCertOrPhoto()" />
           </div>
           <div>
             <label style="font-size:17px">③ 用途分类</label>
-            <select id="mom-up-kind" style="font-size:19px;padding:11px;font-weight:700">
+            <select id="mom-up-kind" style="font-size:19px;padding:11px;font-weight:700" onchange="momStageCertOrPhoto()">
               <option value="auto">🤖 自动识别 (按文件名/内容)</option>
               <option value="cert" selected>📜 纸质考级证书 (填证书1/证书2)</option>
               <option value="score_screenshot">📱 成绩查询手机截图 (填证书1/证书2)</option>
@@ -775,6 +832,14 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         </div>
 
         <div id="mom-stage-result" style="margin-top:16px"></div>
+
+        <!-- Shared Mom & Wife Today Upload Log -->
+        <div style="margin-top:18px;background:#f8fafc;border:2px solid #cbd5e1;border-radius:14px;padding:14px 16px">
+          <div style="font-size:19px;font-weight:800;color:#0f172a;margin-bottom:8px">
+            📋 今日已办妥清单（老妈与老婆实时共享进度，防止重复上传）：
+          </div>
+          <div id="mom-upload-log-box" style="font-size:17px;color:#475569">正在加载今日已传记录...</div>
+        </div>
       </div>
 
       <!-- USE CASE 2: TEACHER REGISTRATION FEE TALLY & PRE-EXAM FILING TABLE -->
@@ -935,7 +1000,142 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       setTimeout(() => el.classList.add('hidden'), 3400);
     }
 
+    let momSelectedImageBase64 = '';
+    let momWxPollTimer = null;
+
+    async function momCheckWeChatSession() {
+      const el = document.getElementById('mom-wx-session-status');
+      const badge = document.getElementById('mom-operator-badge');
+      const savedOp = localStorage.getItem('mea_operator_name');
+      if (savedOp && badge) {
+        badge.textContent = \`当前已登录：\${savedOp}（下次打开微信直接进入本页）\`;
+      }
+      if (!el) return;
+      try {
+        const st = await fetch('/official-sync/session-status').then(r => r.json());
+        if (st.has_active_session) {
+          el.innerHTML = \`🟢 <strong>国音考级后台微信已在线连接</strong>（会话ID: <code>\${st.session?.php_sess_id_masked || 'active'}</code> · 登录时间: \${(st.session?.authenticated_at || '').slice(0, 19).replace('T', ' ')}）— 可直接一键传证书/换照片！\`;
+          el.style.color = '#047857';
+        } else {
+          el.innerHTML = '🟡 <strong>查老师账单、算考前备案表免扫码直接可用！</strong>如需直接把证书/照片写入国音官网，请点右侧「📱 微信扫码连接国音后台」用老妈或老婆微信扫一下：';
+          el.style.color = '#b45309';
+        }
+      } catch {}
+    }
+
+    function momBindOperator(opName) {
+      localStorage.setItem('mea_operator_name', opName);
+      localStorage.setItem('mea_default_tab', 'mom');
+      const badge = document.getElementById('mom-operator-badge');
+      if (badge) badge.textContent = \`当前已绑定：\${opName}（以后点开链接自动进大字台）\`;
+      const pill = document.getElementById('role-identity-pill');
+      if (pill) pill.textContent = \`👵 \${opName} · 专属微信大字台\`;
+      showToast(\`✅ 已记住您的身份为「\${opName}」！以后在微信点开链接会自动直接打开本页。\`);
+    }
+
+    async function momStartWeChatLogin() {
+      const drawer = document.getElementById('mom-wx-qr-drawer');
+      const imgBox = document.getElementById('mom-wx-qr-img');
+      const hintBox = document.getElementById('mom-wx-qr-hint');
+      if (!drawer || !imgBox || !hintBox) return;
+      drawer.classList.remove('hidden');
+      imgBox.innerHTML = '⏳ 正在向国音考级后台请求微信登录二维码...';
+      hintBox.textContent = '⏳ 请稍候，二维码生成中...';
+      if (momWxPollTimer) clearInterval(momWxPollTimer);
+
+      try {
+        const res = await fetch('/official-sync/qr-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        }).then(r => r.json());
+
+        if (res.qr_image_base64) {
+          imgBox.innerHTML = \`<img src="\${res.qr_image_base64}" style="width:232px;height:232px;object-fit:contain;border-radius:10px" />\`;
+          hintBox.textContent = '📱 请拿老妈（朱老师）或老婆的手机微信扫一扫上方二维码，并在手机上点「确认登录」';
+        } else {
+          imgBox.textContent = '二维码获取失败，请再点一次';
+          return;
+        }
+
+        momWxPollTimer = setInterval(async () => {
+          try {
+            const p = await fetch('/official-sync/wxauth-poll', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ php_sess_id: res.php_sess_id, wxauth_token: res.wxauth_token })
+            }).then(r => r.json());
+
+            if (p.authenticated) {
+              clearInterval(momWxPollTimer);
+              localStorage.setItem('mea_default_tab', 'mom');
+              if (!localStorage.getItem('mea_operator_name')) {
+                localStorage.setItem('mea_operator_name', '老妈/老婆 (微信扫码已认证)');
+              }
+              hintBox.style.color = '#047857';
+              hintBox.textContent = '🎉 微信扫码登录成功！已连接「江西小戈尔文化艺术有限公司考级办管理后台」！';
+              setTimeout(() => drawer.classList.add('hidden'), 2200);
+              momCheckWeChatSession();
+              showToast('🎉 微信扫码登录成功！现在点绿色按钮可直接写入国音考级后台！');
+            }
+          } catch {}
+        }, 2000);
+      } catch (e) {
+        hintBox.textContent = '连接失败: ' + e.message;
+      }
+    }
+
+    function momHandleFileDrop(ev) {
+      ev.preventDefault();
+      const dz = document.getElementById('mom-drop-zone');
+      if (dz) dz.style.background = '#eff6ff';
+      if (ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length > 0) {
+        momHandleFileSelect(ev.dataTransfer.files);
+      }
+    }
+
+    function momHandleFileSelect(fileList) {
+      if (!fileList || fileList.length === 0) return;
+      const f = fileList[0];
+      document.getElementById('mom-up-filename').value = f.name;
+      // Parse filename convention if present (e.g. 熊祉玥_钢琴4级.jpg or 詹子妍.jpg)
+      const base = f.name.replace(/\\.[a-zA-Z0-9]+$/, '').trim();
+      if (base.includes('_')) {
+        const [nm, desc] = base.split('_', 2);
+        document.getElementById('mom-up-name').value = nm.trim();
+        if (desc.includes('成绩')) {
+          document.getElementById('mom-up-kind').value = 'score_screenshot';
+        } else {
+          document.getElementById('mom-up-kind').value = 'cert';
+          const lvM = desc.match(/([0-9]{1,2})级/);
+          if (lvM) document.getElementById('mom-up-level').value = lvM[1];
+          const maj = desc.replace(/([0-9]{1,2})级.*$/, '').trim();
+          if (maj) document.getElementById('mom-up-major').value = maj === '音基' ? '音乐基础知识' : maj;
+        }
+      } else if (/^[\\u4e00-\\u9fa5]{2,4}$/.test(base)) {
+        document.getElementById('mom-up-name').value = base;
+        document.getElementById('mom-up-kind').value = 'id_photo';
+      }
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        momSelectedImageBase64 = String(e.target.result || '');
+        const wrap = document.getElementById('mom-local-preview-wrap');
+        const img = document.getElementById('mom-local-preview-img');
+        const nmEl = document.getElementById('mom-local-preview-name');
+        if (wrap && img && nmEl) {
+          img.src = momSelectedImageBase64;
+          nmEl.textContent = \`本次选中图片：\${f.name} (\${Math.round(f.size / 1024)} KB)\`;
+          wrap.classList.remove('hidden');
+        }
+        momStageCertOrPhoto();
+      };
+      reader.readAsDataURL(f);
+    }
+
     function momPresetCase(filename, name, kind, major, level, dateStr, school, certNo) {
+      momSelectedImageBase64 = '';
+      document.getElementById('mom-local-preview-wrap')?.classList.add('hidden');
       document.getElementById('mom-up-filename').value = filename;
       document.getElementById('mom-up-name').value = name;
       document.getElementById('mom-up-kind').value = kind;
@@ -976,6 +1176,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
 
         const p = res.parsed || {};
         const studentsHtml = (res.matched_students || []).map(s => {
+          const latestExamId = s.recent_exams && s.recent_exams[0] ? s.recent_exams[0].exam_id : 0;
           const exRows = (s.recent_exams || []).map(e => {
             const certs = Array.isArray(e.certs_json) ? e.certs_json : [];
             const c1 = certs[0] && (certs[0].picture || certs[0].major_name) ? \`✅ 已有：\${certs[0].major_name || ''}\${certs[0].level || ''}级\` : '❌ 空缺 (待传证书1)';
@@ -986,11 +1187,16 @@ const WEB_APP_HTML = `<!DOCTYPE html>
             </div>\`;
           }).join('');
 
+          const newPhotoPreviewHtml = momSelectedImageBase64
+            ? \`<div><div style="font-size:14px;color:#1d4ed8;font-weight:700;margin-bottom:3px">本次新传图片</div><img src="\${momSelectedImageBase64}" style="width:74px;height:96px;object-fit:cover;border-radius:8px;border:3px solid #2563eb" /></div>\`
+            : '';
+
           return \`
             <div style="border:2px solid #16a34a;background:#f0fdf4;border-radius:14px;padding:16px;margin-top:10px">
               <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
                 <div style="display:flex;gap:14px;align-items:center">
-                  \${s.picture_proxy_url ? \`<div><div style="font-size:14px;color:#065f46;font-weight:700;margin-bottom:3px">当前后台原照</div><img src="\${s.picture_proxy_url}" style="width:70px;height:92px;object-fit:cover;border-radius:8px;border:2px solid #16a34a" /></div>\` : ''}
+                  \${s.picture_proxy_url ? \`<div><div style="font-size:14px;color:#065f46;font-weight:700;margin-bottom:3px">当前后台原照</div><img src="\${s.picture_proxy_url}" style="width:74px;height:96px;object-fit:cover;border-radius:8px;border:2px solid #16a34a" /></div>\` : ''}
+                  \${newPhotoPreviewHtml}
                   <div>
                     <div style="font-size:23px;font-weight:800;color:#064e3b">
                       👧 后台匹配考生：\${s.name_cn} <span style="font-size:18px;color:#047857">(考生ID: \${s.student_id} · 拼音: \${s.pinyin || '—'})</span>
@@ -1004,9 +1210,9 @@ const WEB_APP_HTML = `<!DOCTYPE html>
                     </div>
                   </div>
                 </div>
-                <button class="btn-primary" style="font-size:20px;padding:14px 22px;border-radius:12px"
-                  onclick="showToast('✅ 已将「' + '\${s.name_cn}' + '」的 ' + '\${p.filename}' + ' 加入国音后台直传队列 (STS -> OSS tlskkj -> ' + '\${p.target_slot}' + ')！')">
-                  ✅ 确认无误 · 一键写入「\${s.name_cn}」后台
+                <button class="btn-primary" id="mom-exec-btn-\${s.student_id}" style="font-size:20px;padding:14px 22px;border-radius:12px"
+                  onclick="momExecuteUpload(\${s.student_id}, '\${s.name_cn}', \${latestExamId}, '\${p.kind}', \${p.cert_index || 0}, '\${p.major_name || ''}', '\${p.level || ''}', '\${p.date || ''}', '\${p.school || ''}', '\${p.cert_no || ''}', '\${s.picture_url || ''}')">
+                  ✅ 确认无误 · 一键上传写入「\${s.name_cn}」后台
                 </button>
               </div>
               <div style="margin-top:10px;background:#fff;padding:10px 14px;border-radius:10px;border:1px solid #bbf7d0">
@@ -1023,6 +1229,79 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       } catch (e) {
         box.innerHTML = '<div style="font-size:19px;color:red">核验出错: ' + e.message + '</div>';
       }
+    }
+
+    async function momExecuteUpload(studentId, studentName, examId, kind, certIndex, majorName, level, dateStr, school, certNo, existingPicUrl) {
+      const btn = document.getElementById('mom-exec-btn-' + studentId);
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ 正在上传至阿里云 OSS 并写入后台...';
+      }
+      const opName = localStorage.getItem('mea_operator_name') || '老妈/老婆微信台';
+      try {
+        const res = await fetch('/official-sync/execute-cert-or-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            operator_name: opName,
+            student_id: Number(studentId),
+            student_name: studentName,
+            exam_id: Number(examId || 0),
+            filename: document.getElementById('mom-up-filename')?.value || '',
+            kind: kind,
+            cert_index: Number(certIndex || 0),
+            major_name: majorName,
+            level: level,
+            date: dateStr,
+            school: school,
+            cert_no: certNo,
+            image_base64: momSelectedImageBase64 || '',
+            existing_picture_url: existingPicUrl || ''
+          })
+        }).then(r => r.json());
+
+        if (btn) {
+          btn.disabled = false;
+          btn.style.background = '#047857';
+          btn.textContent = \`🎉 已成功写入「\${studentName}」后台！\`;
+        }
+        showToast(\`🎉 「\${studentName}」写入成功！\${res.official_msg || ''}\`);
+        momStageCertOrPhoto();
+        momLoadUploadLog();
+      } catch (e) {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '重试上传';
+        }
+        showToast('上传失败: ' + e.message);
+      }
+    }
+
+    async function momLoadUploadLog() {
+      const box = document.getElementById('mom-upload-log-box');
+      if (!box) return;
+      try {
+        const res = await fetch('/official-sync/mom-upload-log').then(r => r.json());
+        const items = res.items || [];
+        if (items.length === 0) {
+          box.innerHTML = '<div style="font-size:17px;color:#64748b">今日暂无上传记录。您或老妈每点一次「确认无误 · 一键上传写入」，这里就会自动打勾记录，不怕两个人重复传！</div>';
+          return;
+        }
+        box.innerHTML = items.slice(0, 12).map((it, idx) => \`
+          <div style="padding:8px 10px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:18px">
+            <div>
+              <span class="badge badge-confirmed" style="font-size:15px">✅ 已办妥 #\${items.length - idx}</span>
+              <strong>\${it.student_name}</strong> (ID:\${it.student_id})
+              → <strong>\${it.target_slot}</strong>
+              \${it.major_name ? \` · \${it.major_name}\${it.level ? it.level + '级' : ''}\` : ''}
+              \${it.cert_no ? \` · 编号:<code>\${it.cert_no}</code>\` : ''}
+            </div>
+            <div style="font-size:15px;color:#047857">
+              👤 操作人：<strong>\${it.operator_name}</strong> · \${String(it.created_at || '').slice(11, 19)} · \${it.official_msg || ''}
+            </div>
+          </div>
+        \`).join('');
+      } catch {}
     }
 
     function momQuickTeacherReport(agentName, seasonCode) {
@@ -1148,8 +1427,10 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       });
       refreshData();
       if (tab === 'mom') {
+        momCheckWeChatSession();
         momStageCertOrPhoto();
         momLoadTeacherFeeReport();
+        momLoadUploadLog();
       }
       if (tab === 'archive') searchHistoricalStudent('archive');
       if (tab === 'teacher') initTeacherTab();
@@ -1907,9 +2188,16 @@ const WEB_APP_HTML = `<!DOCTYPE html>
 
       const modeParam = params.get('mode') || '';
       if (modeParam === 'mom') initialTab = 'mom';
+      if (!params.get('tab') && !invite && !ref && !roleParam && localStorage.getItem('mea_default_tab') === 'mom') {
+        initialTab = 'mom';
+      }
       if (initialTab === 'mom') {
         document.getElementById('chip-admin')?.classList.remove('active');
         document.getElementById('chip-mom')?.classList.add('active');
+        const savedOp = localStorage.getItem('mea_operator_name');
+        if (savedOp) {
+          pill.textContent = \`👵 \${savedOp} · 专属微信大字台\`;
+        }
       }
 
       recalcParentCheckout();
