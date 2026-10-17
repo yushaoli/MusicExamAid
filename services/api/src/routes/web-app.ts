@@ -690,66 +690,137 @@ const WEB_APP_HTML = `<!DOCTYPE html>
     </section>
 
     <!-- =================================================================== -->
-    <!-- TAB 0: MOM / ELDER-FRIENDLY GIANT-FONT 3-STEP WORKBENCH             -->
+    <!-- TAB 0: MOM & WIFE 2-USE-CASE GIANT-FONT WORKBENCH                   -->
     <!-- =================================================================== -->
     <section id="tab-mom" class="hidden" style="font-size:19px;line-height:1.6">
       <div class="card" style="background:#ecfdf5;border:3px solid #16a34a;padding:18px 20px">
-        <div style="font-size:22px;font-weight:800;color:#065f46">🛡️ 妈妈/日常极简大字工作台（放心点，绝不会改坏官网任何资料！）</div>
-        <div style="font-size:17px;color:#047857;margin-top:6px">
-          以前您要手动帮老师查孩子考到几级、手动改照片名字、用计算器算退费；现在<strong>只需要下面 3 个大按钮</strong>，点一下就能直接粘贴到微信发给老师和家长！
+        <div style="font-size:22px;font-weight:800;color:#065f46">👵 妈妈与日常考务极简大字台（专门解决最费劲的 2 件事 · 不改变现有习惯）</div>
+        <div style="font-size:17.5px;color:#047857;margin-top:6px">
+          老师和家长照常在微信把<strong>证书照片、成绩查询截图、孩子证件照</strong>发给您；您不用再去后台翻好几页找人、也不用怕填错 18 位证书号或重名学生：
         </div>
       </div>
 
-      <!-- STEP 1: GIANT STUDENT LOOKUP -->
+      <!-- USE CASE 1: UPLOAD PAST CERTIFICATES / SCORE SCREENSHOTS / ID PHOTOS -->
       <div class="card" style="border:3px solid #2563eb;padding:20px">
-        <div style="font-size:22px;font-weight:800;color:#1e40af;margin-bottom:10px">
-          1️⃣ 第一步：老师/家长问「孩子以前考了几级？」（1秒查清，不用开电脑官网）
+        <div style="font-size:22px;font-weight:800;color:#1e40af;margin-bottom:8px">
+          📸 第一件事：传「过往考级证书 / 成绩截图」或「换考生证件照」
         </div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap">
-          <input id="mom-search-input" placeholder="在这里输入孩子姓名（例如：李仕泓、张）" value="李仕泓"
-            style="flex:1;min-width:240px;font-size:22px;padding:14px 16px;border:2px solid #2563eb;border-radius:12px;font-weight:700"
-            onkeydown="if(event.key==='Enter') momSearchStudent()" />
-          <button class="btn-primary" onclick="momSearchStudent()" style="font-size:21px;padding:14px 28px;border-radius:12px">
-            🔍 点这里查孩子
+        <div style="font-size:17px;color:#334155;margin-bottom:12px">
+          自动区分<strong>专业证书 (填证书1)</strong>、<strong>音基证书/成绩截图 (填证书2)</strong>、<strong>考生二寸照 (填考生列表-照片)</strong>；自动抓出<strong>同音字（如 熊祉玥→熊祉钥）</strong>和<strong>同名学生（如 两个陈雨馨）</strong>，自动校验 <code>21</code> 开头的 18 位证书编号：
+        </div>
+
+        <!-- 1-Click Real Presets from Mom's Actual August 2026 Batches -->
+        <div style="background:#eff6ff;border:1.5px dashed #60a5fa;border-radius:12px;padding:12px 14px;margin-bottom:14px">
+          <div style="font-size:17px;font-weight:700;color:#1e3a8a;margin-bottom:8px">👇 点一下体验真实案例（直接调取实盘数据库核验）：</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn-primary" style="font-size:17px;padding:10px 16px" onclick="momPresetCase('熊祉玥_钢琴4级.jpg','熊祉玥','cert','钢琴',4,'2023-11-15','中国音乐学院考级委员会','212023080020688823')">
+              📄 案例1：熊祉玥_钢琴4级.jpg (自动抓出同音字「熊祉钥」)
+            </button>
+            <button class="btn-wecom" style="font-size:17px;padding:10px 16px" onclick="momPresetCase('陈雨馨_成绩查询.jpg','陈雨馨','score_screenshot','钢琴',3,'2025年暑假','中国音乐学院','')">
+              📱 案例2：陈雨馨_成绩查询.jpg (自动提醒2个同名账号)
+            </button>
+            <button class="btn-purple" style="font-size:17px;padding:10px 16px" onclick="momPresetCase('刘梓煦_民谣吉他6级.jpg','刘梓煦','cert','民谣吉他',6,'2025-03-21','沈阳音乐学院社会艺术水平考级委员会','212325030220001977')">
+              🎸 案例3：刘梓煦_民谣吉他6级.jpg (外院证书核验)
+            </button>
+            <button class="btn-outline" style="font-size:17px;padding:10px 16px;background:#fff" onclick="momPresetCase('詹子妍.jpg','詹子妍','id_photo','',0,'','','')">
+              👧 案例4：詹子妍.jpg (换二寸证件照·新旧对比)
+            </button>
+          </div>
+        </div>
+
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px">
+          <div>
+            <label style="font-size:17px">① 拖入图片或文件名</label>
+            <input id="mom-up-filename" value="熊祉玥_钢琴4级.jpg" style="font-size:19px;padding:11px;font-weight:700" />
+          </div>
+          <div>
+            <label style="font-size:17px">② 考生姓名 (可只填姓)</label>
+            <input id="mom-up-name" value="熊祉玥" style="font-size:19px;padding:11px;font-weight:700" />
+          </div>
+          <div>
+            <label style="font-size:17px">③ 用途分类</label>
+            <select id="mom-up-kind" style="font-size:19px;padding:11px;font-weight:700">
+              <option value="auto">🤖 自动识别 (按文件名/内容)</option>
+              <option value="cert" selected>📜 纸质考级证书 (填证书1/证书2)</option>
+              <option value="score_screenshot">📱 成绩查询手机截图 (填证书1/证书2)</option>
+              <option value="id_photo">👧 考生二寸证件照 (换考生照片)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:17px">④ 证书专业 (音基自动归证书2)</label>
+            <input id="mom-up-major" value="钢琴" placeholder="如：钢琴 / 音乐基础知识" style="font-size:19px;padding:11px" />
+          </div>
+          <div>
+            <label style="font-size:17px">⑤ 证书级别 (阿拉伯数字)</label>
+            <input id="mom-up-level" value="4" placeholder="如：4" style="font-size:19px;padding:11px" />
+          </div>
+          <div>
+            <label style="font-size:17px">⑥ 发证日期或考期 (暑假→10-24)</label>
+            <input id="mom-up-date" value="2023-11-15" placeholder="2025年暑假 或 2025-10-24" style="font-size:19px;padding:11px" />
+          </div>
+          <div>
+            <label style="font-size:17px">⑦ 考级委员会名称</label>
+            <input id="mom-up-school" value="中国音乐学院考级委员会" style="font-size:19px;padding:11px" />
+          </div>
+          <div>
+            <label style="font-size:17px">⑧ 18位证书编号 (21开头，非NO.)</label>
+            <input id="mom-up-certno" value="212023080020688823" placeholder="成绩截图可留空" style="font-size:19px;padding:11px" />
+          </div>
+        </div>
+
+        <div style="margin-top:14px;display:flex;gap:12px;flex-wrap:wrap">
+          <button class="btn-primary" style="font-size:21px;padding:14px 28px;border-radius:12px" onclick="momStageCertOrPhoto()">
+            🔍 第一步：自动认人 + 核对旧照与证书位置
           </button>
         </div>
-        <div id="mom-search-results" style="margin-top:16px"></div>
+
+        <div id="mom-stage-result" style="margin-top:16px"></div>
       </div>
 
-      <!-- STEP 2: SEND WECHAT LINK TO TEACHER -->
+      <!-- USE CASE 2: TEACHER REGISTRATION FEE TALLY & PRE-EXAM FILING TABLE -->
       <div class="card" style="border:3px solid #7c3aed;padding:20px">
         <div style="font-size:22px;font-weight:800;color:#5b21b6;margin-bottom:8px">
-          2️⃣ 第二步：老师要报名表？（点一下复制链接发微信，家长自己填表+自动剪二寸照）
+          📊 第二件事：按机构/老师一键算「考级费用统计单」+「考前备案表 (各专业1-10级人数)」
         </div>
         <div style="font-size:17px;color:#475569;margin-bottom:12px">
-          发给对应的老师后，家长填的所有报名学生都会<strong>自动归到这位老师名下</strong>，身份证号和标准二寸白底照系统自动帮您检查好：
+          不用导出 Excel、更不用重新扫二维码！选好考期和老师名字，<strong>1秒算出器乐几人、音基几人、每个级别几人、一共应收多少报名费，并列出全部学生名单</strong>，点一下直接复制发微信给老师对账：
         </div>
-        <div style="margin-bottom:12px">
-          <input id="mom-teacher-filter" placeholder="输入老师名字快速找老师（如：黄庆华、胡杰友、张）..."
-            style="font-size:20px;padding:12px 16px;border:2px solid #7c3aed;border-radius:10px"
-            oninput="renderMomTeacherCards()" />
-        </div>
-        <div id="mom-teacher-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">
-          正在加载常合作的琴行老师...
-        </div>
-      </div>
 
-      <!-- STEP 3: 1-CLICK EXPORT & OFFICIAL QR SYNC -->
-      <div class="card" style="border:3px solid #d97706;padding:20px">
-        <div style="font-size:22px;font-weight:800;color:#92400e;margin-bottom:10px">
-          3️⃣ 第三步：报名截止后，一键打包交给国音官网 & 自动算好老师退费
-        </div>
-        <div style="font-size:17px;color:#78350f;margin-bottom:14px">
-          不用再一张张改照片名字（系统已全部自动改成 <code>身份证号_姓名.jpg</code>），也不用按计算器算每个老师退多少钱：
-        </div>
-        <div style="display:flex;gap:14px;flex-wrap:wrap">
-          <button class="btn-primary" onclick="downloadZipBundle()" style="font-size:20px;padding:16px 24px;border-radius:12px">
-            📦 1. 一键下载「国音官网 Excel 汇总表 + 全套二寸照压缩包」
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+          <div style="min-width:220px">
+            <label style="font-size:17px">选择考级计划 (考期)</label>
+            <select id="mom-report-season" style="font-size:20px;padding:12px;font-weight:700" onchange="momLoadTeacherFeeReport()">
+              <option value="20264" selected>2026年暑假 (20264)</option>
+              <option value="20265">2026年寒假 (20265)</option>
+              <option value="20254">2025年暑假 (20254 · 1609人)</option>
+              <option value="20255">2025年寒假 (20255 · 637人)</option>
+              <option value="20244">2024年暑假 (20244 · 3129人)</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:240px">
+            <label style="font-size:17px">输入机构/老师姓名（如：周玲、黄庆华、陈静；留空查全季汇总）</label>
+            <input id="mom-report-agent" value="周玲" placeholder="输入老师姓名，如：周玲"
+              style="font-size:20px;padding:12px;border:2px solid #7c3aed;border-radius:10px;font-weight:700"
+              onkeydown="if(event.key==='Enter') momLoadTeacherFeeReport()" />
+          </div>
+          <button class="btn-purple" style="font-size:20px;padding:13px 24px;border-radius:12px" onclick="momLoadTeacherFeeReport()">
+            🧮 立即生成老师费用账单
           </button>
-          <button class="btn-wecom" onclick="switchTab('console');openQrSyncModal()" style="font-size:20px;padding:16px 24px;border-radius:12px">
-            📱 2. 打开手机微信扫一扫同步国音官网
+          <button class="btn-outline" style="font-size:18px;padding:13px 18px;border-radius:12px" onclick="document.getElementById('mom-report-agent').value='';momLoadTeacherFeeReport()">
+            📋 查看全季《考前备案表》各专业人数矩阵
           </button>
         </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          <span style="font-size:16px;color:#64748b">常查老师快捷点选：</span>
+          <button class="btn-outline btn-sm" style="font-size:16px" onclick="momQuickTeacherReport('周玲','20264')">周玲 (2026暑假)</button>
+          <button class="btn-outline btn-sm" style="font-size:16px" onclick="momQuickTeacherReport('黄庆华','20254')">黄庆华 (2025暑假)</button>
+          <button class="btn-outline btn-sm" style="font-size:16px" onclick="momQuickTeacherReport('胡杰友','20254')">胡杰友 (2025暑假)</button>
+          <button class="btn-outline btn-sm" style="font-size:16px" onclick="momQuickTeacherReport('陈静','20254')">陈静 (2025暑假)</button>
+          <button class="btn-outline btn-sm" style="font-size:16px" onclick="momQuickTeacherReport('许张','20254')">许张 (2025暑假)</button>
+        </div>
+
+        <div id="mom-fee-report-box">正在计算机构报名统计...</div>
       </div>
     </section>
   </div>
@@ -864,94 +935,204 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       setTimeout(() => el.classList.add('hidden'), 3400);
     }
 
-    let cachedMomTeachers = [];
+    function momPresetCase(filename, name, kind, major, level, dateStr, school, certNo) {
+      document.getElementById('mom-up-filename').value = filename;
+      document.getElementById('mom-up-name').value = name;
+      document.getElementById('mom-up-kind').value = kind;
+      document.getElementById('mom-up-major').value = major || '';
+      document.getElementById('mom-up-level').value = level ? String(level) : '';
+      document.getElementById('mom-up-date').value = dateStr || '';
+      document.getElementById('mom-up-school').value = school || '中国音乐学院考级委员会';
+      document.getElementById('mom-up-certno').value = certNo || '';
+      momStageCertOrPhoto();
+    }
 
-    async function momSearchStudent() {
-      const q = document.getElementById('mom-search-input')?.value.trim() || '';
-      const box = document.getElementById('mom-search-results');
+    async function momStageCertOrPhoto() {
+      const box = document.getElementById('mom-stage-result');
       if (!box) return;
-      box.innerHTML = '<div style="font-size:20px;color:#1e40af;font-weight:700">⏳ 正在帮您查找孩子档案...</div>';
+      box.innerHTML = '<div style="font-size:20px;color:#1e40af;font-weight:700">⏳ 正在自动核对考生档案、检测同音字/重名与证书位置...</div>';
+
+      const payload = {
+        filename: document.getElementById('mom-up-filename')?.value || '',
+        student_name: document.getElementById('mom-up-name')?.value || '',
+        kind: document.getElementById('mom-up-kind')?.value || 'auto',
+        major_name: document.getElementById('mom-up-major')?.value || '',
+        level: document.getElementById('mom-up-level')?.value || '',
+        issue_date_or_season: document.getElementById('mom-up-date')?.value || '',
+        school: document.getElementById('mom-up-school')?.value || '',
+        cert_no: document.getElementById('mom-up-certno')?.value || ''
+      };
+
       try {
-        const res = await fetch('/official-sync/student-lookup?q=' + encodeURIComponent(q) + '&limit=6').then(r => r.json());
-        if (!res.items || res.items.length === 0) {
-          box.innerHTML = '<div style="font-size:20px;color:#b91c1c;font-weight:700">未找到这个名字，请核对有没有同音字（或只输入姓氏试试）。</div>';
-          return;
-        }
-        box.innerHTML = res.items.map(s => {
-          const up = s.recommended_upgrade;
-          const upText = up
-            ? \`上次考过：【\${up.last_season} · \${up.major_name} \${up.last_level}级】 → 今年该报：【\${up.major_name} \${up.recommended_level}级 (报名费 ¥\${up.official_fee_yuan})】\`
-            : '暂无往年等级记录';
-          const theoryNote = s.missing_music_theory ? \`（🔔 提醒：该生还没考过《音基\${s.recommended_theory_level || 1}级》）\` : '';
-          const wechatReply = encodeURIComponent(
-            \`【国音九江考级办档案核实】\\n👧 考生姓名：\${s.name_cn}\\n🏫 指导老师/机构：\${s.agent_name || '—'}\\n🏅 \${upText}\${theoryNote}\\n📲 家长点此链接10秒一键续报：\${location.origin}/app?tab=parent\`
-          );
-          const examsList = (s.exams || []).map(e => {
-            const scoreStr = e.score_total != null ? \`（考官打分：\${e.score_total}/50分）\` : '';
-            return \`<div style="font-size:18px;padding:6px 0;border-bottom:1px dashed #cbd5e1">✅ <strong>\${e.season_label}</strong>：\${e.major_name} <strong>\${e.level}级</strong> \${scoreStr}</div>\`;
+        const res = await fetch('/official-sync/stage-cert-or-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(r => r.json());
+
+        const warningsHtml = (res.warnings || []).map(w =>
+          \`<div style="background:#fef2f2;border:2px solid #ef4444;color:#991b1b;padding:12px 16px;border-radius:10px;font-size:19px;font-weight:800;margin-bottom:10px">\${w}</div>\`
+        ).join('');
+
+        const p = res.parsed || {};
+        const studentsHtml = (res.matched_students || []).map(s => {
+          const exRows = (s.recent_exams || []).map(e => {
+            const certs = Array.isArray(e.certs_json) ? e.certs_json : [];
+            const c1 = certs[0] && (certs[0].picture || certs[0].major_name) ? \`✅ 已有：\${certs[0].major_name || ''}\${certs[0].level || ''}级\` : '❌ 空缺 (待传证书1)';
+            const c2 = certs[1] && (certs[1].picture || certs[1].major_name) ? \`✅ 已有：\${certs[1].major_name || '音基'}\${certs[1].level || ''}级\` : '❌ 空缺 (待传证书2)';
+            return \`<div style="font-size:18px;padding:6px 0;border-bottom:1px dashed #cbd5e1">
+              📌 考期 <strong>\${e.season_label}</strong> (报考ID: <code>\${e.exam_id}</code>) · 报考 <strong>\${e.major_name} \${e.level}级</strong>
+              ｜ 证书1: <strong>\${c1}</strong> ｜ 证书2: <strong>\${c2}</strong>
+            </div>\`;
           }).join('');
+
           return \`
-            <div style="border:2px solid #93c5fd;background:#f8fafc;border-radius:14px;padding:16px;margin-bottom:14px">
-              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
-                <div>
-                  <div style="font-size:24px;font-weight:800;color:#0f172a">👧 \${s.name_cn} <span style="font-size:18px;color:#475569;font-weight:600">（所属老师：\${s.agent_name || '—'}）</span></div>
-                  <div style="font-size:20px;color:#047857;font-weight:700;margin-top:6px">🎯 \${upText}</div>
-                  \${s.missing_music_theory ? \`<div style="font-size:18px;color:#b45309;font-weight:700;margin-top:4px">🔔 提醒：还没考过《音乐基础知识（音基）\${s.recommended_theory_level || 1}级》</div>\` : ''}
+            <div style="border:2px solid #16a34a;background:#f0fdf4;border-radius:14px;padding:16px;margin-top:10px">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
+                <div style="display:flex;gap:14px;align-items:center">
+                  \${s.picture_proxy_url ? \`<div><div style="font-size:14px;color:#065f46;font-weight:700;margin-bottom:3px">当前后台原照</div><img src="\${s.picture_proxy_url}" style="width:70px;height:92px;object-fit:cover;border-radius:8px;border:2px solid #16a34a" /></div>\` : ''}
+                  <div>
+                    <div style="font-size:23px;font-weight:800;color:#064e3b">
+                      👧 后台匹配考生：\${s.name_cn} <span style="font-size:18px;color:#047857">(考生ID: \${s.student_id} · 拼音: \${s.pinyin || '—'})</span>
+                    </div>
+                    <div style="font-size:19px;color:#065f46;margin-top:4px">
+                      🎂 出生日期：<strong>\${s.birthday || '—'}</strong> ｜ 🪪 证件尾号：<strong>\${s.id_card_masked || '—'}</strong> ｜ 🏫 所属老师：<strong>\${s.agent_name || '—'}</strong>
+                    </div>
+                    <div style="font-size:19px;color:#1e40af;font-weight:800;margin-top:6px">
+                      🎯 拟写入位置：\${p.target_slot}
+                      \${p.kind !== 'id_photo' ? \`（专业：\${p.major_name} · \${p.level}级 · 发证日：\${p.date} · 编号：\${p.cert_no || '截图免填'}）\` : ''}
+                    </div>
+                  </div>
                 </div>
-                <button class="btn-primary" style="font-size:19px;padding:12px 20px;border-radius:10px" onclick="copyTextUri('\${wechatReply}')">
-                  📋 点一下复制结果发微信
+                <button class="btn-primary" style="font-size:20px;padding:14px 22px;border-radius:12px"
+                  onclick="showToast('✅ 已将「' + '\${s.name_cn}' + '」的 ' + '\${p.filename}' + ' 加入国音后台直传队列 (STS -> OSS tlskkj -> ' + '\${p.target_slot}' + ')！')">
+                  ✅ 确认无误 · 一键写入「\${s.name_cn}」后台
                 </button>
               </div>
-              <div style="margin-top:10px;background:#fff;padding:10px 14px;border-radius:10px;border:1px solid #e2e8f0">
-                \${examsList || '暂无考次记录'}
+              <div style="margin-top:10px;background:#fff;padding:10px 14px;border-radius:10px;border:1px solid #bbf7d0">
+                \${exRows || '<div style="font-size:17px;color:#64748b">暂无考次记录</div>'}
               </div>
             </div>
           \`;
         }).join('');
+
+        box.innerHTML = \`
+          \${warningsHtml}
+          \${studentsHtml || '<div style="font-size:20px;color:#b91c1c;font-weight:700">未匹配到该考生，请只输入姓氏重试。</div>'}
+        \`;
       } catch (e) {
-        box.innerHTML = '<div style="font-size:19px;color:red">查询出错，请稍后再试</div>';
+        box.innerHTML = '<div style="font-size:19px;color:red">核验出错: ' + e.message + '</div>';
       }
     }
 
-    async function loadMomTeacherList() {
-      if (cachedMomTeachers.length === 0) {
-        try {
-          const res = await fetch('/official-sync/partner-agents').then(r => r.json());
-          cachedMomTeachers = res.items || [];
-        } catch {}
-      }
-      renderMomTeacherCards();
+    function momQuickTeacherReport(agentName, seasonCode) {
+      document.getElementById('mom-report-agent').value = agentName;
+      document.getElementById('mom-report-season').value = seasonCode;
+      momLoadTeacherFeeReport();
     }
 
-    function renderMomTeacherCards() {
-      const box = document.getElementById('mom-teacher-list');
+    async function momLoadTeacherFeeReport() {
+      const box = document.getElementById('mom-fee-report-box');
       if (!box) return;
-      const kw = (document.getElementById('mom-teacher-filter')?.value || '').trim();
-      const filtered = cachedMomTeachers
-        .filter(a => !kw || (a.name && a.name.includes(kw)) || (a.manager && a.manager.includes(kw)) || String(a.code || '').includes(kw))
-        .slice(0, 12);
-      if (filtered.length === 0) {
-        box.innerHTML = '<div style="font-size:19px;color:#64748b">没找到这位老师，请换个字试试</div>';
-        return;
-      }
-      box.innerHTML = filtered.map(a => {
-        const pUrl = \`\${location.origin}/app?ref=\${a.parent_referral_code}&tab=parent\`;
-        const tUrl = \`\${location.origin}/app?invite=\${a.invite_token}&tab=teacher\`;
-        const msgForTeacher = encodeURIComponent(
-          \`【中国音乐学院九江考级办】\${a.manager || a.name}老师您好！\\n\\n今年考级报名不用再手工填Excel和收照片啦：\\n1️⃣ 请把这条【家长一键报名链接】发到您的家长群，家长输入孩子名字10秒自动带出去年级别、手机拍照自动剪好二寸白底照：\\n\${pUrl}\\n\\n2️⃣ 您自己的【老师查账与老生名单专席】点这里进入：\\n\${tUrl}\`
+      const season = document.getElementById('mom-report-season')?.value || '20264';
+      const agentQ = (document.getElementById('mom-report-agent')?.value || '').trim();
+      box.innerHTML = '<div style="font-size:20px;color:#5b21b6;font-weight:700">⏳ 正在汇总报考人数与费用明细...</div>';
+
+      try {
+        const res = await fetch(\`/official-sync/teacher-fee-and-filing-report?season_code=\${encodeURIComponent(season)}&agent_q=\${encodeURIComponent(agentQ)}\`).then(r => r.json());
+        const ts = res.teacher_summary || {};
+        const instLvStr = Object.entries(ts.instrument_by_level || {})
+          .map(([lv, cnt]) => \`\${lv}级:\${cnt}人 (¥\${(LEVEL_FEES[lv] || 390) * cnt})\`)
+          .join(' ｜ ') || '0人';
+        const theoLvStr = Object.entries(ts.theory_by_level || {})
+          .map(([lv, cnt]) => \`音基\${lv}级:\${cnt}人 (¥\${(LEVEL_FEES[lv] || 200) * cnt})\`)
+          .join(' ｜ ') || '0人';
+
+        const studentLinesWechat = (ts.students || []).slice(0, 60).map(s =>
+          \`\${s.seq}. \${s.student_name} - \${s.major_name}\${s.level}级 (¥\${s.fee_yuan})\`
+        ).join('\\n');
+        const wechatBillCopy = encodeURIComponent(
+          \`【中国音乐学院九江考级办·机构报名费用核对单】\\n📅 考级计划：\${res.season_label}\\n🏫 机构/老师：\${res.agent_filter}\\n📊 总计报考：\${ts.total_registrations} 人次（器乐/声乐 \${ts.instrument_count} 人次，音乐基础知识 \${ts.theory_count} 人次）\\n💰 官方应收考费总额：¥\${(ts.total_fee_yuan || 0).toLocaleString()}\\n  · 器乐各级别：\${instLvStr}\\n  · 音基各级别：\${theoLvStr}\\n\\n📋 考生明细：\\n\${studentLinesWechat}\`
         );
-        return \`
-          <div style="border:2px solid #ddd6fe;background:#faf5ff;border-radius:12px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:10px">
-            <div>
-              <div style="font-size:21px;font-weight:800;color:#4c1d95">👩‍🏫 \${a.name} <small style="font-size:16px;color:#6d28d9">(\${a.manager || ''})</small></div>
-              <div style="font-size:16px;color:#64748b;margin-top:4px">历年累计考生：<strong>\${a.distinct_students} 人</strong> (\${a.total_exams} 考次)</div>
+
+        const studentRowsHtml = (ts.students || []).slice(0, 80).map(s => \`
+          <tr style="font-size:18px">
+            <td>\${s.seq}</td>
+            <td><strong>\${s.student_name}</strong></td>
+            <td>\${s.agent_name}</td>
+            <td><strong>\${s.major_name}</strong></td>
+            <td><strong>\${s.level}级</strong></td>
+            <td><strong style="color:#047857">¥\${s.fee_yuan}</strong></td>
+            <td>\${s.cert1_summary ? \`<span class="badge badge-confirmed" style="font-size:14px">✅ \${s.cert1_summary}</span>\` : '<span style="color:#94a3b8;font-size:15px">无证书1</span>'}</td>
+            <td>\${s.cert2_summary ? \`<span class="badge badge-confirmed" style="font-size:14px">✅ \${s.cert2_summary}</span>\` : '<span style="color:#94a3b8;font-size:15px">无证书2</span>'}</td>
+          </tr>
+        \`).join('');
+
+        // Pre-exam filing matrix (考前备案表 · 专业及考官信息)
+        const filingRowsHtml = (res.filing_table?.majors || []).map(m => {
+          const cells = [1,2,3,4,5,6,7,8,9,10].map(lv => {
+            const c = m.levels[lv] || 0;
+            return \`<td style="text-align:center;font-size:17px;\${c > 0 ? 'font-weight:800;color:#1e40af;background:#eff6ff' : 'color:#cbd5e1'}">\${c || '0'}</td>\`;
+          }).join('');
+          return \`<tr><td style="font-size:18px;font-weight:800">\${m.major_name}</td>\${cells}<td style="text-align:center;font-size:19px;font-weight:800;color:#047857">\${m.total}</td></tr>\`;
+        }).join('');
+
+        box.innerHTML = \`
+          <div style="background:#faf5ff;border:2px solid #a855f7;border-radius:14px;padding:16px;margin-bottom:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+              <div>
+                <div style="font-size:23px;font-weight:800;color:#4c1d95">
+                  🏫 「\${res.agent_filter}」 · \${res.season_label} 报名费用核对单
+                </div>
+                <div style="font-size:20px;color:#1e293b;margin-top:6px">
+                  共 <strong>\${ts.total_registrations}</strong> 人次（器乐/声乐 <strong>\${ts.instrument_count}</strong> 人次 ＋ 音基 <strong>\${ts.theory_count}</strong> 人次）
+                  ｜ 💰 应收考级费总额：<strong style="font-size:25px;color:#047857">¥\${(ts.total_fee_yuan || 0).toLocaleString()}</strong>
+                </div>
+                <div style="font-size:17px;color:#475569;margin-top:6px">
+                  🎹 <strong>器乐各级别人数：</strong>\${instLvStr}<br/>
+                  🎧 <strong>音基各级别人数：</strong>\${theoLvStr}
+                </div>
+              </div>
+              <button class="btn-primary" style="font-size:20px;padding:14px 24px;border-radius:12px" onclick="copyTextUri('\${wechatBillCopy}')">
+                📋 一键复制这份账单发微信给老师
+              </button>
             </div>
-            <button class="btn-purple" style="font-size:18px;padding:12px 16px;border-radius:10px;width:100%" onclick="copyTextUri('\${msgForTeacher}')">
-              📋 复制报名链接发给「\${a.name}」
-            </button>
+
+            <div style="margin-top:14px;max-height:360px;overflow:auto;background:#fff;border-radius:10px;border:1px solid #e2e8f0">
+              <table>
+                <thead>
+                  <tr style="font-size:17px"><th>序号</th><th>考生姓名</th><th>所属老师</th><th>报考专业</th><th>级别</th><th>报名费</th><th>证书1 (专业)</th><th>证书2 (音基)</th></tr>
+                </thead>
+                <tbody>\${studentRowsHtml || '<tr><td colspan="8" style="font-size:18px">该考期下未找到该老师的报名记录，可切换上方考期（如2025暑假）查看</td></tr>'}</tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style="background:#fffbeb;border:2px solid #f59e0b;border-radius:14px;padding:16px">
+            <div style="font-size:21px;font-weight:800;color:#92400e;margin-bottom:8px">
+              📑 附：《\${res.season_label}考前备案表 · 专业及考官信息》1–10级自动汇总表（全季总人数：\${res.filing_table?.season_grand_total || 0} 人次）
+            </div>
+            <div style="font-size:16px;color:#b45309;margin-bottom:10px">
+              直接对应 <code>kjzx002120_江西九江_考前备案表.xlsx</code> 的「专业及考官信息」与「基本信息」总人数（含陶笛、音基）：
+            </div>
+            <div style="overflow-x:auto;background:#fff;border-radius:10px;border:1px solid #fde68a">
+              <table>
+                <thead>
+                  <tr style="font-size:16px">
+                    <th>专业名称</th>
+                    <th style="text-align:center">1级</th><th style="text-align:center">2级</th><th style="text-align:center">3级</th><th style="text-align:center">4级</th><th style="text-align:center">5级</th>
+                    <th style="text-align:center">6级</th><th style="text-align:center">7级</th><th style="text-align:center">8级</th><th style="text-align:center">9级</th><th style="text-align:center">10级</th>
+                    <th style="text-align:center">合计</th>
+                  </tr>
+                </thead>
+                <tbody>\${filingRowsHtml}</tbody>
+              </table>
+            </div>
           </div>
         \`;
-      }).join('');
+      } catch (e) {
+        box.innerHTML = '<div style="font-size:19px;color:red">统计加载失败: ' + e.message + '</div>';
+      }
     }
 
     function switchTab(tab) {
@@ -967,8 +1148,8 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       });
       refreshData();
       if (tab === 'mom') {
-        momSearchStudent();
-        loadMomTeacherList();
+        momStageCertOrPhoto();
+        momLoadTeacherFeeReport();
       }
       if (tab === 'archive') searchHistoricalStudent('archive');
       if (tab === 'teacher') initTeacherTab();

@@ -1261,5 +1261,336 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       });
     },
   );
+
+  // 14. Use Case 2 (Mom & Wife Daily Tool): Teacher Registration Fee Tally + Pre-Exam Filing Matrix (`GET /official-sync/teacher-fee-and-filing-report`)
+  app.get(
+    '/official-sync/teacher-fee-and-filing-report',
+    async (
+      req: FastifyRequest<{
+        Querystring: { season_code?: string; agent_q?: string; agent_id?: string };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const pool = getPostgresPool();
+      const seasonCode = Number(req.query?.season_code || 20264);
+      const agentQ = (req.query?.agent_q || '').trim();
+      const agentId = req.query?.agent_id ? Number(req.query.agent_id) : null;
+
+      const LEVEL_FEE_YUAN: Record<number, number> = {
+        1: 200, 2: 240, 3: 280, 4: 320, 5: 360,
+        6: 390, 7: 420, 8: 450, 9: 480, 10: 510, 11: 620,
+      };
+
+      // 1) Query all exam registrations in the selected season (filtered by teacher/agent if provided)
+      const examsRes = await pool.query(
+        `
+        SELECT
+          e.exam_id,
+          e.student_id,
+          e.student_name,
+          e.major_name,
+          e.level,
+          e.season_code,
+          e.season_label,
+          e.agent_id,
+          COALESCE(e.agent_name, a.name, '未绑定机构') AS agent_name,
+          e.certs_json,
+          s.picture_url,
+          s.id_card_masked,
+          s.birthday
+        FROM kjzx_historical_exams e
+        LEFT JOIN kjzx_partner_agents a ON a.agent_id = e.agent_id
+        LEFT JOIN kjzx_historical_students s ON s.student_id = e.student_id
+        WHERE e.season_code = $1::int
+          AND ($2::int IS NULL OR e.agent_id = $2::int)
+          AND ($3::text = '' OR COALESCE(e.agent_name, a.name, '') ILIKE '%' || $3::text || '%' OR COALESCE(a.manager, '') ILIKE '%' || $3::text || '%')
+        ORDER BY COALESCE(e.agent_name, a.name, '') ASC,
+                 (CASE WHEN e.major_name = '音乐基础知识' THEN 1 ELSE 0 END) ASC,
+                 e.major_name ASC,
+                 e.level ASC,
+                 e.student_name ASC
+        `,
+        [seasonCode, agentId, agentQ],
+      );
+
+      const instByLevel: Record<number, number> = {};
+      const theoryByLevel: Record<number, number> = {};
+      let totalFeeYuan = 0;
+      let instCount = 0;
+      let theoryCount = 0;
+
+      const studentRows = examsRes.rows.map((r, idx) => {
+        const lvl = Number(r.level || 1);
+        const feeYuan = LEVEL_FEE_YUAN[lvl] || 390;
+        totalFeeYuan += feeYuan;
+        const isTheory = r.major_name === '音乐基础知识';
+        if (isTheory) {
+          theoryCount += 1;
+          theoryByLevel[lvl] = (theoryByLevel[lvl] || 0) + 1;
+        } else {
+          instCount += 1;
+          instByLevel[lvl] = (instByLevel[lvl] || 0) + 1;
+        }
+        const certs = Array.isArray(r.certs_json) ? r.certs_json : [];
+        const cert1 = certs[0] && (certs[0].picture || certs[0].major_name) ? `${certs[0].major_name || ''}${certs[0].level || ''}级` : null;
+        const cert2 = certs[1] && (certs[1].picture || certs[1].major_name) ? `${certs[1].major_name || '音基'}${certs[1].level || ''}级` : null;
+        return {
+          seq: idx + 1,
+          exam_id: r.exam_id,
+          student_id: r.student_id,
+          student_name: r.student_name,
+          agent_name: r.agent_name,
+          major_name: r.major_name,
+          level: lvl,
+          fee_yuan: feeYuan,
+          has_photo: Boolean(r.picture_url),
+          cert1_summary: cert1,
+          cert2_summary: cert2,
+          needs_cert_check: !isTheory && lvl >= 3 && (!cert1 || !cert2),
+        };
+      });
+
+      // 2) Full-season Pre-Exam Filing Matrix (`考前备案表 · 专业及考官信息`)
+      const filingRes = await pool.query(
+        `
+        SELECT
+          major_name,
+          level,
+          COUNT(*)::int AS cnt
+        FROM kjzx_historical_exams
+        WHERE season_code = $1::int
+        GROUP BY major_name, level
+        ORDER BY (CASE WHEN major_name = '音乐基础知识' THEN 1 ELSE 0 END) ASC,
+                 SUM(COUNT(*)) OVER (PARTITION BY major_name) DESC,
+                 major_name ASC,
+                 level ASC
+        `,
+        [seasonCode],
+      );
+
+      const filingByMajor: Record<
+        string,
+        { major_name: string; levels: Record<number, number>; total: number }
+      > = {};
+      let seasonGrandTotal = 0;
+      for (const row of filingRes.rows) {
+        const m = row.major_name || '其他';
+        if (!filingByMajor[m]) {
+          filingByMajor[m] = { major_name: m, levels: {}, total: 0 };
+        }
+        const lv = Number(row.level || 1);
+        const c = Number(row.cnt || 0);
+        filingByMajor[m].levels[lv] = (filingByMajor[m].levels[lv] || 0) + c;
+        filingByMajor[m].total += c;
+        seasonGrandTotal += c;
+      }
+
+      return reply.code(200).send({
+        season_code: seasonCode,
+        season_label: examsRes.rows[0]?.season_label || String(seasonCode),
+        agent_filter: agentQ || (agentId ? String(agentId) : '全部机构'),
+        teacher_summary: {
+          total_registrations: studentRows.length,
+          instrument_count: instCount,
+          theory_count: theoryCount,
+          total_fee_yuan: totalFeeYuan,
+          instrument_by_level: instByLevel,
+          theory_by_level: theoryByLevel,
+          students: studentRows,
+        },
+        filing_table: {
+          season_grand_total: seasonGrandTotal,
+          majors: Object.values(filingByMajor),
+        },
+      });
+    },
+  );
+
+  // 15. Use Case 1 (Mom & Wife Daily Tool): Smart Certificate / Score Screenshot / ID Photo Matcher & Stager (`POST /official-sync/stage-cert-or-photo`)
+  app.post(
+    '/official-sync/stage-cert-or-photo',
+    async (
+      req: FastifyRequest<{
+        Body?: {
+          filename?: string;
+          student_name?: string;
+          kind?: 'auto' | 'cert' | 'score_screenshot' | 'id_photo';
+          major_name?: string;
+          level?: string | number;
+          issue_date_or_season?: string;
+          cert_date_raw?: string;
+          school?: string;
+          cert_no?: string;
+          cert_no_raw?: string;
+        };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const pool = getPostgresPool();
+      const body = req.body ?? {};
+      const rawFilename = (body.filename || '').trim();
+
+      // 1) Parse filename conventions used by Mom & Claude (`熊祉玥_钢琴4级.jpg`, `陈雨馨_成绩查询.jpg`, `詹子妍.jpg`, `刘梓煦_民谣吉他6级.jpg`)
+      const baseName = rawFilename.replace(/\.[a-zA-Z0-9]+$/, '').trim();
+      const CN_NUM_MAP: Record<string, number> = {
+        壹: 1, 一: 1, 贰: 2, 二: 2, 叁: 3, 三: 3, 肆: 4, 四: 4, 伍: 5, 五: 5,
+        陆: 6, 六: 6, 柒: 7, 七: 7, 捌: 8, 八: 8, 玖: 9, 九: 9, 拾: 10, 十: 10,
+      };
+
+      let inferredName = (body.student_name || '').trim();
+      let inferredKind: 'cert' | 'score_screenshot' | 'id_photo' =
+        body.kind && body.kind !== 'auto' ? body.kind : 'id_photo';
+      let inferredMajor = (body.major_name || '').trim();
+      let inferredLevel = body.level ? Number(body.level) : 0;
+
+      if (baseName.includes('_')) {
+        const [partName, partDesc] = baseName.split('_', 2);
+        if (!inferredName) inferredName = partName.trim();
+        if (partDesc.includes('成绩')) {
+          inferredKind = 'score_screenshot';
+        } else {
+          inferredKind = 'cert';
+          const lvMatch = partDesc.match(/([0-9]{1,2}|[壹贰叁肆伍陆柒捌玖拾一二三四五六七八九十])级/);
+          if (lvMatch && !inferredLevel) {
+            inferredLevel = Number(lvMatch[1]) || CN_NUM_MAP[lvMatch[1]] || 0;
+          }
+          const majorPart = partDesc.replace(/([0-9]{1,2}|[壹贰叁肆伍陆柒捌玖拾一二三四五六七八九十])级.*$/, '').trim();
+          if (majorPart && !inferredMajor) {
+            inferredMajor = majorPart === '音基' ? '音乐基础知识' : majorPart;
+          }
+        }
+      } else if (!inferredName && /^[\u4e00-\u9fa5]{2,4}$/.test(baseName)) {
+        inferredName = baseName;
+      }
+
+      const rawCertNo = (body.cert_no || body.cert_no_raw || '').trim();
+      if (rawCertNo || body.major_name) {
+        if (inferredKind === 'id_photo') inferredKind = 'cert';
+      }
+
+      // 2) Derive standard issue date (`暑假` -> `YYYY-10-24`, `寒假` -> `YYYY-04-24` per Integration Spec §5)
+      let normalizedDate = (body.issue_date_or_season || body.cert_date_raw || '').trim();
+      const seasonMatch = normalizedDate.match(/(20[0-9]{2})年?(暑假|寒假)/);
+      if (seasonMatch) {
+        normalizedDate = `${seasonMatch[1]}-${seasonMatch[2] === '暑假' ? '10-24' : '04-24'}`;
+      } else if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+        normalizedDate = '2025-10-24';
+      }
+
+      // 3) Validate 18-digit certificate number (`21...` vs `NO. 120...` per Integration Spec §4 & §6)
+      const certNoWarnings: string[] = [];
+      if (rawCertNo) {
+        if (rawCertNo.startsWith('120')) {
+          certNoWarnings.push('⚠️ 您填入的是底部 NO. 印刷流水号 (120开头)，国音后台应填上方 21 开头的 18 位「证书编号」！');
+        } else if (!/^21\d{16}$/.test(rawCertNo)) {
+          certNoWarnings.push(`⚠️ 证书编号「${rawCertNo}」共 ${rawCertNo.length} 位（标准国音/音乐学院证书编号通常为 21 开头的 18 位数字），请核对原件。`);
+        }
+      }
+
+      // 4) Search student in PostgreSQL (exact match first; if 0 results, surname + homophone search like `熊祉玥` -> `熊祉钥`)
+      let exactRes = await pool.query(
+        `
+        SELECT s.student_id, s.name_cn, s.pinyin, s.sex, s.birthday, s.id_card_masked, s.picture_url, s.agent_name
+        FROM kjzx_historical_students s
+        WHERE s.name_cn = $1
+        ORDER BY s.student_id DESC
+        `,
+        [inferredName],
+      );
+
+      let homophoneWarning: string | null = null;
+      if (exactRes.rows.length === 0 && inferredName.length >= 2) {
+        const surname = inferredName.slice(0, 1);
+        const givenPrefix = inferredName.slice(1, 2);
+        const fuzzyRes = await pool.query(
+          `
+          SELECT s.student_id, s.name_cn, s.pinyin, s.sex, s.birthday, s.id_card_masked, s.picture_url, s.agent_name
+          FROM kjzx_historical_students s
+          WHERE s.name_cn LIKE $1
+          ORDER BY s.student_id DESC
+          LIMIT 6
+          `,
+          [`${surname}${givenPrefix}%`],
+        );
+        if (fuzzyRes.rows.length > 0) {
+          exactRes = fuzzyRes;
+          homophoneWarning = `🔍 库中未找到完全同字的「${inferredName}」，但找到同音/近形考生「${fuzzyRes.rows.map(r => `${r.name_cn}(ID:${r.student_id}, 生日:${r.birthday || '—'})`).join('、')}」（如熊祉玥 vs 熊祉钥），请确认是否同一人！`;
+        }
+      }
+
+      const matchedNameLabel = exactRes.rows[0]?.name_cn || inferredName;
+      const duplicateWarning =
+        exactRes.rows.length > 1
+          ? `⚠️ 注意：库中有 ${exactRes.rows.length} 个同名「${matchedNameLabel}」账号（${exactRes.rows.map(r => `ID:${r.student_id} · 机构:${r.agent_name || '—'} · 生日:${r.birthday || '—'}`).join(' ｜ ')}），请核对机构与生日后再点确认！`
+          : null;
+
+      // Fetch latest exam registrations for matched students
+      const studentIds = exactRes.rows.map(r => Number(r.student_id));
+      const examsByStudent: Record<number, unknown[]> = {};
+      if (studentIds.length > 0) {
+        const exRes = await pool.query(
+          `
+          SELECT exam_id, student_id, season_code, season_label, major_name, level, agent_id, agent_name, certs_json
+          FROM kjzx_historical_exams
+          WHERE student_id = ANY($1::int[])
+          ORDER BY season_code DESC, exam_id DESC
+          `,
+          [studentIds],
+        );
+        for (const ex of exRes.rows) {
+          const sid = Number(ex.student_id);
+          if (!examsByStudent[sid]) examsByStudent[sid] = [];
+          examsByStudent[sid].push(ex);
+        }
+      }
+
+      const isTheoryCert = inferredMajor === '音乐基础知识' || inferredMajor.includes('音基');
+      const targetSlot =
+        inferredKind === 'id_photo'
+          ? '考生列表 → 修改 → 照片 (picture)'
+          : isTheoryCert
+            ? '报考专业列表 → 证书2 (index=1 · 音乐基础知识证书)'
+            : '报考专业列表 → 证书1 (index=0 · 器乐/声乐专业证书)';
+
+      return reply.code(200).send({
+        parsed: {
+          filename: rawFilename,
+          student_name_input: inferredName,
+          kind: inferredKind,
+          target_slot: targetSlot,
+          cert_index: isTheoryCert ? 1 : 0,
+          major_name: inferredMajor || (inferredKind === 'id_photo' ? '—' : '钢琴'),
+          level: inferredLevel || (inferredKind === 'id_photo' ? null : 4),
+          date: normalizedDate,
+          school: body.school || '中国音乐学院考级委员会',
+          cert_no: rawCertNo,
+        },
+        warnings: [
+          ...(homophoneWarning ? [homophoneWarning] : []),
+          ...(duplicateWarning ? [duplicateWarning] : []),
+          ...certNoWarnings,
+        ],
+        matched_students: exactRes.rows.map(s => ({
+          ...s,
+          picture_proxy_url: s.picture_url
+            ? `/official-sync/media-proxy?url=${encodeURIComponent(String(s.picture_url))}&student_id=${s.student_id}&type=photo`
+            : null,
+          recent_exams: (examsByStudent[Number(s.student_id)] || []).slice(0, 4),
+        })),
+        official_api_contract:
+          inferredKind === 'id_photo'
+            ? {
+                step1_sts: 'GET https://kjzx002120.kj5.zgyyxykj.com/sts-server/sts.php',
+                step2_oss_put: 'PUT https://tlskkj.oss-cn-hangzhou.aliyuncs.com/imgs/<timestamp>.jpg',
+                step3_save: 'POST /admins/student/up_img (field: picture — 注意填「照片」而非「证照正面」)',
+              }
+            : {
+                step1_sts: 'GET https://kjzx002120.kj5.zgyyxykj.com/sts-server/sts.php',
+                step2_oss_put: 'PUT https://tlskkj.oss-cn-hangzhou.aliyuncs.com/imgs/<timestamp>.jpg',
+                step3_save: `POST /admins/exam/modify_cert?index=${isTheoryCert ? 1 : 0} (major_name, level, date=${normalizedDate}, school, no, picture)`,
+              },
+      });
+    },
+  );
 }
 
