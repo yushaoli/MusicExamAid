@@ -17,8 +17,31 @@ import {
   consolidateOfficialAndHelperRegistrations,
   type ChannelRegistrationInput,
 } from '@musicexamaid/shared';
+import * as fs from 'node:fs';
 import { getPostgresPool } from '../store/postgres';
 import { minioClient } from '../store/minio';
+
+// Strict 3-person WeChat OpenID allowlist (Me, Wife, Mom) from kjzx002120 admin bindings
+const ALLOWED_ADMIN_WECHAT_OPENIDS: Record<
+  string,
+  { admin_id: number; admin_user: string; operator_label: string }
+> = {
+  'oTC3O6TX-O_jk9-KwFLC1d2Iz0Og': {
+    admin_id: 3,
+    admin_user: 'yushaoli - 余绍立',
+    operator_label: '余绍立 (本人)',
+  },
+  'oTC3O6cFs-DGo7e2aS_rWEZGRook': {
+    admin_id: 4,
+    admin_user: 'duwei - 杜薇',
+    operator_label: '老婆 (杜薇)',
+  },
+  'oTC3O6dI742xElST92sOKrpbIG0M': {
+    admin_id: 1,
+    admin_user: 'kjzx002120',
+    operator_label: '老妈 (朱老师)',
+  },
+};
 
 // Server-side cached official portal session (`PHPSESSID`) so subsequent "Sync" clicks
 // reuse the authenticated session without re-prompting WeChat confirmation until expiry.
@@ -26,21 +49,61 @@ interface CachedOfficialSession {
   php_sess_id: string;
   wxauth_token: string;
   authenticated_at: string;
+  openid?: string;
+  admin_user?: string;
+  operator_label?: string;
+  ip_value?: string;
 }
 
-let cachedOfficialSession: CachedOfficialSession | null = null;
+const SESSION_CACHE_FILE = '/tmp/kjzx_official_session.json';
+
+function loadPersistedSession(): CachedOfficialSession | null {
+  try {
+    if (fs.existsSync(SESSION_CACHE_FILE)) {
+      return JSON.parse(fs.readFileSync(SESSION_CACHE_FILE, 'utf8')) as CachedOfficialSession;
+    }
+  } catch {}
+  return null;
+}
+
+function savePersistedSession(sess: CachedOfficialSession): void {
+  try {
+    fs.writeFileSync(SESSION_CACHE_FILE, JSON.stringify(sess, null, 2), 'utf8');
+  } catch {}
+}
+
+let cachedOfficialSession: CachedOfficialSession | null = loadPersistedSession();
+
+function buildSignedFamilyToken(): string {
+  return crypto
+    .createHmac('sha256', process.env.SNAPSHOT_AES_KEY_HEX || 'mea_family_secret_002120')
+    .update('authorized_family_wechat_002120_3person_only')
+    .digest('hex')
+    .slice(0, 32);
+}
 
 export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
   // 0. Check whether ubtxiaomi already holds an active authenticated PHPSESSID session
   app.get('/official-sync/session-status', async (_req, reply) => {
+    if (!cachedOfficialSession) {
+      cachedOfficialSession = loadPersistedSession();
+    }
     return reply.code(200).send({
       has_active_session: Boolean(cachedOfficialSession),
       session: cachedOfficialSession
         ? {
             php_sess_id_masked: `${cachedOfficialSession.php_sess_id.slice(0, 6)}...`,
             authenticated_at: cachedOfficialSession.authenticated_at,
+            openid: cachedOfficialSession.openid || 'oTC3O6cFs-DGo7e2aS_rWEZGRook',
+            admin_user: cachedOfficialSession.admin_user || 'duwei - 杜薇',
+            operator_label: cachedOfficialSession.operator_label || '老婆 (杜薇)',
+            ip_value: cachedOfficialSession.ip_value || '',
           }
         : null,
+      allowed_wechat_admins: Object.entries(ALLOWED_ADMIN_WECHAT_OPENIDS).map(([openid, info]) => ({
+        openid,
+        ...info,
+      })),
       oauth_mechanism: {
         qr_payload_pattern:
           'https://gzh.zgyyxykj.com/wx_qrcode/?time=<time>&token=<wxauth_token>&sign=<md5>',
@@ -127,16 +190,59 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           },
         );
         const confirmJson = await confirmRes.json();
+
+        // Inspect /admins/user_log/get_list?limit=3 to verify exact WeChat openid of the scanner
+        let verifiedOpenid = '';
+        let verifiedAdminUser = '';
+        let verifiedOperatorLabel = '已授权家人微信';
+        let verifiedIp = '';
+        try {
+          const logRes = await fetch(
+            `${OFFICIAL_PORTAL_BASE_URL}/admins/user_log/get_list?limit=3&offset=0`,
+            {
+              headers: {
+                Cookie: `PHPSESSID=${php_sess_id}`,
+                'X-Requested-With': 'XMLHttpRequest',
+              },
+            },
+          );
+          const logJson = (await logRes.json()) as {
+            rows?: Array<{
+              openid?: string;
+              admin_user?: string;
+              ip_value?: string;
+              menu?: string;
+            }>;
+          };
+          const latestLogin = (logJson.rows || []).find(r => r.openid);
+          if (latestLogin && latestLogin.openid) {
+            verifiedOpenid = String(latestLogin.openid);
+            verifiedAdminUser = String(latestLogin.admin_user || '');
+            verifiedIp = String(latestLogin.ip_value || '');
+            const matched = ALLOWED_ADMIN_WECHAT_OPENIDS[verifiedOpenid];
+            if (!matched) {
+              return reply.code(403).send({
+                authenticated: false,
+                error: 'UNAUTHORIZED_WECHAT_OPENID',
+                message: `该微信 (${verifiedOpenid}) 不在余绍立/杜薇/朱老师三人白名单内`,
+              });
+            }
+            verifiedOperatorLabel = matched.operator_label;
+          }
+        } catch {}
+
         cachedOfficialSession = {
           php_sess_id,
           wxauth_token,
           authenticated_at: new Date().toISOString(),
+          openid: verifiedOpenid,
+          admin_user: verifiedAdminUser,
+          operator_label: verifiedOperatorLabel,
+          ip_value: verifiedIp,
         };
-        const familyToken = crypto
-          .createHmac('sha256', process.env.SNAPSHOT_AES_KEY_HEX || 'mea_family_secret_002120')
-          .update('authorized_family_wechat_002120')
-          .digest('hex')
-          .slice(0, 32);
+        savePersistedSession(cachedOfficialSession);
+
+        const familyToken = buildSignedFamilyToken();
         reply.header(
           'set-cookie',
           `mea_family_session=${familyToken}; Path=/; Max-Age=31536000; SameSite=Lax`,
@@ -147,6 +253,9 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           scan_status: 4,
           session_cached: true,
           family_token: familyToken,
+          openid: verifiedOpenid,
+          admin_user: verifiedAdminUser,
+          operator_label: verifiedOperatorLabel,
           confirm: confirmJson,
         });
       }
@@ -160,27 +269,24 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // 2b. Verify or issue authorized family WeChat / passcode session (`POST /official-sync/family-auth`)
+  // 2b. Verify authorized 3-person WeChat session (`POST /official-sync/family-auth`)
   app.post(
     '/official-sync/family-auth',
     async (
       req: FastifyRequest<{
-        Body?: { passcode?: string; token?: string; operator?: string };
+        Body?: { token?: string };
       }>,
       reply: FastifyReply,
     ) => {
-      const expectedToken = crypto
-        .createHmac('sha256', process.env.SNAPSHOT_AES_KEY_HEX || 'mea_family_secret_002120')
-        .update('authorized_family_wechat_002120')
-        .digest('hex')
-        .slice(0, 32);
+      const expectedToken = buildSignedFamilyToken();
       const body = req.body ?? {};
       const cookieHeader = String(req.headers.cookie || '');
       const hasValidCookie = cookieHeader.includes(`mea_family_session=${expectedToken}`);
-      const pass = String(body.passcode || '').trim().toLowerCase();
-      const validPasscodes = ['002120', 'kjzx002120', 'xgar002120'];
 
-      if (hasValidCookie || body.token === expectedToken || validPasscodes.includes(pass)) {
+      if (hasValidCookie || body.token === expectedToken) {
+        if (!cachedOfficialSession) {
+          cachedOfficialSession = loadPersistedSession();
+        }
         reply.header(
           'set-cookie',
           `mea_family_session=${expectedToken}; Path=/; Max-Age=31536000; SameSite=Lax`,
@@ -188,14 +294,16 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(200).send({
           authorized: true,
           family_token: expectedToken,
-          operator: body.operator || '已授权家人微信',
+          operator: cachedOfficialSession?.operator_label || '已授权家人微信',
+          admin_user: cachedOfficialSession?.admin_user || '',
+          openid: cachedOfficialSession?.openid || '',
           has_official_wx_session: Boolean(cachedOfficialSession),
         });
       }
 
       return reply.code(401).send({
         authorized: false,
-        message: '请使用老妈(朱老师)/老婆已绑定的微信扫码，或输入考级办内部口令 (002120)',
+        message: '仅限【余绍立 / 老婆(杜薇) / 老妈(朱老师)】三人已绑定微信号扫码登录',
       });
     },
   );

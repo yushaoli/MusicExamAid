@@ -2374,39 +2374,38 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       }, 2000);
     }
 
-    // Authorized WeChat ID & Family Gate (prevents public access on public IP)
+    // Authorized 3-Person WeChat OpenID Gate (余绍立, 杜薇, 朱老师 only)
     let gatePollTimer = null;
     async function initFamilyAuthGate() {
       const params = new URLSearchParams(location.search);
-      const urlKey = params.get('k') || params.get('key') || '';
       const invite = params.get('invite') || params.get('invite_token') || '';
       const ref = params.get('ref') || params.get('ref_agent') || '';
       const savedToken = localStorage.getItem('mea_family_token') || '';
 
       // Teacher/parent scoped invite links have their own strict single-agent isolation
-      if (invite || ref) return true;
+      if (invite || ref) {
+        document.getElementById('mea-auth-gate')?.classList.add('hidden');
+        return true;
+      }
 
       try {
         const res = await fetch('/official-sync/family-auth', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ passcode: urlKey, token: savedToken })
+          body: JSON.stringify({ token: savedToken })
         });
         if (res.ok) {
           const data = await res.json();
           if (data.family_token) localStorage.setItem('mea_family_token', data.family_token);
-          if (urlKey) {
-            params.delete('k');
-            params.delete('key');
-            const cleanUrl = location.pathname + (params.toString() ? '?' + params.toString() : '');
-            history.replaceState(null, '', cleanUrl);
+          if (data.operator && !localStorage.getItem('mea_operator_name')) {
+            localStorage.setItem('mea_operator_name', data.operator);
           }
           document.getElementById('mea-auth-gate')?.classList.add('hidden');
           return true;
         }
       } catch {}
 
-      // Show full-screen login gate and start WeChat QR verification
+      // Show full-screen login gate and start 3-person WeChat QR verification
       const gate = document.getElementById('mea-auth-gate');
       if (gate) {
         gate.classList.remove('hidden');
@@ -2428,7 +2427,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         }).then(r => r.json());
         if (res.qr_image_base64) {
           box.innerHTML = \`<img src="\${res.qr_image_base64}" style="width:100%;height:100%;object-fit:contain;border-radius:10px" />\`;
-          status.textContent = '📱 请使用【老妈(朱老师) / 老婆】已绑定的管理员微信扫码（手机端可长按二维码识别）';
+          status.textContent = '📱 仅限【余绍立 / 老婆(杜薇) / 老妈(朱老师)】三人微信扫码（手机端长按二维码点「识别图中二维码」即可）';
           if (gatePollTimer) clearInterval(gatePollTimer);
           gatePollTimer = setInterval(async () => {
             try {
@@ -2440,9 +2439,15 @@ const WEB_APP_HTML = `<!DOCTYPE html>
               if (p.authenticated) {
                 clearInterval(gatePollTimer);
                 if (p.family_token) localStorage.setItem('mea_family_token', p.family_token);
+                if (p.operator_label) localStorage.setItem('mea_operator_name', p.operator_label);
+                localStorage.setItem('mea_default_tab', 'mom');
                 document.getElementById('mea-auth-gate')?.classList.add('hidden');
-                showToast('✅ 授权微信核验成功！已自动登录并记住本机');
+                showToast(\`✅ 微信核验成功：\${p.operator_label || '已授权家人'}！已自动记住本机\`);
                 location.reload();
+              } else if (p.error === 'UNAUTHORIZED_WECHAT_OPENID') {
+                clearInterval(gatePollTimer);
+                status.style.color = '#dc2626';
+                status.textContent = '⛔ ' + (p.message || '该微信号不在三人授权白名单内');
               } else if (p.scan_status === 2) {
                 status.textContent = '📲 已扫码！请在手机微信上点击「确认登录」...';
               }
@@ -2450,31 +2455,8 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           }, 2000);
         }
       } catch {
-        box.innerHTML = '请使用下方快捷口令登录';
+        box.innerHTML = '二维码加载失败，请点下方按钮刷新';
       }
-    }
-
-    async function submitGateFamilyPasscode(operatorName) {
-      const input = document.getElementById('gate-passcode-input');
-      const pass = (input ? input.value : '').trim();
-      const res = await fetch('/official-sync/family-auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passcode: pass, operator: operatorName })
-      });
-      if (!res.ok) {
-        alert('口令不正确，请输入考级办6位机构号（002120）或用已绑定微信扫码');
-        return;
-      }
-      const data = await res.json();
-      if (data.family_token) localStorage.setItem('mea_family_token', data.family_token);
-      if (operatorName) {
-        localStorage.setItem('mea_operator_name', operatorName);
-        localStorage.setItem('mea_default_tab', 'mom');
-      }
-      if (gatePollTimer) clearInterval(gatePollTimer);
-      document.getElementById('mea-auth-gate')?.classList.add('hidden');
-      location.reload();
     }
 
     // Bootstrap Session Role & Isolation from URL parameters
@@ -2556,35 +2538,27 @@ const WEB_APP_HTML = `<!DOCTYPE html>
     })();
   </script>
 
-  <!-- FULL-SCREEN AUTHORIZED WECHAT ID & FAMILY GATE OVERLAY -->
+  <!-- FULL-SCREEN AUTHORIZED 3-PERSON WECHAT ID GATE OVERLAY -->
   <div id="mea-auth-gate" style="position:fixed;inset:0;z-index:9999;background:#0f172a;display:flex;align-items:center;justify-content:center;padding:18px;overflow-y:auto">
-    <div style="background:#ffffff;max-width:500px;width:100%;border-radius:20px;padding:26px 22px;box-shadow:0 20px 50px rgba(0,0,0,0.5);text-align:center;border:3px solid #16a34a">
-      <div style="font-size:24px;font-weight:800;color:#065f46;margin-bottom:6px">
-        🔒 内部工作台 · 授权微信核验
+    <div style="background:#ffffff;max-width:480px;width:100%;border-radius:20px;padding:28px 22px;box-shadow:0 20px 50px rgba(0,0,0,0.5);text-align:center;border:3px solid #16a34a">
+      <div style="font-size:24px;font-weight:800;color:#065f46;margin-bottom:8px">
+        🔒 内部工作台 · 授权微信扫码登录
       </div>
-      <div style="font-size:16px;color:#475569;margin-bottom:16px;line-height:1.5">
-        本系统为内部私有工具，不对外公开。<br/>请使用<strong>已绑定管理员权限的微信</strong>扫码（或在手机微信内长按识别）：
+      <div style="font-size:16.5px;color:#334155;margin-bottom:16px;line-height:1.55">
+        仅限已绑定的<strong>3个管理员微信号</strong>登录：<br/>
+        <span style="display:inline-block;margin-top:6px;padding:4px 12px;border-radius:99px;background:#ecfdf5;color:#047857;font-weight:800;font-size:15px">
+          👑 余绍立 · 👩 杜薇 (老婆) · 👵 朱老师 (老妈)
+        </span>
       </div>
-      <div id="gate-wx-qr-box" style="width:210px;height:210px;margin:0 auto 10px;border:3px solid #86efac;border-radius:14px;display:flex;align-items:center;justify-content:center;background:#f8fafc;font-size:15px;color:#047857;padding:8px">
+      <div id="gate-wx-qr-box" style="width:236px;height:236px;margin:0 auto 12px;border:3px solid #86efac;border-radius:14px;display:flex;align-items:center;justify-content:center;background:#f8fafc;font-size:16px;color:#047857;padding:8px">
         正在加载微信核验码...
       </div>
-      <div id="gate-wx-qr-status" style="font-size:16px;font-weight:700;color:#d97706;margin-bottom:18px">
-        ⏳ 等待授权管理员微信号扫码...
+      <div id="gate-wx-qr-status" style="font-size:17px;font-weight:800;color:#d97706;margin-bottom:14px;line-height:1.5">
+        📱 手机端直接<strong>长按上方二维码 → 点「识别图中二维码」</strong>即可一键登录并永久记住本机
       </div>
-      <div style="border-top:2px dashed #cbd5e1;padding-top:16px;text-align:left">
-        <div style="font-size:16px;font-weight:800;color:#1e293b;margin-bottom:8px;text-align:center">
-          📱 手机微信直接打开？输入内部6位机构号一键绑定本机：
-        </div>
-        <input id="gate-passcode-input" type="tel" placeholder="请输入6位机构编号 (如 002120)" style="font-size:20px;font-weight:800;text-align:center;padding:12px;border:2px solid #94a3b8;border-radius:12px;margin-bottom:12px" />
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <button class="btn-primary" style="font-size:18px;padding:13px 10px;border-radius:12px;width:100%" onclick="submitGateFamilyPasscode('老婆')">
-            👩 我是老婆 · 登录记住我
-          </button>
-          <button class="btn-wecom" style="font-size:18px;padding:13px 10px;border-radius:12px;width:100%" onclick="submitGateFamilyPasscode('老妈 (朱老师)')">
-            👵 我是老妈 · 登录记住我
-          </button>
-        </div>
-      </div>
+      <button class="btn-outline" style="font-size:16px;padding:10px 18px;border-radius:10px;font-weight:700" onclick="startGateWeChatQr()">
+        🔄 刷新二维码
+      </button>
     </div>
   </div>
 </body>
