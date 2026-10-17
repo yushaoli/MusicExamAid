@@ -1380,28 +1380,40 @@ const WEB_APP_HTML = `<!DOCTYPE html>
 
         const p = res.parsed || {};
         const studentsHtml = (res.matched_students || []).map(s => {
-          const latestExamId = s.recent_exams && s.recent_exams[0] ? s.recent_exams[0].exam_id : 0;
-          const exRows = (s.recent_exams || []).map(e => {
+          const curExams = s.current_term_exams || [];
+          const histExams = s.historical_exams || [];
+          const hasCur = Boolean(s.has_current_term_exam);
+          const targetExam = curExams[0] || s.recent_exams?.[0] || null;
+          const targetExamId = targetExam ? targetExam.exam_id : 0;
+
+          const curRowsHtml = curExams.map(e => {
             const certs = Array.isArray(e.certs_json) ? e.certs_json : [];
-            const c1 = certs[0] && (certs[0].picture || certs[0].major_name) ? \`✅ 已有：\${certs[0].major_name || ''}\${certs[0].level || ''}级 \${certs[0].no ? '(' + certs[0].no + ')' : ''}\` : '❌ 空缺 (待传证书1)';
-            const c2 = certs[1] && (certs[1].picture || certs[1].major_name) ? \`✅ 已有：\${certs[1].major_name || '音基'}\${certs[1].level || ''}级 \${certs[1].no ? '(' + certs[1].no + ')' : ''}\` : '❌ 空缺 (待传证书2)';
-            const passBadge = e.pass_level ? \`<span class="badge badge-confirmed" style="font-size:14px">通过:\${e.pass_level}级 \${e.cert_no ? '· 编号:' + e.cert_no : ''}</span>\` : '<span class="badge" style="background:#fef3c7;color:#92400e;font-size:14px">本季待考/审核中</span>';
-            return \`<div style="font-size:18px;padding:6px 0;border-bottom:1px dashed #cbd5e1">
-              📌 考期 <strong>\${e.season_label}</strong> (报考ID: <code>\${e.exam_id}</code>) · 报考 <strong>\${e.major_name} \${e.level}级</strong> \${passBadge}
-              ｜ 证书1: <strong>\${c1}</strong> ｜ 证书2: <strong>\${c2}</strong>
+            const c1 = certs[0] && (certs[0].picture || certs[0].major_name) ? \`✅ 已传：\${certs[0].major_name || ''}\${certs[0].level || ''}级 \${certs[0].no ? '(' + certs[0].no + ')' : ''}\` : '<span style="color:#dc2626;font-weight:800">❌ 空缺 (待传证书1)</span>';
+            const c2 = certs[1] && (certs[1].picture || certs[1].major_name) ? \`✅ 已传：\${certs[1].major_name || '音基'}\${certs[1].level || ''}级 \${certs[1].no ? '(' + certs[1].no + ')' : ''}\` : '<span style="color:#dc2626;font-weight:800">❌ 空缺 (待传证书2)</span>';
+            return \`<div style="font-size:19px;padding:8px 12px;background:#ecfdf5;border:2px solid #10b981;border-radius:8px;margin-bottom:6px">
+              🎯 <strong>【本期当期报考 · \${e.season_label}】</strong> (报考ID: <code>\${e.exam_id}</code>) · 正在报考 <strong style="color:#047857;font-size:20px">\${e.major_name} \${e.level}级</strong>
+              <span class="badge" style="background:#fef3c7;color:#92400e;font-size:15px">⚡ 本次上传/替换的目标记录</span><br/>
+              👉 当前证书槽状态：证书1(专业): <strong>\${c1}</strong> ｜ 证书2(音基): <strong>\${c2}</strong>
+            </div>\`;
+          }).join('');
+
+          const histRowsHtml = histExams.map(e => {
+            const passBadge = e.pass_level ? \`<span class="badge badge-confirmed" style="font-size:13px">已通过:\${e.pass_level}级 \${e.cert_no ? '· 编号:' + e.cert_no : ''}</span>\` : '';
+            return \`<div style="font-size:16px;color:#64748b;padding:4px 0;border-bottom:1px dashed #e2e8f0">
+              📚 往期历史 (\${e.season_label} · ID:\${e.exam_id})：\${e.major_name} \${e.level}级 \${passBadge} <span style="font-size:14px">（往期归档，本次不会修改）</span>
             </div>\`;
           }).join('');
 
           const discoveredHtml = (s.auto_discovered_certs || []).length > 0
             ? \`<div style="margin-top:10px;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:10px;padding:10px 14px">
                 <div style="font-size:17px;font-weight:800;color:#1e3a8a;margin-bottom:6px">
-                  💡 系统在该生历年档案/成绩查询库中找到以下【已合格证书】，点一下即可自动生成凭证图并填好 18 位编号：
+                  💡 从该生往期历史中自动提取到以下【已合格旧证书】，点一下即可自动填入上方【本期当期报考】的证书槽：
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
                   \${(s.auto_discovered_certs || []).map(dc => \`
                     <button class="btn-outline btn-sm" style="font-size:16px;background:#fff;border-color:#2563eb;color:#1d4ed8;font-weight:700"
                       onclick="momGenerateLookScoreImageAndFill('\${s.name_cn}', '\${s.sex || '女'}', '\${dc.major_name}', '\${dc.pass_level}', '\${dc.season_label}', '', '合格', '\${dc.date}', '\${dc.cert_no || ''}', '\${dc.picture_url || ''}')">
-                      🪄 选用：\${dc.major_name}\${dc.pass_level}级 (\${dc.season_label}\${dc.cert_no ? ' · ' + dc.cert_no : ''}\${dc.picture_url ? ' · 含原图' : ''}) → 填证书\${dc.cert_index + 1}
+                      🪄 提取往期「\${dc.major_name}\${dc.pass_level}级 (\${dc.season_label}\${dc.cert_no ? ' · ' + dc.cert_no : ''})」→ 填入本期【证书\${dc.cert_index + 1}】
                     </button>
                   \`).join('')}
                 </div>
@@ -1412,34 +1424,44 @@ const WEB_APP_HTML = `<!DOCTYPE html>
             ? \`<div><div style="font-size:14px;color:#1d4ed8;font-weight:700;margin-bottom:3px">本次新传图片</div><img src="\${momSelectedImageBase64}" style="width:74px;height:96px;object-fit:cover;border-radius:8px;border:3px solid #2563eb" /></div>\`
             : '';
 
+          const cardBorder = hasCur ? '3px solid #16a34a' : '2px dashed #94a3b8';
+          const cardBg = hasCur ? '#f0fdf4' : '#f8fafc';
+          const termStatusBadge = hasCur
+            ? '<span class="badge badge-confirmed" style="font-size:16px;background:#16a34a;color:#fff">🟢 本期 (2026暑假) 在考考生 · 推荐写入</span>'
+            : '<span class="badge" style="font-size:16px;background:#e2e8f0;color:#475569">⚪ 往期旧账号 (本期2026暑假无报考 · 请勿误传)</span>';
+
           return \`
-            <div style="border:2px solid #16a34a;background:#f0fdf4;border-radius:14px;padding:16px;margin-top:10px">
+            <div style="border:\${cardBorder};background:\${cardBg};border-radius:14px;padding:16px;margin-top:10px;opacity:\${hasCur ? '1' : '0.82'}">
               <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
                 <div style="display:flex;gap:14px;align-items:center">
                   \${s.picture_proxy_url ? \`<div><div style="font-size:14px;color:#065f46;font-weight:700;margin-bottom:3px">当前后台原照</div><img src="\${s.picture_proxy_url}" style="width:74px;height:96px;object-fit:cover;border-radius:8px;border:2px solid #16a34a" /></div>\` : ''}
                   \${newPhotoPreviewHtml}
                   <div>
-                    <div style="font-size:23px;font-weight:800;color:#064e3b">
-                      👧 后台匹配考生：\${s.name_cn} <span style="font-size:18px;color:#047857">(考生ID: \${s.student_id} · 拼音: \${s.pinyin || '—'})</span>
+                    <div style="font-size:23px;font-weight:800;color:#064e3b;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                      <span>👧 考生：\${s.name_cn}</span>
+                      <span style="font-size:18px;color:#047857">(ID: \${s.student_id} · \${s.pinyin || '—'})</span>
+                      \${termStatusBadge}
                     </div>
                     <div style="font-size:19px;color:#065f46;margin-top:4px">
                       🎂 出生日期：<strong>\${s.birthday || '—'}</strong> ｜ 🪪 证件尾号：<strong>\${s.id_card_masked || '—'}</strong> ｜ 🏫 所属老师：<strong>\${s.agent_name || '—'}</strong>
                     </div>
                     <div style="font-size:19px;color:#1e40af;font-weight:800;margin-top:6px">
-                      🎯 拟写入位置：\${p.target_slot}
-                      \${p.kind !== 'id_photo' ? \`（专业：\${p.major_name} · \${p.level}级 · 发证日：\${p.date} · 编号：\${p.cert_no || '截图免填'}）\` : ''}
+                      🎯 拟写入当期位置：\${p.target_slot}
+                      \${targetExam ? \` [当期报考ID: \${targetExam.exam_id} · \${targetExam.season_label}]\` : ''}
+                      \${p.kind !== 'id_photo' ? \`（填入：\${p.major_name} · \${p.level}级 · 发证日：\${p.date} · 编号：\${p.cert_no || '截图免填'}）\` : ''}
                     </div>
                   </div>
                 </div>
-                <button class="btn-primary" id="mom-exec-btn-\${s.student_id}" style="font-size:20px;padding:14px 22px;border-radius:12px"
-                  onclick="momExecuteUpload(\${s.student_id}, '\${s.name_cn}', \${latestExamId}, '\${p.kind}', \${p.cert_index || 0}, '\${p.major_name || ''}', '\${p.level || ''}', '\${p.date || ''}', '\${p.school || ''}', '\${p.cert_no || ''}', '\${s.picture_url || ''}')">
-                  ✅ 确认无误 · 一键上传写入「\${s.name_cn}」后台
+                <button class="\${hasCur ? 'btn-primary' : 'btn-outline'}" id="mom-exec-btn-\${s.student_id}" style="font-size:20px;padding:14px 22px;border-radius:12px"
+                  onclick="momExecuteUpload(\${s.student_id}, '\${s.name_cn}', \${targetExamId}, '\${p.kind}', \${p.cert_index || 0}, '\${p.major_name || ''}', '\${p.level || ''}', '\${p.date || ''}', '\${p.school || ''}', '\${p.cert_no || ''}', '\${s.picture_url || ''}')">
+                  \${hasCur ? \`✅ 确认无误 · 一键写入「\${s.name_cn}」本期(2026暑假)后台\` : \`⚠️ 强制写入此往期旧号 (\${s.student_id})\`}
                 </button>
               </div>
-              \${discoveredHtml}
               <div style="margin-top:10px;background:#fff;padding:10px 14px;border-radius:10px;border:1px solid #bbf7d0">
-                \${exRows || '<div style="font-size:17px;color:#64748b">暂无考次记录</div>'}
+                \${curRowsHtml || '<div style="font-size:18px;color:#b45309;font-weight:700">⚠️ 该账号在本期（2026暑假）暂无报考专业记录（仅可更换考生列表证件照，或请核对上方另一个同名在考账号）</div>'}
+                \${histRowsHtml ? \`<div style="margin-top:6px">\${histRowsHtml}</div>\` : ''}
               </div>
+              \${discoveredHtml}
             </div>
           \`;
         }).join('');

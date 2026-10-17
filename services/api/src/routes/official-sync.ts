@@ -1524,7 +1524,11 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           ? `⚠️ 注意：库中有 ${exactRes.rows.length} 个同名「${matchedNameLabel}」账号（${exactRes.rows.map(r => `ID:${r.student_id} · 机构:${r.agent_name || '—'} · 生日:${r.birthday || '—'}`).join(' ｜ ')}），请核对机构与生日后再点确认！`
           : null;
 
-      // Fetch latest exam registrations & passed certificates for matched students
+      // Fetch exam registrations & passed certificates for matched students
+      // IMPORTANT: In zgyyxykj, 暑假 = YYYY4 (Jul/Aug, later in year) and 寒假 = YYYY5 (Jan/Feb, earlier in year),
+      // so `20265` (2026寒假) is numerically > `20264` (2026暑假, the CURRENT term), while `exam_id` is strictly sequential!
+      // Always pin `currentSeasonCode` (20264 = 2026暑假) and order by `exam_id DESC` so uploads/replacements target the CURRENT term!
+      const currentSeasonCode = Number((body as any).current_season_code || 20264);
       const studentIds = exactRes.rows.map(r => Number(r.student_id));
       const examsByStudent: Record<number, any[]> = {};
       if (studentIds.length > 0) {
@@ -1533,9 +1537,9 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           SELECT exam_id, student_id, season_code, season_label, apply_year, major_name, level, pass_level, cert_no, status, is_made_cert, agent_id, agent_name, certs_json
           FROM kjzx_historical_exams
           WHERE student_id = ANY($1::int[])
-          ORDER BY season_code DESC, exam_id DESC
+          ORDER BY (CASE WHEN season_code = $2 THEN 0 ELSE 1 END), exam_id DESC
           `,
-          [studentIds],
+          [studentIds, currentSeasonCode],
         );
         for (const ex of exRes.rows) {
           const sid = Number(ex.student_id);
@@ -1547,12 +1551,83 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       const isTheoryCert = inferredMajor === '音乐基础知识' || inferredMajor.includes('音基');
       const targetSlot =
         inferredKind === 'id_photo'
-          ? '考生列表 → 修改 → 照片 (picture)'
+          ? '考生列表 → 修改 → 照片 (picture · 当期考生证件照)'
           : isTheoryCert
-            ? '报考专业列表 → 证书2 (index=1 · 音乐基础知识证书)'
-            : '报考专业列表 → 证书1 (index=0 · 器乐/声乐专业证书)';
+            ? '当期报考专业列表 (2026暑假) → 证书2 (index=1 · 音乐基础知识证书)'
+            : '当期报考专业列表 (2026暑假) → 证书1 (index=0 · 器乐/声乐专业证书)';
+
+      const enrichedStudents = exactRes.rows.map(s => {
+        const allEx = examsByStudent[Number(s.student_id)] || [];
+        const currentTermExams = allEx.filter(ex => Number(ex.season_code) === currentSeasonCode);
+        const historicalExams = allEx.filter(ex => Number(ex.season_code) !== currentSeasonCode);
+
+        // Build auto_discovered_certs from historical passed exams & prior certs_json!
+        const discoveredMap = new Map<string, any>();
+        for (const ex of historicalExams) {
+          if (ex.pass_level || ex.cert_no) {
+            const isSummer = String(ex.season_label || '').includes('暑') || String(ex.season_code || '').endsWith('4');
+            const yr = ex.apply_year || String(ex.season_code || '2025').slice(0, 4);
+            const derivedDate = `${yr}-${isSummer ? '10-24' : '04-24'}`;
+            const key = `${ex.major_name}_${ex.pass_level || ex.level}`;
+            if (!discoveredMap.has(key)) {
+              discoveredMap.set(key, {
+                source: '本考点往期成绩库 (look_score 同源)',
+                season_label: ex.season_label,
+                major_name: ex.major_name,
+                pass_level: ex.pass_level || ex.level,
+                cert_no: ex.cert_no || '',
+                date: derivedDate,
+                school: '中国音乐学院考级委员会',
+                picture_url: '',
+                cert_index: ex.major_name === '音乐基础知识' ? 1 : 0,
+              });
+            }
+          }
+          const cArr = Array.isArray(ex.certs_json) ? ex.certs_json : [];
+          for (const c of cArr) {
+            if (c && typeof c === 'object' && !Array.isArray(c) && (c.major_name || c.picture || c.no)) {
+              const key = `${c.major_name || '专业'}_${c.level || ''}`;
+              const existing = discoveredMap.get(key);
+              if (existing) {
+                if (!existing.picture_url && c.picture) existing.picture_url = c.picture;
+                if (!existing.cert_no && c.no && String(c.no).startsWith('21')) existing.cert_no = c.no;
+                if (c.date) existing.date = c.date;
+              } else {
+                discoveredMap.set(key, {
+                  source: `往期已传档案 (${ex.season_label})`,
+                  season_label: ex.season_label,
+                  major_name: c.major_name || ex.major_name,
+                  pass_level: Number(c.level || 1),
+                  cert_no: c.no || '',
+                  date: c.date || '2025-10-24',
+                  school: c.school || '中国音乐学院考级委员会',
+                  picture_url: c.picture || '',
+                  cert_index: String(c.major_name || '').includes('音乐基础') ? 1 : 0,
+                });
+              }
+            }
+          }
+        }
+
+        return {
+          ...s,
+          picture_proxy_url: s.picture_url
+            ? `/official-sync/media-proxy?url=${encodeURIComponent(String(s.picture_url))}&student_id=${s.student_id}&type=photo`
+            : null,
+          has_current_term_exam: currentTermExams.length > 0,
+          current_term_exams: currentTermExams,
+          historical_exams: historicalExams.slice(0, 5),
+          recent_exams: allEx.slice(0, 6),
+          auto_discovered_certs: Array.from(discoveredMap.values()),
+        };
+      });
+
+      // Sort matched students so the one with an active CURRENT TERM registration is ALWAYS first!
+      enrichedStudents.sort((a, b) => Number(b.has_current_term_exam) - Number(a.has_current_term_exam));
 
       return reply.code(200).send({
+        current_season_code: currentSeasonCode,
+        current_season_label: currentSeasonCode === 20264 ? '2026暑假 (当前考期)' : String(currentSeasonCode),
         parsed: {
           filename: rawFilename,
           student_name_input: inferredName,
@@ -1570,65 +1645,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           ...(duplicateWarning ? [duplicateWarning] : []),
           ...certNoWarnings,
         ],
-        matched_students: exactRes.rows.map(s => {
-          const allEx = examsByStudent[Number(s.student_id)] || [];
-          // Build auto_discovered_certs from prior passed exams & prior certs_json!
-          const discoveredMap = new Map<string, any>();
-          for (const ex of allEx) {
-            if (ex.pass_level || ex.cert_no) {
-              const isSummer = String(ex.season_label || '').includes('暑') || String(ex.season_code || '').endsWith('4');
-              const yr = ex.apply_year || String(ex.season_code || '2025').slice(0, 4);
-              const derivedDate = `${yr}-${isSummer ? '10-24' : '04-24'}`;
-              const key = `${ex.major_name}_${ex.pass_level || ex.level}`;
-              if (!discoveredMap.has(key)) {
-                discoveredMap.set(key, {
-                  source: '本考点历年成绩库 (look_score 同源)',
-                  season_label: ex.season_label,
-                  major_name: ex.major_name,
-                  pass_level: ex.pass_level || ex.level,
-                  cert_no: ex.cert_no || '',
-                  date: derivedDate,
-                  school: '中国音乐学院考级委员会',
-                  picture_url: '',
-                  cert_index: ex.major_name === '音乐基础知识' ? 1 : 0,
-                });
-              }
-            }
-            const cArr = Array.isArray(ex.certs_json) ? ex.certs_json : [];
-            for (const c of cArr) {
-              if (c && typeof c === 'object' && !Array.isArray(c) && (c.major_name || c.picture || c.no)) {
-                const key = `${c.major_name || '专业'}_${c.level || ''}`;
-                const existing = discoveredMap.get(key);
-                if (existing) {
-                  if (!existing.picture_url && c.picture) existing.picture_url = c.picture;
-                  if (!existing.cert_no && c.no && String(c.no).startsWith('21')) existing.cert_no = c.no;
-                  if (c.date) existing.date = c.date;
-                } else {
-                  discoveredMap.set(key, {
-                    source: `往期已传档案 (${ex.season_label})`,
-                    season_label: ex.season_label,
-                    major_name: c.major_name || ex.major_name,
-                    pass_level: Number(c.level || 1),
-                    cert_no: c.no || '',
-                    date: c.date || '2025-10-24',
-                    school: c.school || '中国音乐学院考级委员会',
-                    picture_url: c.picture || '',
-                    cert_index: String(c.major_name || '').includes('音乐基础') ? 1 : 0,
-                  });
-                }
-              }
-            }
-          }
-
-          return {
-            ...s,
-            picture_proxy_url: s.picture_url
-              ? `/official-sync/media-proxy?url=${encodeURIComponent(String(s.picture_url))}&student_id=${s.student_id}&type=photo`
-              : null,
-            recent_exams: allEx.slice(0, 6),
-            auto_discovered_certs: Array.from(discoveredMap.values()),
-          };
-        }),
+        matched_students: enrichedStudents,
         official_api_contract:
           inferredKind === 'id_photo'
             ? {
@@ -1772,7 +1789,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       } else {
         if (!resolvedExamId) {
           const latestEx = await pool.query(
-            `SELECT exam_id, certs_json FROM kjzx_historical_exams WHERE student_id = $1 ORDER BY season_code DESC, exam_id DESC LIMIT 1`,
+            `SELECT exam_id, certs_json FROM kjzx_historical_exams WHERE student_id = $1 ORDER BY (CASE WHEN season_code = 20264 THEN 0 ELSE 1 END), exam_id DESC LIMIT 1`,
             [studentId],
           );
           resolvedExamId = Number(latestEx.rows[0]?.exam_id || 0);
@@ -2038,7 +2055,10 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         FROM kjzx_historical_exams e
         WHERE (e.student_name = $1 OR e.student_name LIKE $2)
           AND ($3 = '' OR e.id_card_masked LIKE '%' || $3)
-        ORDER BY (CASE WHEN e.student_name = $1 THEN 0 ELSE 1 END), e.season_code DESC, e.exam_id DESC
+        ORDER BY
+          (CASE WHEN e.student_name = $1 THEN 0 ELSE 1 END),
+          (CASE WHEN e.pass_level IS NOT NULL OR e.cert_no IS NOT NULL THEN 0 ELSE 1 END),
+          e.exam_id DESC
         LIMIT 30
         `,
         [name, `${name.slice(0, 2)}%`, idTail],
