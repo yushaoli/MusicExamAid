@@ -224,7 +224,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
               return reply.code(403).send({
                 authenticated: false,
                 error: 'UNAUTHORIZED_WECHAT_OPENID',
-                message: `该微信 (${verifiedOpenid}) 不在余绍立/杜薇/谈老师三人白名单内`,
+                message: '该微信号未授权登录',
               });
             }
             verifiedOperatorLabel = matched.operator_label;
@@ -269,7 +269,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // 2b. Verify authorized 3-person WeChat session (`POST /official-sync/family-auth`)
+  // 2b. Verify authorized WeChat session (`POST /official-sync/family-auth`)
   app.post(
     '/official-sync/family-auth',
     async (
@@ -294,7 +294,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(200).send({
           authorized: true,
           family_token: expectedToken,
-          operator: cachedOfficialSession?.operator_label || '已授权家人微信',
+          operator: cachedOfficialSession?.operator_label || '已授权管理员',
           admin_user: cachedOfficialSession?.admin_user || '',
           openid: cachedOfficialSession?.openid || '',
           has_official_wx_session: Boolean(cachedOfficialSession),
@@ -303,7 +303,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
 
       return reply.code(401).send({
         authorized: false,
-        message: '仅限【余绍立 / 老婆(杜薇) / 老妈(谈老师)】三人已绑定微信号扫码登录',
+        message: '请使用已授权的微信号扫码登录',
       });
     },
   );

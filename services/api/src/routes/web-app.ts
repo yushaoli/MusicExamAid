@@ -2428,7 +2428,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         }).then(r => r.json());
         if (res.qr_image_base64) {
           box.innerHTML = \`<img src="\${res.qr_image_base64}" style="width:100%;height:100%;object-fit:contain;border-radius:10px" />\`;
-          status.textContent = '📱 仅限【余绍立 / 老婆(杜薇) / 老妈(谈老师)】三人微信扫码（手机端长按二维码点「识别图中二维码」即可）';
+          status.textContent = '📱 请使用已授权微信扫码（手机端长按二维码点「识别图中二维码」即可）';
           if (gatePollTimer) clearInterval(gatePollTimer);
           gatePollTimer = setInterval(async () => {
             try {
@@ -2443,12 +2443,12 @@ const WEB_APP_HTML = `<!DOCTYPE html>
                 if (p.operator_label) localStorage.setItem('mea_operator_name', p.operator_label);
                 localStorage.setItem('mea_default_tab', 'mom');
                 document.getElementById('mea-auth-gate')?.classList.add('hidden');
-                showToast(\`✅ 微信核验成功：\${p.operator_label || '已授权家人'}！已自动记住本机\`);
+                showToast(\`✅ 微信核验成功：\${p.operator_label || '已授权管理员'}！已自动记住本机\`);
                 location.reload();
               } else if (p.error === 'UNAUTHORIZED_WECHAT_OPENID') {
                 clearInterval(gatePollTimer);
                 status.style.color = '#dc2626';
-                status.textContent = '⛔ ' + (p.message || '该微信号不在三人授权白名单内');
+                status.textContent = '⛔ ' + (p.message || '该微信号未授权登录');
               } else if (p.scan_status === 2) {
                 status.textContent = '📲 已扫码！请在手机微信上点击「确认登录」...';
               }
@@ -2539,23 +2539,17 @@ const WEB_APP_HTML = `<!DOCTYPE html>
     })();
   </script>
 
-  <!-- FULL-SCREEN AUTHORIZED 3-PERSON WECHAT ID GATE OVERLAY -->
+  <!-- FULL-SCREEN AUTHORIZED WECHAT ID GATE OVERLAY -->
   <div id="mea-auth-gate" style="position:fixed;inset:0;z-index:9999;background:#0f172a;display:flex;align-items:center;justify-content:center;padding:18px;overflow-y:auto">
-    <div style="background:#ffffff;max-width:480px;width:100%;border-radius:20px;padding:28px 22px;box-shadow:0 20px 50px rgba(0,0,0,0.5);text-align:center;border:3px solid #16a34a">
-      <div style="font-size:24px;font-weight:800;color:#065f46;margin-bottom:8px">
-        🔒 内部工作台 · 授权微信扫码登录
-      </div>
-      <div style="font-size:16.5px;color:#334155;margin-bottom:16px;line-height:1.55">
-        仅限已绑定的<strong>3个管理员微信号</strong>登录：<br/>
-        <span style="display:inline-block;margin-top:6px;padding:4px 12px;border-radius:99px;background:#ecfdf5;color:#047857;font-weight:800;font-size:15px">
-          👑 余绍立 · 👩 杜薇 (老婆) · 👵 谈老师 (老妈)
-        </span>
+    <div style="background:#ffffff;max-width:460px;width:100%;border-radius:20px;padding:28px 22px;box-shadow:0 20px 50px rgba(0,0,0,0.5);text-align:center;border:3px solid #16a34a">
+      <div style="font-size:24px;font-weight:800;color:#065f46;margin-bottom:14px">
+        🔒 内部工作台 · 微信扫码登录
       </div>
       <div id="gate-wx-qr-box" style="width:236px;height:236px;margin:0 auto 12px;border:3px solid #86efac;border-radius:14px;display:flex;align-items:center;justify-content:center;background:#f8fafc;font-size:16px;color:#047857;padding:8px">
         正在加载微信核验码...
       </div>
       <div id="gate-wx-qr-status" style="font-size:17px;font-weight:800;color:#d97706;margin-bottom:14px;line-height:1.5">
-        📱 手机端直接<strong>长按上方二维码 → 点「识别图中二维码」</strong>即可一键登录并永久记住本机
+        📱 手机端直接<strong>长按上方二维码 → 点「识别图中二维码」</strong>即可一键登录并记住本机
       </div>
       <button class="btn-outline" style="font-size:16px;padding:10px 18px;border-radius:10px;font-weight:700" onclick="startGateWeChatQr()">
         🔄 刷新二维码
