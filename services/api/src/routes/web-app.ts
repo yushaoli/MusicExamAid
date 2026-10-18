@@ -684,7 +684,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       </div>
 
       <div class="card">
-        <h2>📊 2020–2026 历年 13 个考期人数分布与 Top 10 合作老师（实盘 PostgreSQL）</h2>
+        <h2>📊 2020–2026 历年「全年合并 (寒假+暑假)」季节性分布、分考期明细与 Top 10 合作老师</h2>
         <div class="grid" id="adm-archive-breakdown">正在加载实盘统计...</div>
       </div>
     </section>
@@ -880,22 +880,26 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           📊 第二件事：按机构/老师一键算「考级费用统计单」+「考前备案表 (各专业1-10级人数)」
         </div>
         <div style="font-size:17px;color:#475569;margin-bottom:12px">
-          不用导出 Excel、更不用重新扫二维码！选好考期和老师名字，<strong>1秒算出器乐几人、音基几人、每个级别几人、一共应收多少报名费，并列出全部学生名单</strong>，点一下直接复制发微信给老师对账：
+          不用导出 Excel、更不用重新扫二维码！支持按<strong>单考期 (暑假/寒假)</strong>或<strong>全年合并 (寒假+暑假)</strong>查看，<strong>1秒算出器乐几人、音基几人、每个级别几人、一共应收多少报名费，并列出全部学生名单</strong>，点一下直接复制发微信给老师对账：
         </div>
 
         <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
-          <div style="min-width:220px">
-            <label style="font-size:17px">选择考级计划 (考期)</label>
+          <div style="min-width:250px">
+            <label style="font-size:17px">选择考级计划 (单考期 或 全年寒暑合并)</label>
             <select id="mom-report-season" style="font-size:20px;padding:12px;font-weight:700" onchange="momLoadTeacherFeeReport()">
-              <option value="20264" selected>2026年暑假 (20264)</option>
+              <option value="20264" selected>2026年暑假 (20264 · 当前考期)</option>
               <option value="20265">2026年寒假 (20265)</option>
-              <option value="20254">2025年暑假 (20254 · 1609人)</option>
-              <option value="20255">2025年寒假 (20255 · 637人)</option>
-              <option value="20244">2024年暑假 (20244 · 3129人)</option>
+              <option value="2026">🔥 2026全年合并 (寒假532+暑假1706=2238人)</option>
+              <option value="2025">🔥 2025全年合并 (寒假689+暑假2437=3126人)</option>
+              <option value="20254">2025年暑假 (20254 · 2437人)</option>
+              <option value="20255">2025年寒假 (20255 · 689人)</option>
+              <option value="2024">🔥 2024全年合并 (寒假813+暑假3264=4077人)</option>
+              <option value="20244">2024年暑假 (20244 · 3264人)</option>
+              <option value="2023">🔥 2023全年合并 (寒假786+暑假4186=4972人)</option>
             </select>
           </div>
           <div style="flex:1;min-width:240px">
-            <label style="font-size:17px">输入机构/老师姓名（如：周玲、黄庆华、陈静；留空查全季汇总）</label>
+            <label style="font-size:17px">输入机构/老师姓名（如：周玲、黄庆华、陈静；留空查全季/全年汇总）</label>
             <input id="mom-report-agent" value="周玲" placeholder="输入老师姓名，如：周玲"
               style="font-size:20px;padding:12px;border:2px solid #7c3aed;border-radius:10px;font-weight:700"
               onkeydown="if(event.key==='Enter') momLoadTeacherFeeReport()" />
@@ -904,17 +908,18 @@ const WEB_APP_HTML = `<!DOCTYPE html>
             🧮 立即生成老师费用账单
           </button>
           <button class="btn-outline" style="font-size:18px;padding:13px 18px;border-radius:12px" onclick="document.getElementById('mom-report-agent').value='';momLoadTeacherFeeReport()">
-            📋 查看全季《考前备案表》各专业人数矩阵
+            📋 查看全季/全年《考前备案表》矩阵
           </button>
         </div>
 
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
           <span style="font-size:16px;color:#64748b">常查老师快捷点选：</span>
           <button class="btn-outline btn-sm" style="font-size:16px" onclick="momQuickTeacherReport('周玲','20264')">周玲 (2026暑假)</button>
-          <button class="btn-outline btn-sm" style="font-size:16px" onclick="momQuickTeacherReport('黄庆华','20254')">黄庆华 (2025暑假)</button>
-          <button class="btn-outline btn-sm" style="font-size:16px" onclick="momQuickTeacherReport('胡杰友','20254')">胡杰友 (2025暑假)</button>
-          <button class="btn-outline btn-sm" style="font-size:16px" onclick="momQuickTeacherReport('陈静','20254')">陈静 (2025暑假)</button>
-          <button class="btn-outline btn-sm" style="font-size:16px" onclick="momQuickTeacherReport('许张','20254')">许张 (2025暑假)</button>
+          <button class="btn-outline btn-sm" style="font-size:16px" onclick="momQuickTeacherReport('周玲','2026')">周玲 (2026全年合并)</button>
+          <button class="btn-outline btn-sm" style="font-size:16px" onclick="momQuickTeacherReport('黄庆华','2025')">黄庆华 (2025全年合并)</button>
+          <button class="btn-outline btn-sm" style="font-size:16px" onclick="momQuickTeacherReport('胡杰友','2025')">胡杰友 (2025全年合并)</button>
+          <button class="btn-outline btn-sm" style="font-size:16px" onclick="momQuickTeacherReport('陈静','2025')">陈静 (2025全年合并)</button>
+          <button class="btn-outline btn-sm" style="font-size:16px" onclick="momQuickTeacherReport('许张','2025')">许张 (2025全年合并)</button>
         </div>
 
         <div id="mom-fee-report-box">正在计算机构报名统计...</div>
@@ -1601,6 +1606,9 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           return \`<tr><td style="font-size:18px;font-weight:800">\${m.major_name}</td>\${cells}<td style="text-align:center;font-size:19px;font-weight:800;color:#047857">\${m.total}</td></tr>\`;
         }).join('');
 
+        const seasonalSubText = res.is_full_year_combined
+          ? \`（❄️ 寒假 <strong>\${ts.winter_count || 0}</strong> 人次 ＋ ☀️ 暑假 <strong>\${ts.summer_count || 0}</strong> 人次） · \`
+          : '';
         box.innerHTML = \`
           <div style="background:#faf5ff;border:2px solid #a855f7;border-radius:14px;padding:16px;margin-bottom:16px">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
@@ -1609,7 +1617,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
                   🏫 「\${res.agent_filter}」 · \${res.season_label} 报名费用核对单
                 </div>
                 <div style="font-size:20px;color:#1e293b;margin-top:6px">
-                  共 <strong>\${ts.total_registrations}</strong> 人次（器乐/声乐 <strong>\${ts.instrument_count}</strong> 人次 ＋ 音基 <strong>\${ts.theory_count}</strong> 人次）
+                  共 <strong>\${ts.total_registrations}</strong> 人次 \${seasonalSubText}（器乐/声乐 <strong>\${ts.instrument_count}</strong> 人次 ＋ 音基 <strong>\${ts.theory_count}</strong> 人次）
                   ｜ 💰 应收考级费总额：<strong style="font-size:25px;color:#047857">¥\${(ts.total_fee_yuan || 0).toLocaleString()}</strong>
                 </div>
                 <div style="font-size:17px;color:#475569;margin-top:6px">
@@ -2324,6 +2332,19 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         }).join('');
         document.getElementById('adm-invite-tbody').innerHTML = inviteRows;
 
+        const annualHtml = (data.annual_combined || []).map(a => {
+          const yoyBadge = a.yoy_pct == null
+            ? '<span style="color:var(--muted)">基期</span>'
+            : a.yoy_pct >= 0
+              ? \`<span class="badge badge-confirmed">+\${a.yoy_pct}%</span>\`
+              : \`<span class="badge" style="background:#fef2f2;color:#991b1b">\${a.yoy_pct}%</span>\`;
+          return \`<tr>
+            <td><strong>\${a.year}全年</strong></td>
+            <td><strong style="color:var(--primary-dark)">\${Number(a.full_year_count || 0).toLocaleString()}</strong> 笔</td>
+            <td>❄️ \${Number(a.winter_count || 0).toLocaleString()} ＋ ☀️ <strong>\${Number(a.summer_count || 0).toLocaleString()}</strong> <small style="color:var(--muted)">(暑占 \${a.summer_share_pct}%)</small></td>
+            <td>\${yoyBadge}</td>
+          </tr>\`;
+        }).join('');
         const seasonsHtml = (data.seasons || []).map(s =>
           \`<tr><td><code>\${s.season_code}</code> · \${s.season_label}</td><td><strong>\${s.exam_count.toLocaleString()}</strong> 笔</td></tr>\`
         ).join('');
@@ -2332,7 +2353,11 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         ).join('');
         document.getElementById('adm-archive-breakdown').innerHTML = \`
           <div>
-            <h3 style="font-size:14px;margin:0 0 8px">📅 2020–2026 历年 13 个考期报考笔数</h3>
+            <h3 style="font-size:14px;margin:0 0 8px">📆 2020–2026 全年合并（寒假+暑假 · 消除季节性）</h3>
+            <table><thead><tr><th>年度</th><th>全年合计</th><th>寒假 + 暑假 (季节性占比)</th><th>同比</th></tr></thead><tbody>\${annualHtml}</tbody></table>
+          </div>
+          <div>
+            <h3 style="font-size:14px;margin:0 0 8px">📅 13 个单考期明细</h3>
             <table><thead><tr><th>考期</th><th>报考笔数</th></tr></thead><tbody>\${seasonsHtml}</tbody></table>
           </div>
           <div>

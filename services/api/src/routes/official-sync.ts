@@ -552,6 +552,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
     const [
       countsRes,
       seasonsRes,
+      annualRes,
       topAgentsRes,
       topMajorsRes,
       levelsRes,
@@ -568,7 +569,18 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         SELECT season_code, season_label, COUNT(*)::int AS exam_count
         FROM kjzx_historical_exams
         GROUP BY season_code, season_label
-        ORDER BY season_code DESC
+        ORDER BY (FLOOR(season_code / 10)) DESC, (CASE WHEN season_code % 10 = 4 THEN 1 ELSE 0 END) DESC
+      `),
+      pool.query(`
+        SELECT
+          FLOOR(season_code / 10)::int AS year,
+          COUNT(*)::int AS full_year_count,
+          COUNT(*) FILTER (WHERE season_code % 10 = 5)::int AS winter_count,
+          COUNT(*) FILTER (WHERE season_code % 10 != 5)::int AS summer_count,
+          ROUND(100.0 * COUNT(*) FILTER (WHERE season_code % 10 != 5) / NULLIF(COUNT(*), 0), 1)::float AS summer_share_pct
+        FROM kjzx_historical_exams
+        GROUP BY FLOOR(season_code / 10)::int
+        ORDER BY year DESC
       `),
       pool.query(`
         SELECT a.agent_id, a.code, a.name, a.manager, a.phone,
@@ -594,8 +606,25 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       `),
     ]);
 
+    const annualAsc = [...annualRes.rows].sort((a, b) => a.year - b.year);
+    const yoyByYear = new Map<number, number | null>();
+    for (let i = 0; i < annualAsc.length; i++) {
+      const cur = annualAsc[i];
+      const prev = i > 0 ? annualAsc[i - 1] : null;
+      const yoy =
+        prev && prev.full_year_count > 0
+          ? Number((((cur.full_year_count - prev.full_year_count) * 100) / prev.full_year_count).toFixed(1))
+          : null;
+      yoyByYear.set(cur.year, yoy);
+    }
+    const annualCombined = annualRes.rows.map((r) => ({
+      ...r,
+      yoy_pct: yoyByYear.get(r.year) ?? null,
+    }));
+
     return reply.code(200).send({
       totals: countsRes.rows[0],
+      annual_combined: annualCombined,
       seasons: seasonsRes.rows,
       top_partner_agents: topAgentsRes.rows,
       top_majors: topMajorsRes.rows,
@@ -1431,6 +1460,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
     ) => {
       const pool = getPostgresPool();
       const seasonCode = Number(req.query?.season_code || 20264);
+      const isFullYear = seasonCode >= 2020 && seasonCode <= 2035;
       const agentQ = (req.query?.agent_q || '').trim();
       const agentId = req.query?.agent_id ? Number(req.query.agent_id) : null;
 
@@ -1439,7 +1469,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         6: 390, 7: 420, 8: 450, 9: 480, 10: 510, 11: 620,
       };
 
-      // 1) Query all exam registrations in the selected season (filtered by teacher/agent if provided)
+      // 1) Query all exam registrations in the selected season or full-year combined (寒假 + 暑假)
       const examsRes = await pool.query(
         `
         SELECT
@@ -1459,7 +1489,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         FROM kjzx_historical_exams e
         LEFT JOIN kjzx_partner_agents a ON a.agent_id = e.agent_id
         LEFT JOIN kjzx_historical_students s ON s.student_id = e.student_id
-        WHERE e.season_code = $1::int
+        WHERE (CASE WHEN $4::boolean THEN FLOOR(e.season_code / 10)::int = $1::int ELSE e.season_code = $1::int END)
           AND ($2::int IS NULL OR e.agent_id = $2::int)
           AND ($3::text = '' OR COALESCE(e.agent_name, a.name, '') ILIKE '%' || $3::text || '%' OR COALESCE(a.manager, '') ILIKE '%' || $3::text || '%')
         ORDER BY COALESCE(e.agent_name, a.name, '') ASC,
@@ -1468,7 +1498,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
                  e.level ASC,
                  e.student_name ASC
         `,
-        [seasonCode, agentId, agentQ],
+        [seasonCode, agentId, agentQ, isFullYear],
       );
 
       const instByLevel: Record<number, number> = {};
@@ -1476,11 +1506,18 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       let totalFeeYuan = 0;
       let instCount = 0;
       let theoryCount = 0;
+      let winterCount = 0;
+      let summerCount = 0;
 
       const studentRows = examsRes.rows.map((r, idx) => {
         const lvl = Number(r.level || 1);
         const feeYuan = LEVEL_FEE_YUAN[lvl] || 390;
         totalFeeYuan += feeYuan;
+        if (Number(r.season_code) % 10 === 5) {
+          winterCount += 1;
+        } else {
+          summerCount += 1;
+        }
         const isTheory = r.major_name === '音乐基础知识';
         if (isTheory) {
           theoryCount += 1;
@@ -1498,6 +1535,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           student_id: r.student_id,
           student_name: r.student_name,
           agent_name: r.agent_name,
+          season_label: r.season_label,
           major_name: r.major_name,
           level: lvl,
           fee_yuan: feeYuan,
@@ -1508,7 +1546,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         };
       });
 
-      // 2) Full-season Pre-Exam Filing Matrix (`考前备案表 · 专业及考官信息`)
+      // 2) Full-season or Full-year Pre-Exam Filing Matrix (`考前备案表 · 专业及考官信息`)
       const filingRes = await pool.query(
         `
         SELECT
@@ -1516,14 +1554,14 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           level,
           COUNT(*)::int AS cnt
         FROM kjzx_historical_exams
-        WHERE season_code = $1::int
+        WHERE (CASE WHEN $2::boolean THEN FLOOR(season_code / 10)::int = $1::int ELSE season_code = $1::int END)
         GROUP BY major_name, level
         ORDER BY (CASE WHEN major_name = '音乐基础知识' THEN 1 ELSE 0 END) ASC,
                  SUM(COUNT(*)) OVER (PARTITION BY major_name) DESC,
                  major_name ASC,
                  level ASC
         `,
-        [seasonCode],
+        [seasonCode, isFullYear],
       );
 
       const filingByMajor: Record<
@@ -1543,12 +1581,19 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         seasonGrandTotal += c;
       }
 
+      const resolvedSeasonLabel = isFullYear
+        ? `${seasonCode}全年合并 (寒假+暑假)`
+        : examsRes.rows[0]?.season_label || String(seasonCode);
+
       return reply.code(200).send({
         season_code: seasonCode,
-        season_label: examsRes.rows[0]?.season_label || String(seasonCode),
+        is_full_year_combined: isFullYear,
+        season_label: resolvedSeasonLabel,
         agent_filter: agentQ || (agentId ? String(agentId) : '全部机构'),
         teacher_summary: {
           total_registrations: studentRows.length,
+          winter_count: winterCount,
+          summer_count: summerCount,
           instrument_count: instCount,
           theory_count: theoryCount,
           total_fee_yuan: totalFeeYuan,
