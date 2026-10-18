@@ -2084,7 +2084,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         const sel = document.getElementById('teacher-agent-select');
         const allOpt = \`<option value="">🌐 全部合作机构汇总</option>\`;
         const opts = partnerAgentsList.slice(0, 80).map(a =>
-          \`<option value="\${a.agent_id}">[\${a.code || a.agent_id}] \${a.name} (负责人: \${a.manager || '—'} · 历年 \${a.total_exams} 考次 / \${a.distinct_students} 人)</option>\`
+          \`<option value="\${a.agent_id}">[\${a.code || a.agent_id}] \${a.name} (25全年:\${a.y2025 ?? 0}[寒\${a.y2025_w ?? 0}+暑\${a.y2025_s ?? 0}] → 26全年:\${a.y2026 ?? 0}[寒\${a.y2026_w ?? 0}+暑\${a.y2026_s ?? 0}] · 7年累计\${a.total_exams}考次)</option>\`
         ).join('');
         sel.innerHTML = allOpt + opts;
       }
@@ -2230,7 +2230,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       loadTeacherRadarAndWallet();
     }
 
-    // Admin Console: Live Archive Stats & Teacher Invite Table
+    // Admin Console: Live Archive Stats & Full-Year Combined Teacher Evaluation
     async function loadAdminArchiveStats() {
       try {
         const [data, agentsRes, intelRes] = await Promise.all([
@@ -2244,36 +2244,49 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           document.getElementById('adm-stat-agents').textContent = data.totals.partner_agents_count + ' 家';
         }
 
-        // Render Studio Growth & Churn Forensic Radar
+        // Render Full-Year Combined (全年 = 寒假 + 暑假) Teacher Evaluation Radar
         const intelBox = document.getElementById('adm-studio-intelligence-box');
         if (intelBox && intelRes) {
           const gap = intelRes.theory_cross_sell_gap || {};
+          const champions = (intelRes.growing_champions_bucket_c || []).slice(0, 8).map(s => {
+            const studioName = s.name || s.agent_name || '合作老师';
+            const ret25 = s.ret25_pct ?? s.ret24_pct ?? 0;
+            const yoy = s.yoy_26_pct != null ? (s.yoy_26_pct >= 0 ? \`+\${s.yoy_26_pct}%\` : \`\${s.yoy_26_pct}%\`) : '—';
+            const tUrl = \`\${location.origin}/app?invite=\${s.invite_token || ''}&tab=teacher\`;
+            const pitch = encodeURIComponent(\`【国音九江考级办·年度标杆合作老师表彰】\${studioName}老师您好！2025全年(\${s.y2025}人)→2026全年(\${s.y2026}人，寒假\${s.y2026_w}+暑假\${s.y2026_s})贵部续报率高达 \${ret25}%！已为您开通标杆机构阶梯优待金与专属老生免填表通道：\${tUrl}\`);
+            return \`<tr>
+              <td><code>[\${s.code}]</code> <strong>\${studioName}</strong> <small style="color:var(--muted)">(\${s.main_inst || ''})</small></td>
+              <td>\${s.y2024} → <strong>\${s.y2025}</strong><small style="color:var(--muted)">(\${s.y2025_w}+\${s.y2025_s})</small> → <strong style="color:var(--primary-dark)">\${s.y2026}</strong><small style="color:var(--muted)">(\${s.y2026_w}+\${s.y2026_s})</small></td>
+              <td><span class="badge badge-confirmed">\${yoy} (25留\${ret25}%)</span></td>
+              <td><button class="btn-primary btn-sm" onclick="copyTextUri('\${pitch}')">🏆 复制标杆激励话术</button></td>
+            </tr>\`;
+          }).join('');
           const defectors = (intelRes.channel_defectors_bucket_b || []).slice(0, 8).map(s => {
             const studioName = s.name || s.agent_name || '合作老师';
-            const retPct = s.ret24_pct ?? s.retention_pct ?? 0;
-            const lvStart = s.avg_lvl_22 ?? s.avg_lv_2023 ?? '—';
-            const lvEnd = s.avg_lvl_25 ?? s.avg_lv_2025 ?? '—';
+            const ret25 = s.ret25_pct ?? s.ret24_pct ?? 0;
+            const lvStart = s.avg_lvl_23 ?? s.avg_lvl_22 ?? '—';
+            const lvEnd = s.avg_lvl_26 ?? s.avg_lvl_25 ?? '—';
             const tUrl = \`\${location.origin}/app?invite=\${s.invite_token || ''}&tab=teacher\`;
             const pitch = encodeURIComponent(\`【国音九江考级办·核心合作机构专享】\${studioName}老师您好！本季我们为您的在籍考生开放了5项低于市面价80%的官方补贴权益（¥1.90 AI二寸照、¥9.90 国音考官五维测评+同曲目百分位排名报告、¥0 免费永久保存2020-2026历年考级高清视频档案），且满30人即享阶梯优待金加码。点击您的专属工作台一键生成老生续报清单：\${tUrl}\`);
             return \`<tr>
-              <td><strong>\${studioName}</strong> <small style="color:var(--muted)">(\${s.main_inst || ''})</small></td>
-              <td>\${s.y2023} → \${s.y2024} → <strong style="color:var(--danger)">\${s.y2025}</strong></td>
-              <td><span class="badge" style="background:#fef2f2;color:#991b1b">\${retPct}% (流失\${s.lost_since_2023 || 0}人)</span></td>
+              <td><code>[\${s.code}]</code> <strong>\${studioName}</strong> <small style="color:var(--muted)">(\${s.main_inst || ''})</small></td>
+              <td>\${s.y2024} → \${s.y2025}<small style="color:var(--muted)">(\${s.y2025_w}+\${s.y2025_s})</small> → <strong style="color:var(--danger)">\${s.y2026}</strong><small style="color:var(--muted)">(\${s.y2026_w}+\${s.y2026_s})</small></td>
+              <td><span class="badge" style="background:#fef2f2;color:#991b1b">25留\${ret25}% (减\${s.lost_25_to_26 || 0}人)</span></td>
               <td>\${lvStart}级 → <strong>\${lvEnd}级</strong></td>
               <td><button class="btn-purple btn-sm" onclick="copyTextUri('\${pitch}')">📋 复制挽回话术(专属低价权益包)</button></td>
             </tr>\`;
           }).join('');
           const loyalAging = (intelRes.loyal_aging_bucket_a || []).slice(0, 8).map(s => {
             const studioName = s.name || s.agent_name || '合作老师';
-            const retPct = s.ret24_pct ?? s.retention_pct ?? 0;
-            const lvStart = s.avg_lvl_22 ?? s.avg_lv_2023 ?? '—';
-            const lvEnd = s.avg_lvl_25 ?? s.avg_lv_2025 ?? '—';
+            const ret25 = s.ret25_pct ?? s.ret24_pct ?? 0;
+            const lvStart = s.avg_lvl_23 ?? s.avg_lvl_22 ?? '—';
+            const lvEnd = s.avg_lvl_26 ?? s.avg_lvl_25 ?? '—';
             const tUrl = \`\${location.origin}/app?invite=\${s.invite_token || ''}&tab=teacher\`;
-            const pitch = encodeURIComponent(\`【国音九江考级办·琴行春季招生赋能】\${studioName}老师您好！感谢您一直以来的支持（老生续报率高达 \${retPct}%）！为帮咱们琴行补充1-3级启蒙新生，考级办免费为您提供【AI国音考官五维模拟测评体验卡】供琴行做引流体验课，并在您名下考生的考级荣誉海报底部免费印制贵琴行招生二维码！工作台：\${tUrl}\`);
+            const pitch = encodeURIComponent(\`【国音九江考级办·琴行春季招生赋能】\${studioName}老师您好！感谢您一直以来的支持（全年老生续报率高达 \${ret25}%）！为帮咱们琴行补充1-3级启蒙新生，考级办免费为您提供【AI国音考官五维模拟测评体验卡】供琴行做引流体验课，并在您名下考生的考级荣誉海报底部免费印制贵琴行招生二维码！工作台：\${tUrl}\`);
             return \`<tr>
-              <td><strong>\${studioName}</strong> <small style="color:var(--muted)">(\${s.main_inst || ''})</small></td>
-              <td>\${s.y2023} → \${s.y2024} → <strong>\${s.y2025}</strong></td>
-              <td><span class="badge badge-confirmed">\${retPct}% 极高忠诚</span></td>
+              <td><code>[\${s.code}]</code> <strong>\${studioName}</strong> <small style="color:var(--muted)">(\${s.main_inst || ''})</small></td>
+              <td>\${s.y2024} → \${s.y2025}<small style="color:var(--muted)">(\${s.y2025_w}+\${s.y2025_s})</small> → <strong>\${s.y2026}</strong><small style="color:var(--muted)">(\${s.y2026_w}+\${s.y2026_s})</small></td>
+              <td><span class="badge badge-confirmed">25留\${ret25}% 极高忠诚</span></td>
               <td>\${lvStart}级 → <strong style="color:var(--warn)">\${lvEnd}级 (高龄化)</strong></td>
               <td><button class="btn-outline btn-sm" onclick="copyTextUri('\${pitch}')">🎁 复制招生赋能包话术</button></td>
             </tr>\`;
@@ -2281,24 +2294,31 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           intelBox.innerHTML = \`
             <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
               <div style="font-size:12.5px;color:#1e3a8a">
-                💡 <strong>「音乐基础知识（音基）」跨科联报金矿：</strong>库内共 <strong>\${(gap.grade3plus_missing_theory || 2439).toLocaleString()} 名</strong> 器乐3级以上考生（含 <strong>\${(gap.grade6plus_missing_theory || 1027).toLocaleString()} 名</strong> 6级以上高阶考生）从未报考音基！家长端搜索老生时已开启<strong>自动弹窗勾选「音基联报 + 免费送 ¥9.90 冲刺题库」</strong>。
+                💡 <strong>按「全年合并 = 寒假+暑假」评估老师（消除寒暑季节性偏差）：</strong>许多古筝/小提琴老师仅在暑假送考（寒假0人），必须用 <strong>24全年 → 25全年(寒+暑) → 26全年(寒+暑)</strong> 评估真实增长与流失；同时库内共 <strong>\${(gap.grade3plus_missing_theory || 2439).toLocaleString()} 名</strong> 3级以上考生待补考音基。
               </div>
-              <span class="badge badge-paid">潜在新增考费池 ¥58.5万</span>
+              <span class="badge badge-paid">全年合并口径 (寒假+暑假)</span>
+            </div>
+            <div style="border:1px solid #86efac;background:#f0fdf4;border-radius:10px;padding:10px;margin-bottom:12px">
+              <div style="font-size:13px;font-weight:700;color:#065f46;margin-bottom:6px">🏆 Bucket C：2025全年→2026全年 逆势增长与高稳健标杆老师（全年寒假+暑假合并口径）</div>
+              <table>
+                <thead><tr><th>机构/老师</th><th>24全年 → 25全年(寒+暑) → 26全年(寒+暑)</th><th>26全年同比 & 留存</th><th>标杆激励</th></tr></thead>
+                <tbody>\${champions}</tbody>
+              </table>
             </div>
             <div class="grid-2" style="gap:14px">
               <div style="border:1px solid #fecaca;background:#fff5f5;border-radius:10px;padding:10px">
-                <div style="font-size:13px;font-weight:700;color:#991b1b;margin-bottom:6px">🚨 Bucket B：疑似外流其它考级通道机构（老生续报率 &lt;35%，低级别被转走）</div>
+                <div style="font-size:13px;font-weight:700;color:#991b1b;margin-bottom:6px">🚨 Bucket B：2024/2025全年→2026全年 断崖流失 / 疑似被分流老师（全年留存 &lt;48%）</div>
                 <div style="font-size:11.5px;color:#7f1d1d;margin-bottom:8px">对策：用<strong>「仅限本考点在籍考生专享低于市面价80%补贴包 + 历年视频云档案绑定 + 阶梯返佣」</strong>让家长主动要求报国音。</div>
                 <table>
-                  <thead><tr><th>机构/老师</th><th>23→24→25考次</th><th>1-8级老生续报率</th><th>平均考级变化</th><th>精准挽回</th></tr></thead>
+                  <thead><tr><th>机构/老师</th><th>24全年→25全年(寒+暑)→26全年(寒+暑)</th><th>全年留存/减员</th><th>均级变化</th><th>精准挽回</th></tr></thead>
                   <tbody>\${defectors}</tbody>
                 </table>
               </div>
               <div style="border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;padding:10px">
-                <div style="font-size:13px;font-weight:700;color:#065f46;margin-bottom:6px">🌱 Bucket A：100%忠诚但琴行初学新生断档机构（老生续报 50%~88%，均级升至 7.5+级）</div>
-                <div style="font-size:11.5px;color:#065f46;margin-bottom:8px">对策：老生毕业致总量自然下滑，提供<strong>「AI五维测评引流卡 + 考级喜报底部琴行招生码」</strong>帮老师招1-3级新生。</div>
+                <div style="font-size:13px;font-weight:700;color:#065f46;margin-bottom:6px">🌱 Bucket A：全年高留存（50%~85%）但老生毕业、1-3级初学新生断档老师</div>
+                <div style="font-size:11.5px;color:#065f46;margin-bottom:8px">对策：老生毕业致全年总量自然回落，提供<strong>「AI五维测评引流卡 + 考级喜报底部琴行招生码」</strong>帮老师招1-3级新生。</div>
                 <table>
-                  <thead><tr><th>机构/老师</th><th>23→24→25考次</th><th>1-8级老生续报率</th><th>平均考级变化</th><th>招生赋能</th></tr></thead>
+                  <thead><tr><th>机构/老师</th><th>24全年→25全年(寒+暑)→26全年(寒+暑)</th><th>全年留存率</th><th>均级变化</th><th>招生赋能</th></tr></thead>
                   <tbody>\${loyalAging}</tbody>
                 </table>
               </div>
@@ -2306,7 +2326,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           \`;
         }
 
-        // Populate top 12 teachers in invite table (starting with 999 sandbox teacher)
+        // Populate top 12 teachers in invite table (sorted by 2025+2026 full-year volume, starting with 999 sandbox teacher)
         const inviteRows = (agentsRes.items || []).slice(0, 12).map(a => {
           const tUrl = \`\${location.origin}/app?invite=\${a.invite_token}&tab=teacher\`;
           const pUrl = \`\${location.origin}/app?ref=\${a.parent_referral_code}&tab=parent\`;
@@ -2317,7 +2337,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           return \`
             <tr style="\${a.agent_id === 999 ? 'background:#f0fdf4' : ''}">
               <td><code>[\${a.code || a.agent_id}]</code> <strong>\${a.name}</strong></td>
-              <td>\${a.manager || '—'} <small style="color:var(--muted)">(\${a.total_exams}考次/\${a.distinct_students}人)</small></td>
+              <td>25全年:<strong>\${a.y2025 ?? 0}</strong><small style="color:var(--muted)">(寒\${a.y2025_w ?? 0}+暑\${a.y2025_s ?? 0})</small> → 26全年:<strong>\${a.y2026 ?? 0}</strong><small style="color:var(--muted)">(寒\${a.y2026_w ?? 0}+暑\${a.y2026_s ?? 0})</small> <small style="color:var(--muted)">| 7年\${a.total_exams}次</small></td>
               <td>\${bindBadge}</td>
               <td>
                 <button class="btn-purple btn-sm" onclick="copyTextUri('\${inviteMsg}')">📋 复制老师绑定邀请函</button>
@@ -2348,8 +2368,12 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         const seasonsHtml = (data.seasons || []).map(s =>
           \`<tr><td><code>\${s.season_code}</code> · \${s.season_label}</td><td><strong>\${s.exam_count.toLocaleString()}</strong> 笔</td></tr>\`
         ).join('');
-        const agentsHtml = (data.top_partner_agents || []).slice(0, 10).map(a =>
-          \`<tr><td>[\${a.code}] <strong>\${a.name}</strong> (\${a.manager || ''})</td><td><strong>\${a.total_exams}</strong> 考次 / \${a.distinct_students} 人</td></tr>\`
+        const agentsHtml = (data.top_partner_agents || []).slice(0, 12).map(a =>
+          \`<tr>
+            <td>[\${a.code}] <strong>\${a.name}</strong></td>
+            <td>\${a.y2024 ?? 0} → <strong>\${a.y2025 ?? 0}</strong><small style="color:var(--muted)">(\${a.y2025_w ?? 0}+\${a.y2025_s ?? 0})</small> → <strong style="color:var(--primary-dark)">\${a.y2026 ?? 0}</strong><small style="color:var(--muted)">(\${a.y2026_w ?? 0}+\${a.y2026_s ?? 0})</small></td>
+            <td><strong>\${a.total_exams}</strong> 考次 / \${a.distinct_students} 人</td>
+          </tr>\`
         ).join('');
         document.getElementById('adm-archive-breakdown').innerHTML = \`
           <div>
@@ -2357,12 +2381,12 @@ const WEB_APP_HTML = `<!DOCTYPE html>
             <table><thead><tr><th>年度</th><th>全年合计</th><th>寒假 + 暑假 (季节性占比)</th><th>同比</th></tr></thead><tbody>\${annualHtml}</tbody></table>
           </div>
           <div>
-            <h3 style="font-size:14px;margin:0 0 8px">📅 13 个单考期明细</h3>
-            <table><thead><tr><th>考期</th><th>报考笔数</th></tr></thead><tbody>\${seasonsHtml}</tbody></table>
+            <h3 style="font-size:14px;margin:0 0 8px">🏆 Top 12 合作老师（按 24全年 → 25全年(寒+暑) → 26全年(寒+暑) 评估）</h3>
+            <table><thead><tr><th>机构 / 老师</th><th>24全年 → 25全年(寒+暑) → 26全年(寒+暑)</th><th>7年累计</th></tr></thead><tbody>\${agentsHtml}</tbody></table>
           </div>
           <div>
-            <h3 style="font-size:14px;margin:0 0 8px">🏆 Top 10 合作老师 / 报名点</h3>
-            <table><thead><tr><th>机构 / 指导老师</th><th>累计考次 / 考生数</th></tr></thead><tbody>\${agentsHtml}</tbody></table>
+            <h3 style="font-size:14px;margin:0 0 8px">📅 13 个单考期明细</h3>
+            <table><thead><tr><th>考期</th><th>报考笔数</th></tr></thead><tbody>\${seasonsHtml}</tbody></table>
           </div>
         \`;
       } catch (err) {

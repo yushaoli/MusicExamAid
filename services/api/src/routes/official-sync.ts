@@ -585,11 +585,20 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       pool.query(`
         SELECT a.agent_id, a.code, a.name, a.manager, a.phone,
                COUNT(e.exam_id)::int AS total_exams,
-               COUNT(DISTINCT e.student_id)::int AS distinct_students
+               COUNT(DISTINCT e.student_id)::int AS distinct_students,
+               COUNT(e.exam_id) FILTER (WHERE e.season_code IN (20234, 20235))::int AS y2023,
+               COUNT(e.exam_id) FILTER (WHERE e.season_code IN (20244, 20245))::int AS y2024,
+               COUNT(e.exam_id) FILTER (WHERE e.season_code IN (20254, 20255))::int AS y2025,
+               COUNT(e.exam_id) FILTER (WHERE e.season_code = 20255)::int AS y2025_w,
+               COUNT(e.exam_id) FILTER (WHERE e.season_code = 20254)::int AS y2025_s,
+               COUNT(e.exam_id) FILTER (WHERE e.season_code IN (20264, 20265))::int AS y2026,
+               COUNT(e.exam_id) FILTER (WHERE e.season_code = 20265)::int AS y2026_w,
+               COUNT(e.exam_id) FILTER (WHERE e.season_code = 20264)::int AS y2026_s
         FROM kjzx_partner_agents a
         LEFT JOIN kjzx_historical_exams e ON e.agent_id = a.agent_id
+        WHERE a.agent_id <> 999
         GROUP BY a.agent_id, a.code, a.name, a.manager, a.phone
-        ORDER BY total_exams DESC
+        ORDER BY (COUNT(e.exam_id) FILTER (WHERE e.season_code IN (20254, 20255, 20264, 20265))) DESC, total_exams DESC
         LIMIT 15
       `),
       pool.query(`
@@ -775,11 +784,25 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         a.wx_nickname,
         a.bound_at,
         COUNT(e.exam_id)::int AS total_exams,
-        COUNT(DISTINCT e.student_id)::int AS distinct_students
+        COUNT(DISTINCT e.student_id)::int AS distinct_students,
+        COUNT(e.exam_id) FILTER (WHERE e.season_code IN (20234, 20235))::int AS y2023,
+        COUNT(e.exam_id) FILTER (WHERE e.season_code IN (20244, 20245))::int AS y2024,
+        COUNT(e.exam_id) FILTER (WHERE e.season_code = 20245)::int AS y2024_w,
+        COUNT(e.exam_id) FILTER (WHERE e.season_code = 20244)::int AS y2024_s,
+        COUNT(e.exam_id) FILTER (WHERE e.season_code IN (20254, 20255))::int AS y2025,
+        COUNT(e.exam_id) FILTER (WHERE e.season_code = 20255)::int AS y2025_w,
+        COUNT(e.exam_id) FILTER (WHERE e.season_code = 20254)::int AS y2025_s,
+        COUNT(e.exam_id) FILTER (WHERE e.season_code IN (20264, 20265))::int AS y2026,
+        COUNT(e.exam_id) FILTER (WHERE e.season_code = 20265)::int AS y2026_w,
+        COUNT(e.exam_id) FILTER (WHERE e.season_code = 20264)::int AS y2026_s
       FROM kjzx_partner_agents a
       LEFT JOIN kjzx_historical_exams e ON e.agent_id = a.agent_id
       GROUP BY a.agent_id, a.code, a.name, a.manager, a.phone, a.addr, a.invite_token, a.parent_referral_code, a.wx_openid, a.wx_nickname, a.bound_at
-      ORDER BY (CASE WHEN a.agent_id = 999 THEN 0 ELSE 1 END) ASC, total_exams DESC, a.agent_id ASC
+      ORDER BY
+        (CASE WHEN a.agent_id = 999 THEN 0 ELSE 1 END) ASC,
+        (COUNT(e.exam_id) FILTER (WHERE e.season_code IN (20254, 20255, 20264, 20265))) DESC,
+        total_exams DESC,
+        a.agent_id ASC
     `);
     return reply.code(200).send({
       total: rows.length,
@@ -921,7 +944,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // 8b. Studio Growth & Churn Forensic Intelligence (`GET /official-sync/studio-growth-intelligence`)
+  // 8b. Full-Year Combined (`寒假 + 暑假`) Teacher & Studio Evaluation (`GET /official-sync/studio-growth-intelligence`)
   app.get('/official-sync/studio-growth-intelligence', async (_req, reply) => {
     const pool = getPostgresPool();
     const [studiosRes, theoryGapRes] = await Promise.all([
@@ -938,18 +961,34 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
             COUNT(*) FILTER (WHERE season_code IN (20224, 20225))::int AS y2022,
             COUNT(*) FILTER (WHERE season_code IN (20234, 20235))::int AS y2023,
             COUNT(*) FILTER (WHERE season_code IN (20244, 20245))::int AS y2024,
+            COUNT(*) FILTER (WHERE season_code = 20245)::int AS y2024_w,
+            COUNT(*) FILTER (WHERE season_code = 20244)::int AS y2024_s,
             COUNT(*) FILTER (WHERE season_code IN (20254, 20255))::int AS y2025,
+            COUNT(*) FILTER (WHERE season_code = 20255)::int AS y2025_w,
+            COUNT(*) FILTER (WHERE season_code = 20254)::int AS y2025_s,
             COUNT(*) FILTER (WHERE season_code IN (20264, 20265))::int AS y2026,
+            COUNT(*) FILTER (WHERE season_code = 20265)::int AS y2026_w,
+            COUNT(*) FILTER (WHERE season_code = 20264)::int AS y2026_s,
             COUNT(DISTINCT e.student_id) FILTER (WHERE season_code IN (20244, 20245) AND level <= 8 AND major_name <> '音乐基础知识')::int AS c2024_eligible,
             COUNT(DISTINCT e.student_id) FILTER (
               WHERE season_code IN (20244, 20245) AND level <= 8 AND major_name <> '音乐基础知识'
               AND EXISTS (
                 SELECT 1 FROM kjzx_historical_exams e2
-                WHERE e2.student_id = e.student_id AND e2.season_code >= 20254
+                WHERE e2.student_id = e.student_id AND e2.season_code IN (20254, 20255, 20264, 20265)
               )
             )::int AS c2024_returned_25_26,
+            COUNT(DISTINCT e.student_id) FILTER (WHERE season_code IN (20254, 20255) AND level <= 8 AND major_name <> '音乐基础知识')::int AS c2025_eligible,
+            COUNT(DISTINCT e.student_id) FILTER (
+              WHERE season_code IN (20254, 20255) AND level <= 8 AND major_name <> '音乐基础知识'
+              AND EXISTS (
+                SELECT 1 FROM kjzx_historical_exams e2
+                WHERE e2.student_id = e.student_id AND e2.season_code IN (20264, 20265)
+              )
+            )::int AS c2025_returned_26,
             ROUND(AVG(level) FILTER (WHERE season_code IN (20224,20225) AND major_name <> '音乐基础知识'), 1)::float AS avg_lvl_22,
-            ROUND(AVG(level) FILTER (WHERE season_code IN (20254,20255) AND major_name <> '音乐基础知识'), 1)::float AS avg_lvl_25
+            ROUND(AVG(level) FILTER (WHERE season_code IN (20234,20235) AND major_name <> '音乐基础知识'), 1)::float AS avg_lvl_23,
+            ROUND(AVG(level) FILTER (WHERE season_code IN (20254,20255) AND major_name <> '音乐基础知识'), 1)::float AS avg_lvl_25,
+            ROUND(AVG(level) FILTER (WHERE season_code IN (20264,20265) AND major_name <> '音乐基础知识'), 1)::float AS avg_lvl_26
           FROM kjzx_historical_exams e
           LEFT JOIN kjzx_partner_agents a ON a.agent_id = e.agent_id
           WHERE e.agent_id IS NOT NULL AND e.agent_id <> 999
@@ -963,15 +1002,23 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           invite_token,
           parent_referral_code,
           main_inst,
-          y2022, y2023, y2024, y2025, y2026,
+          y2022, y2023,
+          y2024, y2024_w, y2024_s,
+          y2025, y2025_w, y2025_s,
+          y2026, y2026_w, y2026_s,
           COALESCE(ROUND(c2024_returned_25_26 * 100.0 / NULLIF(c2024_eligible, 0), 0), 0)::int AS ret24_pct,
+          COALESCE(ROUND(c2025_returned_26 * 100.0 / NULLIF(c2025_eligible, 0), 0), 0)::int AS ret25_pct,
+          CASE WHEN y2025 > 0 THEN ROUND((y2026 - y2025) * 100.0 / y2025, 0)::int ELSE NULL END AS yoy_26_pct,
           avg_lvl_22,
+          avg_lvl_23,
           avg_lvl_25,
-          (y2023 - y2025)::int AS lost_since_2023
+          avg_lvl_26,
+          (y2023 - y2025)::int AS lost_since_2023,
+          (y2024 - y2026)::int AS lost_24_to_26,
+          (y2025 - y2026)::int AS lost_25_to_26
         FROM studio_stats
-        WHERE y2023 >= 45
-        ORDER BY (y2023 - y2025) DESC
-        LIMIT 18;
+        WHERE (y2023 >= 30 OR y2024 >= 30 OR y2025 >= 20 OR y2026 >= 20)
+        ORDER BY y2026 DESC, y2025 DESC
       `),
       pool.query(`
         WITH student_majors AS (
@@ -991,16 +1038,52 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
     ]);
 
     const rows = studiosRes.rows;
-    const channelDefectors = rows.filter(r => Number(r.ret24_pct) <= 36 && Number(r.lost_since_2023) >= 35);
-    const loyalAging = rows.filter(r => Number(r.ret24_pct) > 36 && Number(r.lost_since_2023) >= 35);
+    // Bucket C: Full-Year (`寒假+暑假`) Growing or Steady Champions in 2025 -> 2026
+    const growingChampions = rows
+      .filter(r => r.agent_id !== 18 && Number(r.y2026) >= 25 && Number(r.y2026) >= Number(r.y2025) * 0.88)
+      .sort((a, b) => Number(b.y2026) - Number(a.y2026))
+      .slice(0, 12);
+
+    // Bucket B: Full-Year (`寒假+暑假`) Sharp Drop / Suspected Channel Defectors (2024/2025 -> 2026)
+    const channelDefectors = rows
+      .filter(
+        r =>
+          r.agent_id !== 18 &&
+          !growingChampions.includes(r) &&
+          (Number(r.y2024) >= 34 || Number(r.y2025) >= 34 || Number(r.y2023) >= 50) &&
+          (Number(r.ret25_pct) <= 48 || Number(r.ret24_pct) <= 45) &&
+          Number(r.y2026) < Number(r.y2024) * 0.75,
+      )
+      .sort(
+        (a, b) =>
+          Number(b.y2024) + Number(b.y2025) - 2 * Number(b.y2026) -
+          (Number(a.y2024) + Number(a.y2025) - 2 * Number(a.y2026)),
+      )
+      .slice(0, 12);
+
+    // Bucket A: Full-Year (`寒假+暑假`) Loyal High-Retention (>50%) but Aging Student Base / Beginner Shortage
+    const loyalAging = rows
+      .filter(
+        r =>
+          r.agent_id !== 18 &&
+          !growingChampions.includes(r) &&
+          !channelDefectors.includes(r) &&
+          Number(r.y2026) < Number(r.y2023) * 0.78 &&
+          (Number(r.ret24_pct) >= 50 || Number(r.ret25_pct) >= 50),
+      )
+      .sort((a, b) => Number(b.y2023) - Number(b.y2026) - (Number(a.y2023) - Number(a.y2026)))
+      .slice(0, 12);
+
     const gap = theoryGapRes.rows[0] || { grade3plus_missing_theory: 2439, grade6plus_missing_theory: 1027 };
 
     return reply.code(200).send({
+      evaluation_basis: 'FULL_YEAR_COMBINED_WINTER_PLUS_SUMMER (全年合并 = 寒假 YYYY5 + 暑假 YYYY4)',
       theory_cross_sell_gap: {
         grade3plus_missing_theory: gap.grade3plus_missing_theory,
         grade6plus_missing_theory: gap.grade6plus_missing_theory,
         potential_exam_fee_yuan: gap.grade3plus_missing_theory * 240,
       },
+      growing_champions_bucket_c: growingChampions,
       channel_defectors_bucket_b: channelDefectors,
       loyal_aging_bucket_a: loyalAging,
     });
