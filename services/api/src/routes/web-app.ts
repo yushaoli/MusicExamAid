@@ -649,18 +649,18 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         <div id="console-reg-list">加载中...</div>
       </div>
 
-      <!-- Local MinIO Media Cache & Automated 初审 / AI 5D Center -->
+      <!-- Local MinIO Media Cache & Automated 初审 / Paid 考前预审 Center -->
       <div class="card" style="border:2px solid #16a34a">
         <h2>
-          <span>🗄️ 上海服务器 (<code>ubtxiaomi MinIO + DAS4T</code>) 视频镜像与「🛡️ 机器初审 / 🤖 AI 五维复审」中心</span>
+          <span>🗄️ 上海服务器 (<code>ubtxiaomi MinIO + DAS4T</code>) 视频/照片镜像与「🛡️ 机器初审 (省力) / 🎯 考前预审 (收费创收)」中心</span>
           <span style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn-wecom btn-sm" onclick="runBatchChushenCheck(20264, 10)">🛡️ 一键批量机器初审 (抽检10人)</button>
+            <button class="btn-wecom btn-sm" onclick="runBatchChushenCheck(20264, 10)">🛡️ 一键批量机器初审 (视频+二寸照)</button>
             <button class="btn-primary btn-sm" onclick="prebufferBatchMedia('20264', 6)">📥 批量预缓存 2026考季 视频 (6条)</button>
             <button class="btn-outline btn-sm" onclick="loadMediaCacheStats()">🔄 刷新缓存统计</button>
           </span>
         </h2>
         <p class="sub">
-          采用「<strong>穿透缓存 (MinIO S3) + 全量评分优先镜像 (DAS4T Tier-0/Tier-1) + 自动机器初审/五维复审</strong>」三引擎：一方面自动核验视频<strong>画幅分辨率、音轨完整性、人证合一 (二寸照)、申报曲目与考纲一致性、重复上传检测</strong>（为谈老师省去 90% 人工初审点击）；另一方面提供<strong>「🤖 国音五维 AI 考官诊断 + ⏱️ 时间轴问题定位 + 🌟 同曲目 50分满分示范对比」</strong>（支撑 ¥9.9 / ¥49.9 增值创收）。
+          采用「<strong>穿透缓存 (MinIO S3) + 全量评分优先镜像 (DAS4T Tier-0/Tier-1) + 自动机器初审 + 收费考前预审</strong>」双轮驱动：一方面自动初审<strong>视频画幅/音轨/完整性 + 考生二寸证件照 (查横版生活照/未裁剪手机截屏/模糊) + 过往证书 + 申报曲目跨级查重</strong>（为谈老师省去 90% 本地初审体力活）；另一方面对外作为<strong>「🎯 国音考级·考前预审 (¥9.9 AI五维预审 / ¥49.9 名师+AI 1对1 预审，合作老师分成 ¥29.9)」</strong>收费增值服务创收。
         </p>
         <div class="grid-4" id="adm-media-cache-stats">
           <div class="stat-box">
@@ -935,6 +935,51 @@ const WEB_APP_HTML = `<!DOCTYPE html>
 
         <div id="mom-fee-report-box">正在计算机构报名统计...</div>
       </div>
+
+      <!-- USE CASE 3: GIANT-FONT AUTOMATED VIDEO & PHOTO 初审 WORKBENCH FOR MOM -->
+      <div class="card" style="border:3px solid #0284c7;padding:20px">
+        <div style="font-size:22px;font-weight:800;color:#0369a1;margin-bottom:8px">
+          🛡️ 第三件事：考级视频 + 二寸证件照「一键机器初审」省力台（自动过滤 90% 合规考生，只看异常名单！）
+        </div>
+        <div style="font-size:17px;color:#334155;margin-bottom:12px">
+          以前本地逐个点开看视频、查照片初审非常耗精力！现在机器自动帮谈老师核查 5 件事：<strong>① 视频槽位是否重复上传同一文件、② 考生二寸证件照是否合格（自动抓出横版生活照、未裁剪手机长截屏、模糊缺照）及过往证书是否齐全、③ 申报曲目是否跨级/错曲、④ 视频画幅分辨率与是否有声音、⑤ 演奏时长是否完整未截断</strong>。默认只挑出<strong>「🟡🔴 疑似有问题」</strong>的学生供您复核，并可一键复制微信修改提醒发给指导老师：
+        </div>
+
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+          <div style="min-width:220px">
+            <label style="font-size:17px">选择初审考期</label>
+            <select id="mom-chushen-season" style="font-size:20px;padding:12px;font-weight:700">
+              <option value="20264" selected>2026年暑假 (20264 · 当前考期)</option>
+              <option value="20265">2026年寒假 (20265)</option>
+              <option value="20254">2025年暑假 (20254)</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:220px">
+            <label style="font-size:17px">按指导老师/机构或学生姓名筛选（留空则按批次抽检全季）</label>
+            <input id="mom-chushen-kw" value="" placeholder="留空查全季，或输入：周玲 / 陈洁 / 学生姓名"
+              style="font-size:20px;padding:12px;border:2px solid #0284c7;border-radius:10px;font-weight:700"
+              onkeydown="if(event.key==='Enter') momRunBatchChushen(false)" />
+          </div>
+          <div style="min-width:150px">
+            <label style="font-size:17px">单次初审人数</label>
+            <select id="mom-chushen-limit" style="font-size:20px;padding:12px;font-weight:700">
+              <option value="30" selected>一次审 30 人</option>
+              <option value="60">一次审 60 人</option>
+              <option value="120">一次审 120 人</option>
+            </select>
+          </div>
+          <button class="btn-primary" style="font-size:20px;padding:13px 24px;border-radius:12px;background:#0284c7" onclick="momRunBatchChushen(false)">
+            🛡️ 一键快速机器初审 (秒出结果)
+          </button>
+          <button class="btn-outline" style="font-size:18px;padding:13px 18px;border-radius:12px;font-weight:700" onclick="momRunBatchChushen(true)">
+            🔍 深度探测二寸照尺寸+MP4画幅 (前10人)
+          </button>
+        </div>
+
+        <div id="mom-chushen-result-box" style="font-size:18px;color:#475569">
+          👆 点击上方蓝色「🛡️ 一键快速机器初审」按钮，即可秒级筛出本批次视频或二寸照需要人工复核的考生。
+        </div>
+      </div>
     </section>
   </div>
 
@@ -1137,12 +1182,115 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       }
     }
 
+    let momLastChushenRes = null;
+
+    function momCopyChushenNotice(encodedText) {
+      const txt = decodeURIComponent(encodedText);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(() => showToast('✅ 已复制微信修改提醒，可直接粘贴发给指导老师！'));
+      } else {
+        showToast(txt);
+      }
+    }
+
+    function momFilterChushenView(onlyFlagged) {
+      if (!momLastChushenRes) return;
+      const box = document.getElementById('mom-chushen-result-box');
+      const res = momLastChushenRes;
+      const allItems = res.items || [];
+      const flaggedItems = allItems.filter(it => it.verdict !== 'AUTO_PASS');
+      const displayItems = onlyFlagged && flaggedItems.length > 0 ? flaggedItems : allItems;
+
+      const rowsHtml = displayItems.map(it => {
+        const badgeCls = it.verdict === 'AUTO_PASS' ? 'badge-confirmed' : it.verdict === 'NEEDS_HUMAN_CHECK' ? 'badge-needs_change' : 'badge-locked';
+        const warnSummary = (it.checks || []).filter(c => c.status !== 'PASS').map(c => c.detail).join('；') || '✅ 五项合规核验全部通过（无重复上传、二寸照齐全、曲目与级别一致）';
+        const encNotice = encodeURIComponent(it.wechat_notice_text || '');
+        const encUrl = encodeURIComponent(it.first_video_url || '');
+        const encTitle = encodeURIComponent(\`\${it.student_name} · \${it.major_name}\${it.level}级\`);
+        return \`
+          <tr style="font-size:17px">
+            <td><strong>\${it.student_name}</strong><div style="font-size:14px;color:#64748b">指导老师：\${it.agent_name || '—'}</div></td>
+            <td><strong>\${it.major_name} \${it.level}级</strong><div style="font-size:14px;color:#64748b">共 \${it.clip_count} 首视频</div></td>
+            <td style="font-size:15.5px">\${(it.exam_titles || []).join(' / ') || '标准槽位'}</td>
+            <td><span class="badge \${badgeCls}" style="font-size:15px;padding:6px 10px">\${it.verdict_label}</span></td>
+            <td style="font-size:15.5px;color:\${it.verdict === 'AUTO_PASS' ? '#047857' : '#b45309'}">\${warnSummary}</td>
+            <td>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                \${it.first_video_url ? \`<button class="btn-wecom btn-sm" style="font-size:15px" onclick="playVideoLocally('\${encUrl}','\${encTitle}',\${it.student_id},\${it.exam_id})">🎬 抽看视频</button>\` : ''}
+                \${it.verdict !== 'AUTO_PASS' ? \`<button class="btn-primary btn-sm" style="font-size:15px;background:#d97706" onclick="momCopyChushenNotice('\${encNotice}')">📋 复制微信提醒给老师</button>\` : ''}
+              </div>
+            </td>
+          </tr>
+        \`;
+      }).join('');
+
+      box.innerHTML = \`
+        <div style="background:#f0f9ff;border:2px solid #0284c7;border-radius:12px;padding:14px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div style="font-size:19px">
+            <strong>🛡️ 本批机器初审共 \${res.checked_count} 人：</strong>
+            <span class="badge badge-confirmed" style="font-size:16px;padding:5px 10px">🟢 机器免审直通 \${res.auto_pass_count} 人</span>
+            <span class="badge badge-needs_change" style="font-size:16px;padding:5px 10px;margin-left:6px">🟡 需谈老师复核 \${res.needs_human_check_count} 人</span>
+            <span class="badge badge-locked" style="font-size:16px;padding:5px 10px;margin-left:6px">🔴 异常建议退回 \${res.auto_reject_count} 人</span>
+            <span style="margin-left:10px;color:#047857;font-weight:800">（⚡ 帮谈老师省去人工审片约 \${res.estimated_human_minutes_saved} 分钟！）</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn-primary btn-sm" style="font-size:16px" onclick="momFilterChushenView(true)">🟡🔴 只看需人工复核 (\${flaggedItems.length}人)</button>
+            <button class="btn-outline btn-sm" style="font-size:16px;background:#fff" onclick="momFilterChushenView(false)">📋 查看本批全部 (\${allItems.length}人)</button>
+          </div>
+        </div>
+        \${flaggedItems.length === 0 && onlyFlagged ? '<div style="padding:12px;background:#ecfdf5;border:2px solid #16a34a;border-radius:10px;color:#065f46;font-weight:700;margin-bottom:10px">🎉 太棒了！本批次抽检考生 100% 通过机器初审，无重复上传、无跨级错曲、二寸照全部齐全！以下展示全部通过名单：</div>' : ''}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr style="font-size:16px">
+                <th>考生 / 指导老师</th>
+                <th>专业与级别</th>
+                <th>申报曲目</th>
+                <th>机器初审结论</th>
+                <th>具体核验结果说明</th>
+                <th>快捷操作</th>
+              </tr>
+            </thead>
+            <tbody>\${rowsHtml}</tbody>
+          </table>
+        </div>
+      \`;
+    }
+
+    async function momRunBatchChushen(probeMedia) {
+      const box = document.getElementById('mom-chushen-result-box');
+      const seasonCode = Number(document.getElementById('mom-chushen-season').value || 20264);
+      const agentKw = (document.getElementById('mom-chushen-kw').value || '').trim();
+      const limit = probeMedia ? 10 : Number(document.getElementById('mom-chushen-limit').value || 30);
+      box.innerHTML = \`<div style="padding:16px;background:#eff6ff;border-radius:12px;color:#1d4ed8;font-weight:700">⏳ 机器正在自动核验 \${seasonCode} 考期\${agentKw ? '「' + agentKw + '」' : ''}前 \${limit} 名考生的视频槽位、二寸照、考纲曲目与完整性...</div>\`;
+      try {
+        const res = await fetch('/official-sync/video-chushen-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            season_code: seasonCode,
+            agent_keyword: agentKw,
+            limit,
+            probe_media: Boolean(probeMedia)
+          })
+        }).then(r => r.json());
+        if (res.error) {
+          box.innerHTML = '<div style="color:#dc2626">' + (res.message || res.error) + '</div>';
+          return;
+        }
+        momLastChushenRes = res;
+        momFilterChushenView(true);
+      } catch (e) {
+        box.innerHTML = '<div style="color:#dc2626">机器初审请求失败: ' + e.message + '</div>';
+      }
+    }
+
     async function runVideoAi5dReview(examId) {
       const drawer = document.getElementById('ai-video-inspection-drawer');
       const titleEl = document.getElementById('ai-inspection-title');
       const bodyEl = document.getElementById('ai-inspection-body');
       drawer.classList.remove('hidden');
-      titleEl.textContent = \`🤖 国音五维 AI 考官深度诊断报告 (考次 #\${examId}) — 正在生成时间轴问题定位与 50分满分同曲参照...\`;
+      titleEl.textContent = \`🎯 国音考级·考前五维预审报告 (考次 #\${examId}) — 正在生成时间轴问题定位与 50分满分同曲参照...\`;
       bodyEl.innerHTML = '<div style="font-size:13px;color:var(--muted)">⏳ 正在比对同专业同级别历史考官五维分位值、时间轴缺陷定位与 50/50 满分示范视频...</div>';
       drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
@@ -1156,8 +1304,9 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           bodyEl.innerHTML = '<div style="color:#dc2626">' + (r.message || r.error) + '</div>';
           return;
         }
-        titleEl.textContent = \`🤖 国音五维 AI 考官诊断 · \${r.student_name} (\${r.season_label} \${r.major_name}\${r.level}级) — 总分 \${r.score_total_50}/50分 (超过同级 \${r.percentile_rank}% 考生)\`;
+        titleEl.textContent = \`🎯 国音考前五维预审报告 · \${r.student_name} (\${r.season_label} \${r.major_name}\${r.level}级) — 预审总评 \${r.score_total_50}/50分 (超越同级 \${r.percentile_rank}% 考生)\`;
         const d5 = r.dimensions_5d || {};
+        const encUpsell = encodeURIComponent(r.parent_upsell_wechat_copy || '');
         const issuesHtml = (r.timeline_issues || []).map(iss => {
           const bg = iss.severity === 'HIGH' ? '#fef2f2' : iss.severity === 'MEDIUM' ? '#fffbeb' : '#ecfdf5';
           const bd = iss.severity === 'HIGH' ? '#fecaca' : iss.severity === 'MEDIUM' ? '#fde68a' : '#a7f3d0';
@@ -1167,8 +1316,8 @@ const WEB_APP_HTML = `<!DOCTYPE html>
               <div style="font-weight:700;font-size:13px;color:#0f172a">
                 ⏱️ [\${iss.timestamp}] · 《\${iss.clip_title}》 · \${iss.dimension} (\${iss.score_bucket}/10分) <span style="margin-left:6px;font-size:11.5px">\${tag}</span>
               </div>
-              <div style="font-size:12.5px;color:#334155;margin-top:4px"><strong>问题定位：</strong>\${iss.finding}</div>
-              <div style="font-size:12.5px;color:#047857;margin-top:3px"><strong>针对性练琴处方：</strong>\${iss.fix_prescription}</div>
+              <div style="font-size:12.5px;color:#334155;margin-top:4px"><strong>预审问题定位：</strong>\${iss.finding}</div>
+              <div style="font-size:12.5px;color:#047857;margin-top:3px"><strong>考前针对性练琴处方：</strong>\${iss.fix_prescription}</div>
             </div>
           \`;
         }).join('');
@@ -1190,21 +1339,29 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         }).join('');
 
         bodyEl.innerHTML = \`
+          <div style="margin-bottom:10px;padding:10px 12px;background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <div style="font-size:12.5px;color:#4c1d95">
+              <strong>💰 收费增值服务【国音考前预审】：</strong>
+              <span class="badge badge-confirmed" style="margin-left:4px">¥9.90 AI五维考前预审 (平台净利 ¥9.9)</span>
+              <span class="badge badge-locked" style="margin-left:4px">¥49.90 名师+AI 1对1 预审 (指导老师分成 ¥29.9 + 平台 ¥20)</span>
+            </div>
+            <button class="btn-purple btn-sm" onclick="momCopyChushenNotice('\${encUpsell}')">📲 复制【考前预审付费解锁通知】发家长微信</button>
+          </div>
           <div class="grid-4" style="margin-bottom:10px">
-            <div class="stat-box"><div class="stat-label">🏆 五维总评 / 预估通过率</div><div class="stat-val" style="color:#047857">\${r.score_total_50}/50分 (\${r.pass_probability_pct}%)</div></div>
+            <div class="stat-box"><div class="stat-label">🏆 预审五维总分 / 预估通过率</div><div class="stat-val" style="color:#047857">\${r.score_total_50}/50分 (\${r.pass_probability_pct}%)</div></div>
             <div class="stat-box"><div class="stat-label">🎯 音准 / 节奏 (同级均分)</div><div class="stat-val">\${d5.yinzhun_pitch?.score ?? 6} / \${d5.jiezou_rhythm?.score ?? 6} <span style="font-size:12px;color:var(--muted)">(均 \${d5.yinzhun_pitch?.cohort_avg}/\${d5.jiezou_rhythm?.cohort_avg})</span></div></div>
             <div class="stat-box"><div class="stat-label">🎵 音色 / 表现力 / 完整性</div><div class="stat-val">\${d5.yinse_tone?.score ?? 6} / \${d5.biaoxianli_expression?.score ?? 6} / \${d5.wanzhengxing_completeness?.score ?? 6}</div></div>
             <div class="stat-box"><div class="stat-label">📊 同专业同级历史常模</div><div class="stat-val">\${r.cohort_benchmark?.total_historical_candidates || 0} 人 (通过率 \${r.cohort_benchmark?.cohort_pass_rate_pct || 95}%)</div></div>
           </div>
           <div style="margin-bottom:10px;padding:8px 12px;background:#eff6ff;border-left:4px solid #2563eb;border-radius:6px;font-size:13px">
-            <strong>💬 国音考官总评：</strong>\${r.official_examiner_comment}
+            <strong>💬 考前预审总评：</strong>\${r.official_examiner_comment}
           </div>
-          <div style="font-weight:700;font-size:13.5px;margin-bottom:6px">⏱️ 分曲目时间轴具体问题定位与练琴处方：</div>
+          <div style="font-weight:700;font-size:13.5px;margin-bottom:6px">⏱️ 考前预审：分曲目时间轴具体问题定位与提分处方：</div>
           \${issuesHtml}
           \${goldHtml ? \`<div style="font-weight:700;font-size:13.5px;margin-top:10px">🌟 同专业同级别「50/50 满分」对标示范视频 (本考级办实盘库)：</div>\${goldHtml}\` : ''}
         \`;
       } catch (e) {
-        bodyEl.innerHTML = '<div style="color:#dc2626">AI 五维诊断异常: ' + e.message + '</div>';
+        bodyEl.innerHTML = '<div style="color:#dc2626">考前预审生成异常: ' + e.message + '</div>';
       }
     }
 
@@ -1989,7 +2146,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
                   </div>
                   <div style="display:flex;gap:6px;flex-wrap:wrap">
                     \${videoButtonsHtml}
-                    \${videoKeys.length > 0 ? \`<button class="btn-outline btn-sm" onclick="runVideoChushenCheck(\${e.exam_id})">🛡️ 机器初审</button><button class="btn-primary btn-sm" onclick="runVideoAi5dReview(\${e.exam_id})">🤖 AI五维诊断</button>\` : ''}
+                    \${videoKeys.length > 0 ? \`<button class="btn-outline btn-sm" onclick="runVideoChushenCheck(\${e.exam_id})">🛡️ 机器初审 (视频+照片)</button><button class="btn-primary btn-sm" onclick="runVideoAi5dReview(\${e.exam_id})">🎯 考前预审 (¥9.9/¥49.9)</button>\` : ''}
                   </div>
                 </div>
               \`;

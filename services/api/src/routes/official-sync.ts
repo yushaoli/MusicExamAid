@@ -2672,6 +2672,110 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
     }
   }
 
+  interface PhotoProbeSummary {
+    probed: boolean;
+    is_valid_image: boolean;
+    format: 'JPEG' | 'PNG' | 'UNKNOWN';
+    width_px: number | null;
+    height_px: number | null;
+    size_kb: number;
+    aspect_ratio: number | null;
+    issue: string | null;
+  }
+
+  function inspectPhotoHeaderBuffer(buf: Buffer): PhotoProbeSummary {
+    const res: PhotoProbeSummary = {
+      probed: true,
+      is_valid_image: false,
+      format: 'UNKNOWN',
+      width_px: null,
+      height_px: null,
+      size_kb: Number((buf.length / 1024).toFixed(1)),
+      aspect_ratio: null,
+      issue: null,
+    };
+    if (!buf || buf.length < 24) {
+      res.issue = '图片文件损坏或为空';
+      return res;
+    }
+    // PNG signature: 89 50 4E 47 0D 0A 1A 0A, IHDR width at 16..20, height at 20..24
+    if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
+      res.is_valid_image = true;
+      res.format = 'PNG';
+      res.width_px = buf.readUInt32BE(16);
+      res.height_px = buf.readUInt32BE(20);
+    } else if (buf[0] === 0xff && buf[1] === 0xd8) {
+      // JPEG SOI marker FFD8 -> scan for SOF0..SOF3 (FFC0..FFC3)
+      res.is_valid_image = true;
+      res.format = 'JPEG';
+      let offset = 2;
+      while (offset + 9 < buf.length) {
+        if (buf[offset] !== 0xff) {
+          offset++;
+          continue;
+        }
+        const marker = buf[offset + 1];
+        if (marker === 0xff) {
+          offset++;
+          continue;
+        }
+        if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) {
+          offset += 2;
+          continue;
+        }
+        const segLen = buf.readUInt16BE(offset + 2);
+        if (
+          marker === 0xc0 ||
+          marker === 0xc1 ||
+          marker === 0xc2 ||
+          marker === 0xc3
+        ) {
+          res.height_px = buf.readUInt16BE(offset + 5);
+          res.width_px = buf.readUInt16BE(offset + 7);
+          break;
+        }
+        if (segLen < 2) break;
+        offset += 2 + segLen;
+      }
+    }
+
+    if (res.width_px && res.height_px && res.height_px > 0) {
+      res.aspect_ratio = Number((res.width_px / res.height_px).toFixed(2));
+      if (res.width_px > res.height_px) {
+        res.issue = `二寸照误传为横版照片 (${res.width_px}×${res.height_px})，标准二寸照需竖版 (约3:4)`;
+      } else if (res.height_px / res.width_px > 1.8) {
+        res.issue = `二寸照疑似未裁剪的手机竖长截屏 (${res.width_px}×${res.height_px})，需裁剪为标准二寸竖照`;
+      } else if (res.width_px < 160 || res.height_px < 210) {
+        res.issue = `二寸照分辨率过低模糊 (${res.width_px}×${res.height_px})，制证打印易发虚`;
+      }
+    }
+    return res;
+  }
+
+  async function probeStudentPhoto(photoUrl: string): Promise<PhotoProbeSummary | null> {
+    try {
+      const parsed = new URL(photoUrl);
+      if (!ALLOWED_MEDIA_HOSTS.has(parsed.hostname)) return null;
+      const pool = getPostgresPool();
+      const cached = await pool.query(
+        `SELECT s3_key FROM kjzx_media_cache WHERE source_url = $1`,
+        [photoUrl],
+      );
+      if (cached.rows[0]?.s3_key) {
+        const buf = await minioClient.getObject(String(cached.rows[0].s3_key));
+        if (buf) return inspectPhotoHeaderBuffer(buf);
+      }
+      const res = await fetch(photoUrl, {
+        headers: { Range: 'bytes=0-65535' },
+      });
+      if (!res.ok && res.status !== 206) return null;
+      const buf = Buffer.from(await res.arrayBuffer());
+      return inspectPhotoHeaderBuffer(buf);
+    } catch {
+      return null;
+    }
+  }
+
   // Cost-Saving Automated 初审 Gate (`POST /official-sync/video-chushen-check`)
   app.post(
     '/official-sync/video-chushen-check',
@@ -2682,6 +2786,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           student_id?: number;
           season_code?: number;
           agent_id?: number;
+          agent_keyword?: string;
           limit?: number;
           probe_media?: boolean;
         };
@@ -2690,15 +2795,16 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
     ) => {
       const pool = getPostgresPool();
       const body = req.body ?? {};
-      const limit = Math.min(Math.max(Number(body.limit || (body.exam_id ? 1 : 12)), 1), 50);
+      const limit = Math.min(Math.max(Number(body.limit || (body.exam_id ? 1 : 30)), 1), 200);
       const shouldProbeMedia = body.probe_media ?? Boolean(body.exam_id);
+      const agentKw = (body.agent_keyword || '').trim();
 
       const { rows: exams } = await pool.query(
         `
         SELECT
           e.exam_id, e.student_id, e.student_name, e.sex, e.birthday, e.id_card_masked,
           e.agent_id, e.agent_name, e.season_code, e.season_label,
-          e.major_name, e.level, e.pass_level, e.exam_titles, e.videos_json,
+          e.major_name, e.level, e.pass_level, e.exam_titles, e.videos_json, e.certs_json,
           e.video_status, e.is_reject, e.reject_reason,
           s.picture_url
         FROM kjzx_historical_exams e
@@ -2707,16 +2813,18 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           AND ($2::int IS NULL OR e.student_id = $2::int)
           AND ($3::int IS NULL OR e.season_code = $3::int)
           AND ($4::int IS NULL OR e.agent_id = $4::int)
+          AND ($5::text = '' OR e.agent_name ILIKE '%' || $5::text || '%' OR e.student_name ILIKE '%' || $5::text || '%')
           AND e.videos_json IS NOT NULL
           AND e.videos_json::text <> '{}'
         ORDER BY e.season_code DESC, e.exam_id DESC
-        LIMIT $5::int
+        LIMIT $6::int
         `,
         [
           body.exam_id ?? null,
           body.student_id ?? null,
           body.season_code ?? null,
           body.agent_id ?? null,
+          agentKw,
           limit,
         ],
       );
@@ -2841,7 +2949,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           });
         }
 
-        // Check 2: Person Identification & 2-Inch Registration Photo Gate (人证合一与二寸照核验)
+        // Check 2: 2-Inch Registration Photo (画幅/横竖版/截屏检测) & Prerequisite Certificate Gate (二寸照与过往证书初审)
         const hasPhoto = Boolean(ex.picture_url && String(ex.picture_url).startsWith('http'));
         const birthYear =
           ex.birthday && String(ex.birthday).length >= 4
@@ -2851,26 +2959,54 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         const ageAtExam =
           birthYear && examYear >= birthYear ? examYear - birthYear : null;
 
+        const certsArr = Array.isArray(ex.certs_json) ? ex.certs_json : [];
+        const hasMajorCert = Boolean(
+          certsArr[0] && typeof certsArr[0] === 'object' && !Array.isArray(certsArr[0]) && certsArr[0].picture,
+        );
+        const hasYinjiCert = Boolean(
+          certsArr[1] && typeof certsArr[1] === 'object' && !Array.isArray(certsArr[1]) && certsArr[1].picture,
+        );
+        const certSummary =
+          hasMajorCert || hasYinjiCert
+            ? ` · 已传${hasMajorCert ? '前级专业证书' : ''}${hasMajorCert && hasYinjiCert ? '+' : ''}${hasYinjiCert ? '音基证书' : ''}`
+            : Number(ex.level) >= 7
+              ? ' · ⚠️ 高级别尚未关联前级/音基证书图片'
+              : '';
+
+        const photoProbe =
+          shouldProbeMedia && hasPhoto ? await probeStudentPhoto(String(ex.picture_url)) : null;
+
         if (!hasPhoto) {
           checks.push({
             check_id: 'person_identification',
-            label: '人证合一与报名二寸照比对',
+            label: '考生二寸照规格与过往证书核验',
             status: 'WARN',
-            detail: '缺少考生标准二寸报名照 (picture_url)，建议补传二寸照以完成人脸核验',
+            detail: `缺少考生标准二寸报名照 (picture_url)，建议补传二寸照后再制证${certSummary}`,
+          });
+        } else if (photoProbe && photoProbe.issue) {
+          checks.push({
+            check_id: 'person_identification',
+            label: '考生二寸照规格与过往证书核验',
+            status: 'WARN',
+            detail: `${photoProbe.issue}${certSummary}`,
           });
         } else if (ageAtExam !== null && (ageAtExam < 3 || ageAtExam > 75)) {
           checks.push({
             check_id: 'person_identification',
-            label: '人证合一与报名二寸照比对',
+            label: '考生二寸照规格与过往证书核验',
             status: 'WARN',
-            detail: `已绑定报名二寸照，但证件出生年份 (${birthYear}) 计算考龄 (${ageAtExam}岁) 异常，需人工核对`,
+            detail: `已绑定二寸照，但证件出生年份 (${birthYear}) 计算考龄 (${ageAtExam}岁) 异常，需人工核对${certSummary}`,
           });
         } else {
+          const dimText =
+            photoProbe && photoProbe.width_px && photoProbe.height_px
+              ? ` (${photoProbe.format} ${photoProbe.width_px}×${photoProbe.height_px} 竖版合规)`
+              : '';
           checks.push({
             check_id: 'person_identification',
-            label: '人证合一与报名二寸照比对',
+            label: '考生二寸照规格与过往证书核验',
             status: 'PASS',
-            detail: `考生二寸照已备案${ageAtExam ? ` (考龄 ${ageAtExam} 岁，${ex.sex || '未知性别'})` : ''}，人证档案齐全`,
+            detail: `考生二寸证件照合格${dimText}${ageAtExam ? ` · 考龄 ${ageAtExam} 岁 (${ex.sex || '未知'})` : ''}${certSummary}`,
           });
         }
 
@@ -3040,6 +3176,13 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         else if (verdict === 'NEEDS_HUMAN_CHECK') needsHumanCount++;
         else autoRejectCount++;
 
+        const firstVideoUrl = clipEntries[0]?.[1]?.url ? String(clipEntries[0][1].url) : '';
+        const nonPassIssues = checks.filter(c => c.status !== 'PASS').map(c => c.detail);
+        const wechatNoticeText =
+          nonPassIssues.length > 0
+            ? `【考级办视频初审提醒】${ex.agent_name || '指导'}老师您好，考生【${ex.student_name}】（${ex.major_name}${ex.level}级）机器初审发现以下待核对项：${nonPassIssues.join('；')}。烦请协助核实或补正，谢谢！`
+            : `【考级办视频初审通过】考生【${ex.student_name}】（${ex.major_name}${ex.level}级）视频及报名资料初审已通过。`;
+
         const reportItem = {
           exam_id: Number(ex.exam_id),
           student_id: Number(ex.student_id),
@@ -3051,6 +3194,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           level: Number(ex.level),
           exam_titles: titlesArr,
           clip_count: clipEntries.length,
+          first_video_url: firstVideoUrl,
           verdict,
           verdict_label:
             verdict === 'AUTO_PASS'
@@ -3058,6 +3202,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
               : verdict === 'NEEDS_HUMAN_CHECK'
                 ? '🟡 疑似异常 (需谈老师人工复核)'
                 : '🔴 初审不合规 (建议退回重传)',
+          wechat_notice_text: wechatNoticeText,
           checks,
           clip_probes: clipProbes,
         };
@@ -3338,6 +3483,8 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       const passProbabilityPct =
         totalScore >= 30 ? 96 : totalScore >= 24 ? 85 : totalScore >= 18 ? 68 : 35;
 
+      const parentUpsellWechatCopy = `【国音考级·考前五维预审报告】${ex.student_name}家长您好！系统已完成孩子《${ex.major_name}${ex.level}级》演奏视频的考前预审初筛（当前预估总评 ${totalScore}/50分，超越同级 ${percentileRank}% 考生，预估通过率 ${passProbabilityPct}%），并在时间轴中定位到 ${timelineIssues.length} 处考官重点关注的节奏/音色/表现力提分细节与同曲目 50分满分示范视频。在籍考生仅需 ¥9.90（原价 ¥68）即可解锁完整《AI五维考前预审处方单》，或 ¥49.90 升级《名师+AI 1对1 考前预审语音批注》！`;
+
       return reply.code(200).send({
         exam_id: Number(ex.exam_id),
         student_id: Number(ex.student_id),
@@ -3346,6 +3493,26 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         level: Number(ex.level),
         season_label: String(ex.season_label || ''),
         exam_titles: titlesArr,
+        service_branding: '考前预审 (Paid Pre-Exam Assessment)',
+        pricing_options: [
+          {
+            addon_id: 'ai_video_review',
+            title: '🤖 AI 五维考官考前预审报告 (含时间轴问题定位 + 同曲50分满分示范)',
+            price_yuan: '¥9.90',
+            market_price_yuan: '¥68.00',
+            teacher_share_yuan: '¥0.00',
+            platform_profit_yuan: '¥9.90',
+          },
+          {
+            addon_id: 'mock_video_review',
+            title: '🎬 名师+AI 1对1 考前模拟预审点评报告 (含语音批注 + 保过练琴处方)',
+            price_yuan: '¥49.90',
+            market_price_yuan: '¥150.00',
+            teacher_share_yuan: '¥29.90',
+            platform_profit_yuan: '¥20.00',
+          },
+        ],
+        parent_upsell_wechat_copy: parentUpsellWechatCopy,
         score_source: ex.score_total !== null ? 'official_adjudicator_calibrated' : 'ai_5d_predicted',
         score_total_50: totalScore,
         pass_probability_pct: passProbabilityPct,
