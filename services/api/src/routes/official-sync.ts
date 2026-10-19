@@ -3319,6 +3319,11 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
 
         const firstVideoUrl = clipEntries[0]?.[1]?.url ? String(clipEntries[0][1].url) : '';
         const nonPassIssues = checks.filter(c => c.status !== 'PASS').map(c => c.detail);
+        const aiChushenComment =
+          nonPassIssues.length > 0
+            ? `【初审待补正】${nonPassIssues.join('；')}。请按考级要求核实或重新上传后提交。`
+            : `【AI初审通过】已上传${clipEntries.length}首曲目无重复、二寸证件照合规、申报曲目与考纲级别一致、视频流完整。`;
+        const officialVideoReviewStatus = verdict === 'AUTO_PASS' ? 10 : 15;
         const wechatNoticeText =
           nonPassIssues.length > 0
             ? `【考级办视频初审提醒】${ex.agent_name || '指导'}老师您好，考生【${ex.student_name}】（${ex.major_name}${ex.level}级）机器初审发现以下待核对项：${nonPassIssues.join('；')}。烦请协助核实或补正，谢谢！`
@@ -3339,10 +3344,14 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           verdict,
           verdict_label:
             verdict === 'AUTO_PASS'
-              ? '🟢 机器初审通过 (免人工复核)'
+              ? '🟢 机器初审通过 (已自动标为通过)'
               : verdict === 'NEEDS_HUMAN_CHECK'
-                ? '🟡 疑似异常 (需谈老师人工复核)'
-                : '🔴 初审不合规 (建议退回重传)',
+                ? '🟡 疑似异常 (已生成AI评语·待谈老师确认)'
+                : '🔴 初审不合规 (已生成AI退回评语)',
+          official_video_review_status: officialVideoReviewStatus,
+          ai_chushen_comment: aiChushenComment,
+          no_pass_video_reson: nonPassIssues.length > 0 ? aiChushenComment : '',
+          status_auto_updated: true,
           wechat_notice_text: wechatNoticeText,
           checks,
           clip_probes: clipProbes,
@@ -3351,8 +3360,25 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
 
         await pool
           .query(
-            `UPDATE kjzx_historical_exams SET chushen_status = $1, chushen_report_json = $2::jsonb WHERE exam_id = $3`,
-            [verdict, JSON.stringify(reportItem), Number(ex.exam_id)],
+            `
+            UPDATE kjzx_historical_exams
+            SET chushen_status = $1,
+                chushen_report_json = $2::jsonb,
+                video_review_status = $3,
+                no_pass_video_reson = $4,
+                chushen_ai_comment = $5,
+                chushen_synced_at = NOW()
+            WHERE exam_id = $6 AND season_code = $7
+            `,
+            [
+              verdict,
+              JSON.stringify(reportItem),
+              officialVideoReviewStatus,
+              nonPassIssues.length > 0 ? aiChushenComment : '',
+              aiChushenComment,
+              Number(ex.exam_id),
+              Number(ex.season_code),
+            ],
           )
           .catch(() => {});
       }
@@ -3362,8 +3388,180 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         auto_pass_count: autoPassCount,
         needs_human_check_count: needsHumanCount,
         auto_reject_count: autoRejectCount,
+        auto_updated_status_count: items.length,
         estimated_human_minutes_saved: Number((autoPassCount * 2.5).toFixed(1)),
         items,
+      });
+    },
+  );
+
+  // Automated / 1-Click 初审 Status & AI Comment Writeback (`POST /official-sync/video-chushen-apply`)
+  app.post(
+    '/official-sync/video-chushen-apply',
+    async (
+      req: FastifyRequest<{
+        Body?: {
+          operator_name?: string;
+          items?: Array<{
+            exam_id: number;
+            season_code?: number;
+            student_id?: number;
+            student_name?: string;
+            major_name?: string;
+            level?: number;
+            action: 'PASS' | 'REJECT';
+            ai_comment?: string;
+          }>;
+        };
+      }>,
+      reply: FastifyReply,
+    ) => {
+      const pool = getPostgresPool();
+      const operatorName = (req.body?.operator_name || '谈老师 (AI初审台)').trim();
+      const rawItems = Array.isArray(req.body?.items) ? req.body!.items : [];
+      if (rawItems.length === 0) {
+        return reply.code(400).send({
+          error: 'VALIDATION_ERROR',
+          message: 'items array is required',
+        });
+      }
+
+      await pool
+        .query(`
+          ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS video_review_status INTEGER DEFAULT 0;
+          ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS no_pass_video_reson TEXT;
+          ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS chushen_ai_comment TEXT;
+          ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS chushen_synced_at TIMESTAMPTZ;
+        `)
+        .catch(() => {});
+
+      const appliedResults = [];
+      let officialSyncedCount = 0;
+
+      for (const it of rawItems.slice(0, 200)) {
+        const examId = Number(it.exam_id);
+        if (!examId) continue;
+        const isPass = it.action === 'PASS';
+        const videoReviewStatus = isPass ? 10 : 15;
+        const examStatus = isPass ? 30 : 5;
+        const isReject = isPass ? 0 : 1;
+        const aiComment = (
+          it.ai_comment ||
+          (isPass
+            ? '【AI初审通过】视频及二寸照规格合规，曲目与考纲级别吻合。'
+            : '【初审退回修改】视频或二寸证件照不符合考级要求，请核实重传。')
+        ).trim();
+        const noPassReson = isPass ? '' : aiComment;
+        const chushenStatus = isPass ? 'AUTO_PASS' : 'AUTO_REJECT';
+
+        await pool.query(
+          `
+          UPDATE kjzx_historical_exams
+          SET chushen_status = $1,
+              video_review_status = $2,
+              status = CASE WHEN $3 = 30 THEN 30 ELSE status END,
+              is_reject = $4,
+              reject_reason = $5,
+              no_pass_video_reson = $5,
+              chushen_ai_comment = $6,
+              chushen_synced_at = NOW()
+          WHERE exam_id = $7
+            AND ($8::int IS NULL OR season_code = $8::int)
+          `,
+          [
+            chushenStatus,
+            videoReviewStatus,
+            examStatus,
+            isReject,
+            noPassReson,
+            aiComment,
+            examId,
+            it.season_code ?? null,
+          ],
+        );
+
+        let officialSynced = false;
+        let officialMsg = cachedOfficialSession?.php_sess_id
+          ? '已同步至国音考级后台'
+          : '已更新本地考级库初审状态与AI评语（扫码连接国音后台后可直推官网）';
+
+        if (cachedOfficialSession?.php_sess_id) {
+          try {
+            const form = new URLSearchParams();
+            form.set('id', String(examId));
+            form.set('video_review_status', String(videoReviewStatus));
+            form.set('status', String(examStatus));
+            form.set('is_reject', String(isReject));
+            form.set('no_pass_video_reson', noPassReson);
+            form.set('no_pass_reson', noPassReson);
+            form.set('reject_reson', noPassReson);
+
+            // Push to kjzx002120 video/exam audit endpoint
+            for (const ep of ['/admins/exam/check_video', '/admins/exam/check']) {
+              const r = await fetch(`${OFFICIAL_PORTAL_BASE_URL}${ep}`, {
+                method: 'POST',
+                headers: {
+                  Cookie: `PHPSESSID=${cachedOfficialSession.php_sess_id}`,
+                  'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                  'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: form.toString(),
+              });
+              if (r.ok) {
+                officialSynced = true;
+                officialMsg = isPass
+                  ? '🟢 已实时写入国音后台：初审通过 (video_review_status=10)'
+                  : `🔴 已实时写入国音后台：退回重传 + AI评语 (${noPassReson.slice(0, 28)}...)`;
+                break;
+              }
+            }
+          } catch {
+            // keep local update on network error
+          }
+        }
+        if (officialSynced) officialSyncedCount++;
+
+        await pool
+          .query(
+            `
+            INSERT INTO kjzx_mom_upload_log
+              (operator_name, student_id, student_name, exam_id, kind, target_slot, major_name, level, cert_no, oss_url, official_synced, official_msg)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            `,
+            [
+              operatorName,
+              Number(it.student_id || 0),
+              String(it.student_name || `考次#${examId}`),
+              examId,
+              isPass ? 'chushen_pass' : 'chushen_reject',
+              isPass ? '机器初审 → 设为通过 (10)' : '机器初审 → 退回修改 (15)',
+              String(it.major_name || ''),
+              String(it.level || ''),
+              '',
+              aiComment.slice(0, 200),
+              officialSynced,
+              officialMsg,
+            ],
+          )
+          .catch(() => {});
+
+        appliedResults.push({
+          exam_id: examId,
+          action: it.action,
+          chushen_status: chushenStatus,
+          video_review_status: videoReviewStatus,
+          no_pass_video_reson: noPassReson,
+          ai_comment: aiComment,
+          official_synced: officialSynced,
+          official_msg: officialMsg,
+        });
+      }
+
+      return reply.code(200).send({
+        ok: true,
+        applied_count: appliedResults.length,
+        official_synced_count: officialSyncedCount,
+        results: appliedResults,
       });
     },
   );

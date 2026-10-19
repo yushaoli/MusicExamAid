@@ -1193,6 +1193,77 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       }
     }
 
+    async function momApplySingleChushen(examId, action) {
+      if (!momLastChushenRes) return;
+      const item = (momLastChushenRes.items || []).find(x => Number(x.exam_id) === Number(examId));
+      const commentInput = document.getElementById('mom-chushen-comment-' + examId);
+      const aiComment = commentInput ? commentInput.value.trim() : (item?.ai_chushen_comment || '');
+      const opName = localStorage.getItem('mea_operator_name') || '谈老师 (AI初审台)';
+      try {
+        const res = await fetch('/official-sync/video-chushen-apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            operator_name: opName,
+            items: [{
+              exam_id: Number(examId),
+              season_code: item?.season_code,
+              student_id: item?.student_id,
+              student_name: item?.student_name,
+              major_name: item?.major_name,
+              level: item?.level,
+              action,
+              ai_comment: aiComment,
+            }]
+          })
+        }).then(r => r.json());
+        if (res.ok && item) {
+          item.verdict = action === 'PASS' ? 'AUTO_PASS' : 'AUTO_REJECT';
+          item.verdict_label = action === 'PASS' ? '🟢 已确认初审通过 (status=10)' : '🔴 已带AI评语退回重传 (status=15)';
+          item.ai_chushen_comment = aiComment;
+          showToast(res.results?.[0]?.official_msg || '✅ 已更新初审状态与AI评语！');
+          momFilterChushenView(false);
+          momLoadUploadLog();
+        }
+      } catch (e) {
+        showToast('写入初审状态失败: ' + e.message);
+      }
+    }
+
+    async function momBatchApplyChushenStatus() {
+      if (!momLastChushenRes || !(momLastChushenRes.items || []).length) return;
+      const opName = localStorage.getItem('mea_operator_name') || '谈老师 (AI初审台)';
+      const payloadItems = (momLastChushenRes.items || []).map(it => {
+        const inp = document.getElementById('mom-chushen-comment-' + it.exam_id);
+        return {
+          exam_id: Number(it.exam_id),
+          season_code: it.season_code,
+          student_id: it.student_id,
+          student_name: it.student_name,
+          major_name: it.major_name,
+          level: it.level,
+          action: it.verdict === 'AUTO_PASS' ? 'PASS' : 'REJECT',
+          ai_comment: inp ? inp.value.trim() : (it.ai_chushen_comment || ''),
+        };
+      });
+      try {
+        const res = await fetch('/official-sync/video-chushen-apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            operator_name: opName,
+            items: payloadItems,
+          })
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast(\`⚡ 已一键自动更新本批 \${res.applied_count} 名考生的初审状态与AI评语（官网同步 \${res.official_synced_count} 条）！\`);
+          momLoadUploadLog();
+        }
+      } catch (e) {
+        showToast('批量写入初审状态失败: ' + e.message);
+      }
+    }
+
     function momFilterChushenView(onlyFlagged) {
       if (!momLastChushenRes) return;
       const box = document.getElementById('mom-chushen-result-box');
@@ -1207,17 +1278,25 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         const encNotice = encodeURIComponent(it.wechat_notice_text || '');
         const encUrl = encodeURIComponent(it.first_video_url || '');
         const encTitle = encodeURIComponent(\`\${it.student_name} · \${it.major_name}\${it.level}级\`);
+        const aiCommentVal = String(it.ai_chushen_comment || '').replace(/"/g, '&quot;');
         return \`
           <tr style="font-size:17px">
             <td><strong>\${it.student_name}</strong><div style="font-size:14px;color:#64748b">指导老师：\${it.agent_name || '—'}</div></td>
             <td><strong>\${it.major_name} \${it.level}级</strong><div style="font-size:14px;color:#64748b">共 \${it.clip_count} 首视频</div></td>
             <td style="font-size:15.5px">\${(it.exam_titles || []).join(' / ') || '标准槽位'}</td>
             <td><span class="badge \${badgeCls}" style="font-size:15px;padding:6px 10px">\${it.verdict_label}</span></td>
-            <td style="font-size:15.5px;color:\${it.verdict === 'AUTO_PASS' ? '#047857' : '#b45309'}">\${warnSummary}</td>
+            <td style="font-size:15.5px;color:\${it.verdict === 'AUTO_PASS' ? '#047857' : '#b45309'}">
+              <div>\${warnSummary}</div>
+              <div style="margin-top:6px;display:flex;gap:6px;align-items:center">
+                <span style="font-size:13px;color:#475569;white-space:nowrap">🤖 AI初审评语：</span>
+                <input id="mom-chushen-comment-\${it.exam_id}" value="\${aiCommentVal}" style="font-size:14px;padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;width:100%" />
+              </div>
+            </td>
             <td>
               <div style="display:flex;gap:6px;flex-wrap:wrap">
-                \${it.first_video_url ? \`<button class="btn-wecom btn-sm" style="font-size:15px" onclick="playVideoLocally('\${encUrl}','\${encTitle}',\${it.student_id},\${it.exam_id})">🎬 抽看视频</button>\` : ''}
-                \${it.verdict !== 'AUTO_PASS' ? \`<button class="btn-primary btn-sm" style="font-size:15px;background:#d97706" onclick="momCopyChushenNotice('\${encNotice}')">📋 复制微信提醒给老师</button>\` : ''}
+                \${it.first_video_url ? \`<button class="btn-wecom btn-sm" style="font-size:14px" onclick="playVideoLocally('\${encUrl}','\${encTitle}',\${it.student_id},\${it.exam_id})">🎬 抽看视频</button>\` : ''}
+                <button class="btn-primary btn-sm" style="font-size:14px;background:#059669" onclick="momApplySingleChushen(\${it.exam_id},'PASS')">✅ 设为通过</button>
+                \${it.verdict !== 'AUTO_PASS' ? \`<button class="btn-primary btn-sm" style="font-size:14px;background:#dc2626" onclick="momApplySingleChushen(\${it.exam_id},'REJECT')">🔴 带AI评语退回</button><button class="btn-primary btn-sm" style="font-size:14px;background:#d97706" onclick="momCopyChushenNotice('\${encNotice}')">📋 复制微信提醒</button>\` : ''}
               </div>
             </td>
           </tr>
@@ -1228,17 +1307,18 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         <div style="background:#f0f9ff;border:2px solid #0284c7;border-radius:12px;padding:14px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
           <div style="font-size:19px">
             <strong>🛡️ 本批机器初审共 \${res.checked_count} 人：</strong>
-            <span class="badge badge-confirmed" style="font-size:16px;padding:5px 10px">🟢 机器免审直通 \${res.auto_pass_count} 人</span>
+            <span class="badge badge-confirmed" style="font-size:16px;padding:5px 10px">🟢 已自动标通过 \${res.auto_pass_count} 人</span>
             <span class="badge badge-needs_change" style="font-size:16px;padding:5px 10px;margin-left:6px">🟡 需谈老师复核 \${res.needs_human_check_count} 人</span>
-            <span class="badge badge-locked" style="font-size:16px;padding:5px 10px;margin-left:6px">🔴 异常建议退回 \${res.auto_reject_count} 人</span>
+            <span class="badge badge-locked" style="font-size:16px;padding:5px 10px;margin-left:6px">🔴 异常带AI评语退回 \${res.auto_reject_count} 人</span>
             <span style="margin-left:10px;color:#047857;font-weight:800">（⚡ 帮谈老师省去人工审片约 \${res.estimated_human_minutes_saved} 分钟！）</span>
           </div>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn-primary btn-sm" style="font-size:16px;background:#047857" onclick="momBatchApplyChushenStatus()">⚡ 一键把本批状态+AI评语同步写入后台</button>
             <button class="btn-primary btn-sm" style="font-size:16px" onclick="momFilterChushenView(true)">🟡🔴 只看需人工复核 (\${flaggedItems.length}人)</button>
             <button class="btn-outline btn-sm" style="font-size:16px;background:#fff" onclick="momFilterChushenView(false)">📋 查看本批全部 (\${allItems.length}人)</button>
           </div>
         </div>
-        \${flaggedItems.length === 0 && onlyFlagged ? '<div style="padding:12px;background:#ecfdf5;border:2px solid #16a34a;border-radius:10px;color:#065f46;font-weight:700;margin-bottom:10px">🎉 太棒了！本批次抽检考生 100% 通过机器初审，无重复上传、无跨级错曲、二寸照全部齐全！以下展示全部通过名单：</div>' : ''}
+        \${flaggedItems.length === 0 && onlyFlagged ? '<div style="padding:12px;background:#ecfdf5;border:2px solid #16a34a;border-radius:10px;color:#065f46;font-weight:700;margin-bottom:10px">🎉 太棒了！本批次抽检考生 100% 通过机器初审，系统已自动标为【初审通过 (status=10)】！以下展示全部通过名单：</div>' : ''}
         <div class="table-wrap">
           <table>
             <thead>
@@ -1247,8 +1327,8 @@ const WEB_APP_HTML = `<!DOCTYPE html>
                 <th>专业与级别</th>
                 <th>申报曲目</th>
                 <th>机器初审结论</th>
-                <th>具体核验结果说明</th>
-                <th>快捷操作</th>
+                <th>具体核验结果 & 可编辑 AI 初审评语</th>
+                <th>一键写回状态 / 操作</th>
               </tr>
             </thead>
             <tbody>\${rowsHtml}</tbody>

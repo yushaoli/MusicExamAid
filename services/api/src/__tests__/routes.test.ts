@@ -769,6 +769,32 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const firstItem = chushenBody.items[0];
     assert.ok(['AUTO_PASS', 'NEEDS_HUMAN_CHECK', 'AUTO_REJECT'].includes(firstItem.verdict));
     assert.equal(firstItem.checks.length, 5);
+    assert.ok(typeof firstItem.ai_chushen_comment === 'string' && firstItem.ai_chushen_comment.length > 0);
+    assert.ok([10, 15].includes(firstItem.official_video_review_status));
+
+    // 1b. Apply / override 初审 status + AI comment via POST /official-sync/video-chushen-apply
+    const applyRes = await app.inject({
+      method: 'POST',
+      url: '/official-sync/video-chushen-apply',
+      payload: {
+        operator_name: '谈老师 (AI初审台)',
+        items: [
+          {
+            exam_id: firstItem.exam_id,
+            season_code: firstItem.season_code,
+            student_id: firstItem.student_id,
+            student_name: firstItem.student_name,
+            major_name: firstItem.major_name,
+            level: firstItem.level,
+            action: 'PASS',
+            ai_comment: firstItem.ai_chushen_comment,
+          },
+        ],
+      },
+    });
+    assert.equal(applyRes.statusCode, 200);
+    assert.equal(applyRes.json().applied_count, 1);
+    assert.equal(applyRes.json().results[0].video_review_status, 10);
 
     // 2. Run 5D AI Pre-Exam Assessment (考前预审) on that exam_id
     const aiReviewRes = await app.inject({

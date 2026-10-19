@@ -20,6 +20,10 @@ ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS is_reject INTEGER DEF
 ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS reject_reason TEXT;
 ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS chushen_status VARCHAR(32);
 ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS chushen_report_json JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS video_review_status INTEGER DEFAULT 0;
+ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS no_pass_video_reson TEXT;
+ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS chushen_ai_comment TEXT;
+ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS chushen_synced_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_kjzx_exams_score_total ON kjzx_historical_exams(score_total);
 CREATE INDEX IF NOT EXISTS idx_kjzx_exams_major_level_score ON kjzx_historical_exams(major_name, level, score_total);
