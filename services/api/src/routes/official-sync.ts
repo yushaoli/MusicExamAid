@@ -18,6 +18,7 @@ import {
   type ChannelRegistrationInput,
 } from '@musicexamaid/shared';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { getPostgresPool } from '../store/postgres';
 import { minioClient } from '../store/minio';
 
@@ -2776,6 +2777,105 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
     }
   }
 
+  interface YushenAcousticClipEntry {
+    clip_id: string;
+    piece_title?: string;
+    duration_sec: number;
+    active_ratio: number;
+    dynamic_range_db: number;
+    tempo_cv: number;
+    pitch_clarity_mean: number;
+    chroma_piece_similarity: number | null;
+    predicted_5d: {
+      yinzhun_pitch: number;
+      jiezou_rhythm: number;
+      yinse_tone: number;
+      biaoxianli_expression: number;
+      wanzhengxing_completeness: number;
+    };
+    defects: {
+      hesitation_windows?: Array<{ start_sec: number; end_sec: number; mmss: string; duration_sec: number }>;
+      rhythm_rush_drag_windows?: Array<{ start_sec: number; end_sec: number; mmss: string; issue: string; deviation_pct: number }>;
+      pitch_instability_windows?: Array<{ start_sec: number; end_sec: number; mmss: string; clarity: number }>;
+      tone_harsh_or_weak_windows?: Array<{ start_sec: number; end_sec: number; mmss: string; hf_ratio: number }>;
+      expression_flat_windows?: Array<{ start_sec: number; end_sec: number; mmss: string; db_std: number }>;
+    };
+  }
+
+  interface YushenAcousticModelArtifact {
+    model_version: string;
+    trained_at: string;
+    total_analyzed_clips: number;
+    total_labeled_training_clips: number;
+    total_indexed_exams: number;
+    piece_templates_count: number;
+    validation_metrics: Record<string, any>;
+    exam_acoustic_index: Record<
+      string,
+      {
+        season_code: number;
+        exam_id: number;
+        instrument_cn: string;
+        grade_level: number;
+        clips: Record<string, YushenAcousticClipEntry>;
+      }
+    >;
+  }
+
+  let cachedYushenModel: YushenAcousticModelArtifact | null = null;
+  let cachedYushenModelMtimeMs = 0;
+
+  function loadYushenAcousticModel(): YushenAcousticModelArtifact | null {
+    const candidates = [
+      process.env.YUSHEN_MODEL_JSON_PATH,
+      path.resolve(process.cwd(), 'data/yushen_5d_model_weights.json'),
+      path.resolve(process.cwd(), 'services/api/data/yushen_5d_model_weights.json'),
+      '/mnt/DAS1T/musicexamaid_ml_dataset/yushen_5d_model_weights.json',
+    ].filter(Boolean) as string[];
+
+    for (const p of candidates) {
+      try {
+        if (!fs.existsSync(p)) continue;
+        const st = fs.statSync(p);
+        if (cachedYushenModel && st.mtimeMs === cachedYushenModelMtimeMs) {
+          return cachedYushenModel;
+        }
+        const raw = fs.readFileSync(p, 'utf-8');
+        cachedYushenModel = JSON.parse(raw) as YushenAcousticModelArtifact;
+        cachedYushenModelMtimeMs = st.mtimeMs;
+        return cachedYushenModel;
+      } catch {
+        // try next candidate
+      }
+    }
+    return cachedYushenModel;
+  }
+
+  app.get('/official-sync/yushen-model-status', async (_req, reply) => {
+    const m = loadYushenAcousticModel();
+    if (!m) {
+      return reply.code(200).send({
+        loaded: false,
+        model_version: 'cohort-calibrated-baseline',
+        total_analyzed_clips: 0,
+        total_labeled_training_clips: 0,
+        total_indexed_exams: 0,
+        piece_templates_count: 0,
+        validation_metrics: {},
+      });
+    }
+    return reply.code(200).send({
+      loaded: true,
+      model_version: m.model_version,
+      trained_at: m.trained_at,
+      total_analyzed_clips: m.total_analyzed_clips,
+      total_labeled_training_clips: m.total_labeled_training_clips,
+      total_indexed_exams: m.total_indexed_exams,
+      piece_templates_count: m.piece_templates_count,
+      validation_metrics: m.validation_metrics,
+    });
+  });
+
   // Cost-Saving Automated 初审 Gate (`POST /official-sync/video-chushen-check`)
   app.post(
     '/official-sync/video-chushen-check',
@@ -2798,6 +2898,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       const limit = Math.min(Math.max(Number(body.limit || (body.exam_id ? 1 : 30)), 1), 200);
       const shouldProbeMedia = body.probe_media ?? Boolean(body.exam_id);
       const agentKw = (body.agent_keyword || '').trim();
+      const acousticModel = loadYushenAcousticModel();
 
       const { rows: exams } = await pool.query(
         `
@@ -2888,6 +2989,10 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           status: 'PASS' | 'WARN' | 'FAIL';
           detail: string;
         }> = [];
+
+        const acousticExam =
+          acousticModel?.exam_acoustic_index?.[`${ex.season_code}:${ex.exam_id}`] || null;
+        const acousticClips = acousticExam ? Object.values(acousticExam.clips) : [];
 
         const videosObj =
           typeof ex.videos_json === 'object' && ex.videos_json !== null
@@ -3010,7 +3115,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           });
         }
 
-        // Check 3: Claimed Song & Syllabus Level Match (申报曲目与考纲级别核验)
+        // Check 3: Claimed Song & Syllabus Level Match + Acoustic Chroma Piece Fingerprint (申报曲目与声学指纹核验)
         const mlKey = `${ex.major_name}_${ex.level}`;
         const validSet = piecesByMajorLevel.get(mlKey) || new Set<string>();
         const crossGradeWarnings: string[] = [];
@@ -3031,6 +3136,17 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           }
         }
 
+        const chromaCheckedClips = acousticClips.filter(c => c.chroma_piece_similarity !== null);
+        const lowChromaClip = chromaCheckedClips.find(c => (c.chroma_piece_similarity ?? 1) < 0.62);
+        const avgChromaSim =
+          chromaCheckedClips.length > 0
+            ? Math.round(
+                (chromaCheckedClips.reduce((s, c) => s + Number(c.chroma_piece_similarity || 0), 0) /
+                  chromaCheckedClips.length) *
+                  100,
+              )
+            : null;
+
         if (crossGradeWarnings.length > 0) {
           checks.push({
             check_id: 'song_syllabus_match',
@@ -3038,23 +3154,30 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
             status: 'WARN',
             detail: `疑似跨级/错曲：${crossGradeWarnings.join('；')}`,
           });
+        } else if (lowChromaClip) {
+          checks.push({
+            check_id: 'song_syllabus_match',
+            label: '申报曲目与考纲级别核验',
+            status: 'WARN',
+            detail: `《${lowChromaClip.piece_title || '抽检曲目'}》声学Chroma指纹与同曲目标准模板相似度偏低 (${Math.round((lowChromaClip.chroma_piece_similarity || 0) * 100)}%)，疑似上传错视频/货不对板`,
+          });
         } else if (titlesArr.length > 0) {
           checks.push({
             check_id: 'song_syllabus_match',
             label: '申报曲目与考纲级别核验',
             status: 'PASS',
-            detail: `申报曲目 (${titlesArr.join(' / ')}) 与中国音乐学院 ${ex.major_name} ${ex.level}级考纲曲库一致${matchedSyllabusCount > 0 ? ` (命中 ${matchedSyllabusCount} 首常考曲目)` : ''}`,
+            detail: `申报曲目 (${titlesArr.join(' / ')}) 与中国音乐学院 ${ex.major_name} ${ex.level}级考纲曲库一致${matchedSyllabusCount > 0 ? ` (命中 ${matchedSyllabusCount} 首常考曲目)` : ''}${avgChromaSim !== null ? ` · 🎙️ 曲目声学指纹比对吻合 (${avgChromaSim}%)` : ''}`,
           });
         } else {
           checks.push({
             check_id: 'song_syllabus_match',
             label: '申报曲目与考纲级别核验',
             status: 'PASS',
-            detail: `按标准槽位 (${clipEntries.map(([, c], i) => c.title || `曲目${i + 1}`).join(' / ')}) 提交`,
+            detail: `按标准槽位 (${clipEntries.map(([, c], i) => c.title || `曲目${i + 1}`).join(' / ')}) 提交${avgChromaSim !== null ? ` · 🎙️ 声学指纹吻合 (${avgChromaSim}%)` : ''}`,
           });
         }
 
-        // Check 4 & 5: Frame Size / Audio Stream & Completeness (MP4 Header Probe when requested)
+        // Check 4 & 5: Frame Size / Audio Stream & Completeness (MP4 Header Probe + Real WAV Acoustic Telemetry)
         const clipProbes: Array<{
           slot: string;
           title: string;
@@ -3120,6 +3243,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
             (acc, c) => acc + (c.probe!.duration_sec || 0),
             0,
           );
+          const silentAcousticClip = acousticClips.find(c => c.active_ratio < 0.35);
 
           if (shortClip) {
             checks.push({
@@ -3127,6 +3251,13 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
               label: '演奏基本完整性与截断检测',
               status: 'FAIL',
               detail: `《${shortClip.title}》时长仅 ${shortClip.probe!.duration_sec} 秒，严重不足，疑似未弹完或录错片段`,
+            });
+          } else if (silentAcousticClip) {
+            checks.push({
+              check_id: 'basic_completeness',
+              label: '演奏基本完整性与截断检测',
+              status: 'FAIL',
+              detail: `《${silentAcousticClip.piece_title || '抽检曲目'}》声学有效发声占比仅 ${Math.round(silentAcousticClip.active_ratio * 100)}%，存在大段空录或静音`,
             });
           } else if (tailCutoffClip) {
             checks.push({
@@ -3136,15 +3267,21 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
               detail: `《${tailCutoffClip.title}》末尾能量未自然衰减 (时长 ${tailCutoffClip.probe!.duration_sec}s)，疑似尾音未结束即提前按下停止录制`,
             });
           } else {
+            const acousticNote =
+              acousticClips.length > 0
+                ? ` · 🎙️ 实测有效演奏发声率 ${Math.round((acousticClips.reduce((s, c) => s + c.active_ratio, 0) / acousticClips.length) * 100)}%`
+                : '';
             checks.push({
               check_id: 'basic_completeness',
               label: '演奏基本完整性与截断检测',
               status: 'PASS',
-              detail: `全套视频累计有效时长 ${totalDurSec.toFixed(1)} 秒 (${probedClips.map(c => `${c.title}: ${c.probe!.duration_sec ?? '—'}s`).join(' / ')})，首尾完整无异常截断`,
+              detail: `全套视频累计有效时长 ${totalDurSec.toFixed(1)} 秒 (${probedClips.map(c => `${c.title}: ${c.probe!.duration_sec ?? '—'}s`).join(' / ')})，首尾完整无异常截断${acousticNote}`,
             });
           }
         } else {
           const isLiveSeason = Number(ex.season_code) >= 20235;
+          const silentAcousticClip = acousticClips.find(c => c.active_ratio < 0.35);
+          const acousticDurSum = acousticClips.reduce((s, c) => s + c.duration_sec, 0);
           checks.push({
             check_id: 'frame_and_stream',
             label: '画幅尺寸与音视频流合规核验',
@@ -3156,11 +3293,15 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           checks.push({
             check_id: 'basic_completeness',
             label: '演奏基本完整性与截断检测',
-            status: ex.is_reject === 1 ? 'FAIL' : 'PASS',
+            status: ex.is_reject === 1 || silentAcousticClip ? 'FAIL' : 'PASS',
             detail:
               ex.is_reject === 1
                 ? `历史退回记录：${ex.reject_reason || '视频不符合考级完整度要求'}`
-                : `共 ${clipEntries.length} 首曲目归档完整 (video_status=${ex.video_status})`,
+                : silentAcousticClip
+                  ? `《${silentAcousticClip.piece_title || '抽检曲目'}》声学有效发声占比仅 ${Math.round(silentAcousticClip.active_ratio * 100)}%，疑似空录或静音`
+                  : acousticClips.length > 0
+                    ? `共 ${clipEntries.length} 首曲目归档完整 · 🎙️ 实测声学累计时长 ${acousticDurSum.toFixed(1)}s (有效发声率 ${Math.round((acousticClips.reduce((s, c) => s + c.active_ratio, 0) / acousticClips.length) * 100)}%)`
+                    : `共 ${clipEntries.length} 首曲目归档完整 (video_status=${ex.video_status})`,
           });
         }
 
@@ -3228,7 +3369,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // ===========================================================================
-  // 19. PROFIT-MAKING AI 5D EXAMINER REVIEW & TIMESTAMPED ISSUE REPORT
+  // 19. PROFIT-MAKING AI 5D PRE-EXAM ASSESSMENT (考前预审) & TIMESTAMPED ISSUE REPORT
   //     (`POST /official-sync/video-ai-5d-review`)
   // ===========================================================================
   app.post(
@@ -3236,12 +3377,24 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
     async (
       req: FastifyRequest<{
         Body?: {
-          exam_id: number;
+          exam_id?: number;
+          season_code?: number;
+          id?: string;
         };
       }>,
       reply: FastifyReply,
     ) => {
-      const examId = Number(req.body?.exam_id || 0);
+      let examId = Number(req.body?.exam_id || 0);
+      let seasonCode = req.body?.season_code ? Number(req.body.season_code) : null;
+      if (!examId && req.body?.id) {
+        const parts = String(req.body.id).split(':');
+        if (parts.length === 2) {
+          seasonCode = Number(parts[0]);
+          examId = Number(parts[1]);
+        } else {
+          examId = Number(parts[0]);
+        }
+      }
       if (!examId) {
         return reply.code(400).send({
           error: 'VALIDATION_ERROR',
@@ -3263,9 +3416,11 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         FROM kjzx_historical_exams e
         LEFT JOIN kjzx_historical_students s ON s.student_id = e.student_id
         WHERE e.exam_id = $1
+          AND ($2::int IS NULL OR e.season_code = $2::int)
+        ORDER BY e.season_code DESC
         LIMIT 1
         `,
-        [examId],
+        [examId, seasonCode],
       );
 
       const ex = rows[0];
@@ -3321,13 +3476,38 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       ]);
 
       const cohort = cohortRes.rows[0] || {};
-      const yinzhun = Number(ex.score_yinzhun ?? 6);
-      const jiezou = Number(ex.score_jiezou ?? 6);
-      const yinse = Number(ex.score_yinse ?? 6);
-      const biaoxianli = Number(ex.score_biaoxianli ?? 6);
-      const wanzhengxing = Number(ex.score_wanzhengxing ?? 6);
+      const acousticModel = loadYushenAcousticModel();
+      const acousticExam =
+        acousticModel?.exam_acoustic_index?.[`${ex.season_code}:${ex.exam_id}`] || null;
+      const acousticClips = acousticExam ? Object.values(acousticExam.clips) : [];
+
+      let PredYinzhun = 6;
+      let PredJiezou = 6;
+      let PredYinse = 6;
+      let PredBiaoxianli = 6;
+      let PredWanzhengxing = 6;
+      if (acousticClips.length > 0) {
+        const avgDim = (k: keyof YushenAcousticClipEntry['predicted_5d']) =>
+          Number(
+            (
+              acousticClips.reduce((s, c) => s + Number(c.predicted_5d?.[k] || 6), 0) /
+              acousticClips.length
+            ).toFixed(1),
+          );
+        PredYinzhun = avgDim('yinzhun_pitch');
+        PredJiezou = avgDim('jiezou_rhythm');
+        PredYinse = avgDim('yinse_tone');
+        PredBiaoxianli = avgDim('biaoxianli_expression');
+        PredWanzhengxing = avgDim('wanzhengxing_completeness');
+      }
+
+      const yinzhun = Number(ex.score_yinzhun ?? PredYinzhun);
+      const jiezou = Number(ex.score_jiezou ?? PredJiezou);
+      const yinse = Number(ex.score_yinse ?? PredYinse);
+      const biaoxianli = Number(ex.score_biaoxianli ?? PredBiaoxianli);
+      const wanzhengxing = Number(ex.score_wanzhengxing ?? PredWanzhengxing);
       const totalScore = Number(
-        ex.score_total ?? yinzhun + jiezou + yinse + biaoxianli + wanzhengxing,
+        (ex.score_total ?? yinzhun + jiezou + yinse + biaoxianli + wanzhengxing).toFixed(1),
       );
 
       let titlesArr: string[] = [];
@@ -3349,9 +3529,11 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
 
       const firstClipProbe =
         clipList[0]?.[1]?.url ? await probeClipHeader(String(clipList[0][1].url)) : null;
-      const baseDur = firstClipProbe?.duration_sec && firstClipProbe.duration_sec >= 25
-        ? firstClipProbe.duration_sec
-        : 95;
+      const baseDur =
+        acousticClips[0]?.duration_sec ||
+        (firstClipProbe?.duration_sec && firstClipProbe.duration_sec >= 25
+          ? firstClipProbe.duration_sec
+          : 95);
 
       const fmtTs = (ratioStart: number, ratioEnd: number) => {
         const s1 = Math.max(4, Math.floor(baseDur * ratioStart));
@@ -3365,7 +3547,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       const piece2 = titlesArr[1] || clipList[1]?.[1]?.title || '练习曲';
       const piece3 = titlesArr[2] || clipList[2]?.[1]?.title || '考级乐曲';
 
-      // Build specific timestamped issues tailored to instrument, grade, pieces, and 5D sub-scores
+      // Build specific timestamped issues using real WAV sliding-window defects when available
       const timelineIssues: Array<{
         timestamp: string;
         clip_title: string;
@@ -3376,7 +3558,29 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         fix_prescription: string;
       }> = [];
 
-      if (jiezou <= 3) {
+      const realRhythmClip = acousticClips.find(
+        c => c.defects?.rhythm_rush_drag_windows && c.defects.rhythm_rush_drag_windows.length > 0,
+      );
+      const realPitchClip = acousticClips.find(
+        c => c.defects?.pitch_instability_windows && c.defects.pitch_instability_windows.length > 0,
+      );
+      const realPauseClip = acousticClips.find(
+        c => c.defects?.hesitation_windows && c.defects.hesitation_windows.length > 0,
+      );
+
+      if (realRhythmClip && realRhythmClip.defects.rhythm_rush_drag_windows?.[0]) {
+        const rw = realRhythmClip.defects.rhythm_rush_drag_windows[0];
+        timelineIssues.push({
+          timestamp: rw.mmss.replace('-', '–'),
+          clip_title: realRhythmClip.piece_title || piece1,
+          dimension: '节奏 (Rhythm & Pulse · 实测声学定位)',
+          score_bucket: jiezou,
+          severity: jiezou <= 5 || Math.abs(rw.deviation_pct) >= 40 ? 'HIGH' : 'MEDIUM',
+          finding: `《${realRhythmClip.piece_title || piece1}》在 ${rw.mmss} 处实测检测到${rw.issue} (局部音头密度偏移 ${rw.deviation_pct > 0 ? '+' : ''}${rw.deviation_pct}%，全曲节拍变异系数 CV=${(realRhythmClip.tempo_cv * 100).toFixed(1)}%)`,
+          fix_prescription:
+            '使用节拍器从原速 75% 分手对准拍点慢练该乐句，稳定每拍音头间隔后再恢复原速。',
+        });
+      } else if (jiezou <= 3) {
         timelineIssues.push({
           timestamp: fmtTs(0.18, 0.36),
           clip_title: piece1,
@@ -3392,13 +3596,26 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           clip_title: piece1,
           dimension: '节奏 (Rhythm & Pulse)',
           score_bucket: jiezou,
-          severity: jiezou >= 10 ? 'GOOD' : 'MEDIUM',
+          severity: jiezou >= 9 ? 'GOOD' : 'MEDIUM',
           finding: `《${piece1}》整体律动平稳，但在转调/换把衔接处有轻微时值压缩`,
           fix_prescription: '注意句末长音与休止符时值留足，避免乐句之间急促抢进。',
         });
       }
 
-      if (yinzhun <= 3 || yinse <= 3) {
+      if (realPitchClip && realPitchClip.defects.pitch_instability_windows?.[0]) {
+        const pw = realPitchClip.defects.pitch_instability_windows[0];
+        timelineIssues.push({
+          timestamp: pw.mmss.replace('-', '–'),
+          clip_title: realPitchClip.piece_title || piece2,
+          dimension: '音准与音色 (Pitch & Tone · 实测频谱定位)',
+          score_bucket: Math.min(yinzhun, yinse),
+          severity: Math.min(yinzhun, yinse) <= 5 ? 'HIGH' : 'MEDIUM',
+          finding: `《${realPitchClip.piece_title || piece2}》在 ${pw.mmss} 处基频谐波清晰度下降 (clarity=${pw.clarity})，高把位/快速换指处音准与音色集中度波动`,
+          fix_prescription: String(ex.major_name).includes('钢琴')
+            ? '保持手腕平稳放松、掌关节支撑，练习指尖高抬慢下以提升颗粒清晰度。'
+            : '针对该时间窗内换把/按音音准做慢速长音听辨校准，保持触弦/运弓角度通透。',
+        });
+      } else if (yinzhun <= 3 || yinse <= 3) {
         timelineIssues.push({
           timestamp: fmtTs(0.38, 0.58),
           clip_title: piece2,
@@ -3418,13 +3635,25 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           clip_title: piece2,
           dimension: '音准与音色 (Pitch & Tone)',
           score_bucket: Math.min(yinzhun, yinse),
-          severity: yinzhun >= 10 && yinse >= 10 ? 'GOOD' : 'MEDIUM',
+          severity: yinzhun >= 9 && yinse >= 9 ? 'GOOD' : 'MEDIUM',
           finding: `《${piece2}》主旋律发音清晰干净，伴奏声部与主旋律的音量层次对比可进一步拉开`,
           fix_prescription: '突出高音声部歌唱性线条，伴奏声部力度控制在 mp–p 之间。',
         });
       }
 
-      if (biaoxianli <= 3 || wanzhengxing <= 3) {
+      if (realPauseClip && realPauseClip.defects.hesitation_windows?.[0]) {
+        const hw = realPauseClip.defects.hesitation_windows[0];
+        timelineIssues.push({
+          timestamp: hw.mmss.replace('-', '–'),
+          clip_title: realPauseClip.piece_title || piece3,
+          dimension: '表现力与完整性 (Expression & Flow · 实测断奏定位)',
+          score_bucket: Math.min(biaoxianli, wanzhengxing),
+          severity: 'HIGH',
+          finding: `《${realPauseClip.piece_title || piece3}》在 ${hw.mmss} 处检测到 ${hw.duration_sec} 秒演奏中断/卡顿，且全曲强弱动态范围为 ${realPauseClip.dynamic_range_db} dB`,
+          fix_prescription:
+            '将该卡顿窗口前后 4 小节单独循环抽练消除衔接盲点，并拉开乐句 p 到 f 的强弱张力。',
+        });
+      } else if (biaoxianli <= 3 || wanzhengxing <= 3) {
         timelineIssues.push({
           timestamp: fmtTs(0.65, 0.88),
           clip_title: piece3,
@@ -3435,13 +3664,17 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           fix_prescription: '将再现部难点拆分为 4 小节循环抽练，明确标注 p -> cresc. -> f 的呼吸起伏点。',
         });
       } else {
+        const dynInfo =
+          acousticClips[0]?.dynamic_range_db
+            ? ` (实测动态范围 ${acousticClips[0].dynamic_range_db} dB)`
+            : '';
         timelineIssues.push({
           timestamp: fmtTs(0.66, 0.9),
           clip_title: piece3,
           dimension: '表现力与完整性 (Expression & Flow)',
           score_bucket: Math.min(biaoxianli, wanzhengxing),
-          severity: biaoxianli >= 10 ? 'GOOD' : 'MEDIUM',
-          finding: `《${piece3}》全曲一气呵成无中断，若在展开部乐句呼吸与曲风对比上更鲜明，冲击优秀 (50分) 把握更大`,
+          severity: biaoxianli >= 9 ? 'GOOD' : 'MEDIUM',
+          finding: `《${piece3}》全曲一气呵成无中断${dynInfo}，若在展开部乐句呼吸与曲风对比上更鲜明，冲击优秀 (50分) 把握更大`,
           fix_prescription: '对照下方同级别 50 分满分示范视频，模仿乐句收尾的渐慢与呼吸感。',
         });
       }
@@ -3513,7 +3746,21 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           },
         ],
         parent_upsell_wechat_copy: parentUpsellWechatCopy,
-        score_source: ex.score_total !== null ? 'official_adjudicator_calibrated' : 'ai_5d_predicted',
+        score_source:
+          ex.score_total !== null
+            ? acousticClips.length > 0
+              ? 'official_adjudicator_plus_acoustic_wav'
+              : 'official_adjudicator_calibrated'
+            : acousticClips.length > 0
+              ? 'acoustic_5d_model_predicted'
+              : 'ai_5d_predicted',
+        acoustic_telemetry: {
+          model_version: acousticModel?.model_version || 'cohort-calibrated-baseline',
+          has_real_wav_analysis: acousticClips.length > 0,
+          analyzed_clips_count: acousticClips.length,
+          total_model_trained_clips: acousticModel?.total_labeled_training_clips || 0,
+          clips_detail: acousticClips,
+        },
         score_total_50: totalScore,
         pass_probability_pct: passProbabilityPct,
         percentile_rank: percentileRank,
@@ -3548,4 +3795,5 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 }
+
 

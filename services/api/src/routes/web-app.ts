@@ -1285,6 +1285,58 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       }
     }
 
+    let lastYushenReportData = null;
+
+    function printParentYushenReport() {
+      const r = lastYushenReportData;
+      if (!r) return;
+      const d5 = r.dimensions_5d || {};
+      const w = window.open('', '_blank', 'width=820,height=980');
+      if (!w) return showToast('请允许弹出窗口以生成家长版考前预审报告单');
+      const issuesRows = (r.timeline_issues || []).map(iss => \`
+        <div style="border:1.5px solid #cbd5e1;border-radius:10px;padding:12px 14px;margin-bottom:10px;background:#f8fafc">
+          <div style="font-weight:800;font-size:15px;color:#0f172a">⏱️ [\${iss.timestamp}] 《\${iss.clip_title}》 · \${iss.dimension}（\${iss.score_bucket}/10分）</div>
+          <div style="font-size:14px;color:#334155;margin-top:5px"><strong>问题定位：</strong>\${iss.finding}</div>
+          <div style="font-size:14px;color:#047857;margin-top:4px"><strong>考前提分处方：</strong>\${iss.fix_prescription}</div>
+        </div>
+      \`).join('');
+      w.document.write(\`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"/><title>中国音乐学院考级·考前五维预审报告单 - \${r.student_name}</title>
+      <style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:760px;margin:20px auto;padding:24px;color:#0f172a;border:3px solid #4f46e5;border-radius:16px}
+      .grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:14px 0}
+      .box{background:#f5f3ff;border:1px solid #c4b5fd;border-radius:10px;padding:10px;text-align:center}
+      @media print{.no-print{display:none}}</style></head><body>
+      <div class="no-print" style="text-align:right;margin-bottom:12px"><button onclick="window.print()" style="background:#4f46e5;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:700;cursor:pointer">🖨️ 打印 / 保存为 PDF 发给家长</button></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #e2e8f0;padding-bottom:12px">
+        <div>
+          <div style="font-size:22px;font-weight:800;color:#312e81">🎯 中国音乐学院考级 · 考前五维预审诊断报告单</div>
+          <div style="font-size:14px;color:#475569;margin-top:4px">考生：<strong>\${r.student_name}</strong> ｜ 报考专业：<strong>\${r.major_name} \${r.level}级</strong> (\${r.season_label}) ｜ 曲目：\${(r.exam_titles || []).join(' / ') || '标准曲目'}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:28px;font-weight:900;color:#047857">\${r.score_total_50}<span style="font-size:15px">/50分</span></div>
+          <div style="font-size:12.5px;color:#475569">超越同级 <strong>\${r.percentile_rank}%</strong> 考生 · 预估通过率 <strong>\${r.pass_probability_pct}%</strong></div>
+        </div>
+      </div>
+      <div class="grid5">
+        <div class="box"><div style="font-size:12px;color:#4c1d95">音准 Pitch</div><div style="font-size:20px;font-weight:800">\${d5.yinzhun_pitch?.score ?? 6}/10</div><div style="font-size:11px;color:#64748b">同级均 \${d5.yinzhun_pitch?.cohort_avg}</div></div>
+        <div class="box"><div style="font-size:12px;color:#4c1d95">节奏 Rhythm</div><div style="font-size:20px;font-weight:800">\${d5.jiezou_rhythm?.score ?? 6}/10</div><div style="font-size:11px;color:#64748b">同级均 \${d5.jiezou_rhythm?.cohort_avg}</div></div>
+        <div class="box"><div style="font-size:12px;color:#4c1d95">音色 Tone</div><div style="font-size:20px;font-weight:800">\${d5.yinse_tone?.score ?? 6}/10</div><div style="font-size:11px;color:#64748b">同级均 \${d5.yinse_tone?.cohort_avg}</div></div>
+        <div class="box"><div style="font-size:12px;color:#4c1d95">表现力 Expr</div><div style="font-size:20px;font-weight:800">\${d5.biaoxianli_expression?.score ?? 6}/10</div><div style="font-size:11px;color:#64748b">同级均 \${d5.biaoxianli_expression?.cohort_avg}</div></div>
+        <div class="box"><div style="font-size:12px;color:#4c1d95">完整性 Flow</div><div style="font-size:20px;font-weight:800">\${d5.wanzhengxing_completeness?.score ?? 6}/10</div><div style="font-size:11px;color:#64748b">同级均 \${d5.wanzhengxing_completeness?.cohort_avg}</div></div>
+      </div>
+      <div style="padding:10px 14px;background:#eff6ff;border-left:4px solid #2563eb;border-radius:6px;font-size:14px;margin-bottom:14px">
+        <strong>💬 考官预审总评：</strong>\${r.official_examiner_comment}
+      </div>
+      <div style="font-weight:800;font-size:16px;margin-bottom:8px">⏱️ 分曲目时间轴定位与考前练琴处方：</div>
+      \${issuesRows}
+      <div style="margin-top:14px;padding:12px 14px;background:#ecfdf5;border:1.5px solid #10b981;border-radius:10px;font-size:13.5px;color:#065f46">
+        <strong>🎁 在籍考生专属考前预审增值服务：</strong><br/>
+        • <strong>¥9.90</strong>（市场价 ¥68）：解锁完整《AI五维考前预审处方单 + 同级别同曲目 50/50 满分示范视频对照》<br/>
+        • <strong>¥49.90</strong>（市场价 ¥150）：升级《名师+AI 1对1 考前模拟预审语音批注 + 保过突击练琴处方》
+      </div>
+      </body></html>\`);
+      w.document.close();
+    }
+
     async function runVideoAi5dReview(examId) {
       const drawer = document.getElementById('ai-video-inspection-drawer');
       const titleEl = document.getElementById('ai-inspection-title');
@@ -1304,6 +1356,17 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           bodyEl.innerHTML = '<div style="color:#dc2626">' + (r.message || r.error) + '</div>';
           return;
         }
+        lastYushenReportData = r;
+        const ac = r.acoustic_telemetry || {};
+        const acBadge = ac.has_real_wav_analysis
+          ? \`<span class="badge badge-confirmed" style="margin-left:6px">🎙️ 实测 24kHz 声学五维模型 (\${ac.model_version} · 已测 \${ac.analyzed_clips_count} 首)</span>\`
+          : \`<span class="badge badge-locked" style="margin-left:6px">🤖 五维常模预审引擎 (\${ac.model_version || 'v1.0'})</span>\`;
+        const acClipsHtml = (ac.clips_detail || []).length > 0
+          ? \`<div style="margin-bottom:10px;padding:8px 12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;font-size:12px;color:#065f46">
+              <strong>🎙️ 实测 24kHz 音频声学特征指标：</strong>
+              \${(ac.clips_detail || []).map(c => \`《\${c.piece_title || c.clip_id}》时长 \${c.duration_sec}s · 发声率 \${Math.round(c.active_ratio * 100)}% · 动态范围 <strong>\${c.dynamic_range_db} dB</strong> · 节拍波动 CV <strong>\${(c.tempo_cv * 100).toFixed(1)}%</strong>\${c.chroma_piece_similarity != null ? \` · 曲目声学指纹吻合度 <strong>\${Math.round(c.chroma_piece_similarity * 100)}%</strong>\` : ''}\`).join(' ｜ ')}
+            </div>\`
+          : '';
         titleEl.textContent = \`🎯 国音考前五维预审报告 · \${r.student_name} (\${r.season_label} \${r.major_name}\${r.level}级) — 预审总评 \${r.score_total_50}/50分 (超越同级 \${r.percentile_rank}% 考生)\`;
         const d5 = r.dimensions_5d || {};
         const encUpsell = encodeURIComponent(r.parent_upsell_wechat_copy || '');
@@ -1344,9 +1407,14 @@ const WEB_APP_HTML = `<!DOCTYPE html>
               <strong>💰 收费增值服务【国音考前预审】：</strong>
               <span class="badge badge-confirmed" style="margin-left:4px">¥9.90 AI五维考前预审 (平台净利 ¥9.9)</span>
               <span class="badge badge-locked" style="margin-left:4px">¥49.90 名师+AI 1对1 预审 (指导老师分成 ¥29.9 + 平台 ¥20)</span>
+              \${acBadge}
             </div>
-            <button class="btn-purple btn-sm" onclick="momCopyChushenNotice('\${encUpsell}')">📲 复制【考前预审付费解锁通知】发家长微信</button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn-outline btn-sm" style="background:#fff" onclick="printParentYushenReport()">🖨️ 生成家长版预审报告单</button>
+              <button class="btn-purple btn-sm" onclick="momCopyChushenNotice('\${encUpsell}')">📲 复制【考前预审付费解锁通知】发家长微信</button>
+            </div>
           </div>
+          \${acClipsHtml}
           <div class="grid-4" style="margin-bottom:10px">
             <div class="stat-box"><div class="stat-label">🏆 预审五维总分 / 预估通过率</div><div class="stat-val" style="color:#047857">\${r.score_total_50}/50分 (\${r.pass_probability_pct}%)</div></div>
             <div class="stat-box"><div class="stat-label">🎯 音准 / 节奏 (同级均分)</div><div class="stat-val">\${d5.yinzhun_pitch?.score ?? 6} / \${d5.jiezou_rhythm?.score ?? 6} <span style="font-size:12px;color:var(--muted)">(均 \${d5.yinzhun_pitch?.cohort_avg}/\${d5.jiezou_rhythm?.cohort_avg})</span></div></div>

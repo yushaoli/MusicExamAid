@@ -494,6 +494,28 @@ def main() -> None:
         video_path = dataset_root / rec["rel_video_path"]
         if video_path.exists() and video_path.stat().st_size >= 1024:
             cached += 1
+            if args.extract_audio and ffmpeg_bin:
+                audio_path = dataset_root / rec["rel_audio_path"]
+                if not audio_path.exists():
+                    audio_path.parent.mkdir(parents=True, exist_ok=True)
+                    subprocess.run(
+                        [
+                            ffmpeg_bin,
+                            "-y",
+                            "-nostdin",
+                            "-loglevel",
+                            "error",
+                            "-i",
+                            str(video_path),
+                            "-vn",
+                            "-ac",
+                            "1",
+                            "-ar",
+                            "24000",
+                            str(audio_path),
+                        ],
+                        check=False,
+                    )
             if cached % 200 == 0:
                 write_status("running", {"clip_id": rec["clip_id"], "season": rec["season_code"], "note": "scanning cached"})
             continue

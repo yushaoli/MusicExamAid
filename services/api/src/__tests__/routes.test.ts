@@ -742,8 +742,16 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     await app.close();
   });
 
-  it('Automated 初审 (compliance, person ID, song match, completeness) & AI 5D 复审 (timestamped issues + 50/50 reference videos)', async () => {
+  it('Automated 初审 (compliance, person ID, song match, completeness) & AI 5D 考前预审 (timestamped issues + 50/50 reference videos + acoustic model status)', async () => {
     const app = await buildApp();
+
+    // 0. Check yushen model status endpoint
+    const modelStRes = await app.inject({
+      method: 'GET',
+      url: '/official-sync/yushen-model-status',
+    });
+    assert.equal(modelStRes.statusCode, 200);
+    assert.ok(typeof modelStRes.json().model_version === 'string');
 
     // 1. Run batch Automated 初审 on season 20245 (limit 3, without network media probe for fast test)
     const chushenRes = await app.inject({
@@ -762,7 +770,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     assert.ok(['AUTO_PASS', 'NEEDS_HUMAN_CHECK', 'AUTO_REJECT'].includes(firstItem.verdict));
     assert.equal(firstItem.checks.length, 5);
 
-    // 2. Run 5D AI Examiner Review on that exam_id
+    // 2. Run 5D AI Pre-Exam Assessment (考前预审) on that exam_id
     const aiReviewRes = await app.inject({
       method: 'POST',
       url: '/official-sync/video-ai-5d-review',
@@ -773,6 +781,8 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     assert.equal(aiReviewRes.statusCode, 200);
     const aiBody = aiReviewRes.json();
     assert.equal(aiBody.exam_id, firstItem.exam_id);
+    assert.ok(String(aiBody.service_branding).includes('考前预审'));
+    assert.ok(aiBody.acoustic_telemetry);
     assert.ok(typeof aiBody.score_total_50 === 'number');
     assert.ok(aiBody.dimensions_5d.yinzhun_pitch);
     assert.ok(Array.isArray(aiBody.timeline_issues));
