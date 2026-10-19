@@ -401,21 +401,44 @@ def main() -> None:
             candidates.append(rec)
 
     if args.rescue_order:
-        # Sort by:
-        # 1. Oldest live season first (20235 -> 20244 -> ... -> 20265)
-        # 2. Has 5-D numeric score first (0 if scored else 1)
-        # 3. Has adjudicator review first (0 if reviewed else 1)
-        # 4. exam_id ASC, clip_index ASC
+        # Global Value-First + Oldest-Season Rescue Order:
+        # Tier 0: 5D-scored Gold References (50/50) OR Contrastive Defect/Fail clips (any 3-point subscore, pass_level==0, or is_reject==1)
+        # Tier 1: All remaining 5D numeric-scored clips across all live seasons (20235 -> 20265)
+        # Tier 2: Adjudicator-reviewed clips (rubric tags / narrative) without numeric 5D score
+        # Tier 3: Remaining unscored live clips (oldest live season first)
         season_rank = {s: idx for idx, s in enumerate(LIVE_SEASONS_ASC)}
-        candidates.sort(
-            key=lambda r: (
-                season_rank.get(str(r.get("season_code")), 99),
-                0 if r.get("score_total_50") is not None else 1,
-                0 if (r.get("review_rubric_tags") or r.get("review_narrative")) else 1,
+
+        def clip_priority_key(r: dict) -> tuple:
+            sc_rank = season_rank.get(str(r.get("season_code")), 99)
+            score_tot = r.get("score_total_50")
+            s5d = r.get("score_5d") or {}
+            subscores = [s5d.get(k) for k in ("yinzhun_pitch", "jiezou_rhythm", "yinse_tone", "biaoxianli_expression", "wanzhengxing_completeness") if s5d.get(k) is not None]
+            has_low_subscore = any(int(v) <= 3 for v in subscores)
+            is_gold_or_defect = (
+                score_tot == 50
+                or has_low_subscore
+                or r.get("pass_level") == 0
+                or r.get("is_reject") == 1
+                or r.get("is_excellent") == 1
+            )
+            has_review = bool(r.get("review_rubric_tags") or r.get("review_narrative"))
+            if score_tot is not None and is_gold_or_defect:
+                tier = 0
+            elif score_tot is not None:
+                tier = 1
+            elif has_review:
+                tier = 2
+            else:
+                tier = 3
+            return (
+                tier,
+                sc_rank,
+                0 if has_review else 1,
                 int(r["exam_id"]),
                 int(r["clip_index"]),
             )
-        )
+
+        candidates.sort(key=clip_priority_key)
 
     downloaded = 0
     cached = 0
@@ -423,6 +446,19 @@ def main() -> None:
     consecutive_blocks = 0
     total_new_bytes = 0
     started_at = datetime.now(timezone.utc).isoformat()
+    known_404_path = dataset_root / "known_404_clips.txt"
+    known_404_ids: set[str] = set()
+    if known_404_path.exists():
+        known_404_ids = {line.strip() for line in known_404_path.read_text(encoding="utf-8").splitlines() if line.strip()}
+    else:
+        # Season 20235 was 100% scanned in run #1 (1,069 saved, 948 404s); seed missing 20235 clips so restarts never re-probe dead 20235 URLs
+        for r in candidates:
+            if str(r.get("season_code")) == "20235":
+                vp = dataset_root / r["rel_video_path"]
+                if not (vp.exists() and vp.stat().st_size >= 1024):
+                    known_404_ids.add(str(r["clip_id"]))
+        if known_404_ids:
+            known_404_path.write_text("\n".join(sorted(known_404_ids)) + "\n", encoding="utf-8")
 
     def write_status(state: str, current_clip: dict | None = None, last_error: str | None = None) -> None:
         payload = {
@@ -434,7 +470,7 @@ def main() -> None:
                 "max_kbps": args.max_kbps,
                 "jitter_sleep_sec": [args.sleep_min, args.sleep_max],
                 "coffee_break": f"{args.coffee_seconds}s every {args.coffee_every} clips",
-                "priority": "oldest_live_season_and_5D_scored_first",
+                "priority": "tier0_gold50_and_3pt_defects -> tier1_all_5D_scored -> tier2_reviewed -> tier3_unscored",
             },
             "total_candidates_in_queue": len(candidates),
             "newly_downloaded": downloaded,
@@ -448,7 +484,11 @@ def main() -> None:
         status_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     write_status("running")
-    has_ffmpeg = bool(shutil.which("ffmpeg"))
+    ffmpeg_bin = shutil.which("ffmpeg") or (
+        "/home/ubt/.hermes/tools/ffmpeg-9.0.1-linux-x64/bin/ffmpeg"
+        if Path("/home/ubt/.hermes/tools/ffmpeg-9.0.1-linux-x64/bin/ffmpeg").exists()
+        else None
+    )
 
     for rec in candidates:
         video_path = dataset_root / rec["rel_video_path"]
@@ -456,6 +496,10 @@ def main() -> None:
             cached += 1
             if cached % 200 == 0:
                 write_status("running", {"clip_id": rec["clip_id"], "season": rec["season_code"], "note": "scanning cached"})
+            continue
+
+        if str(rec["clip_id"]) in known_404_ids:
+            failed_404 += 1
             continue
 
         video_path.parent.mkdir(parents=True, exist_ok=True)
@@ -476,13 +520,13 @@ def main() -> None:
             total_new_bytes += nbytes
             consecutive_blocks = 0
 
-            if args.extract_audio and has_ffmpeg:
+            if args.extract_audio and ffmpeg_bin:
                 audio_path = dataset_root / rec["rel_audio_path"]
                 audio_path.parent.mkdir(parents=True, exist_ok=True)
                 if not audio_path.exists():
                     subprocess.run(
                         [
-                            "ffmpeg",
+                            ffmpeg_bin,
                             "-y",
                             "-nostdin",
                             "-loglevel",
@@ -515,6 +559,9 @@ def main() -> None:
         except urllib.error.HTTPError as he:
             if he.code == 404:
                 failed_404 += 1
+                known_404_ids.add(str(rec["clip_id"]))
+                with open(known_404_path, "a", encoding="utf-8") as f404:
+                    f404.write(str(rec["clip_id"]) + "\n")
                 write_status("running", clip_meta, f"HTTP 404 on {rec['clip_id']}")
                 time.sleep(random.uniform(1.5, 3.0))
                 continue

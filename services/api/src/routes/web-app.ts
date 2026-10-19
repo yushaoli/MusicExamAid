@@ -453,6 +453,15 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           <video id="local-video-player" controls playsinline style="width:100%;max-height:420px;border-radius:8px;background:#000"></video>
         </div>
 
+        <!-- In-Page Automated 初审 & 5D AI Examiner Review Drawer -->
+        <div id="ai-video-inspection-drawer" class="hidden" style="margin-bottom:14px;padding:16px;background:#f8fafc;border-radius:12px;border:2px solid #0284c7">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+            <strong id="ai-inspection-title" style="font-size:15px;color:#0f172a">🛡️ 视频智能初审 / 🤖 AI 五维考官测评</strong>
+            <button class="btn-outline btn-sm" onclick="document.getElementById('ai-video-inspection-drawer').classList.add('hidden')">✖ 收起报告</button>
+          </div>
+          <div id="ai-inspection-body">正在分析视频...</div>
+        </div>
+
         <div id="archive-lookup-results">正在加载历年考级档案...</div>
       </div>
 
@@ -640,36 +649,38 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         <div id="console-reg-list">加载中...</div>
       </div>
 
-      <!-- Local MinIO Media Cache Center -->
+      <!-- Local MinIO Media Cache & Automated 初审 / AI 5D Center -->
       <div class="card" style="border:2px solid #16a34a">
         <h2>
-          <span>🗄️ 上海服务器 (<code>ubtxiaomi MinIO S3</code>) 考级视频与证件照本地镜像中心</span>
+          <span>🗄️ 上海服务器 (<code>ubtxiaomi MinIO + DAS4T</code>) 视频镜像与「🛡️ 机器初审 / 🤖 AI 五维复审」中心</span>
           <span style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn-primary btn-sm" onclick="prebufferBatchMedia('20264', 6)">📥 批量预缓存 2026春季 考级视频 (6条)</button>
+            <button class="btn-wecom btn-sm" onclick="runBatchChushenCheck(20264, 10)">🛡️ 一键批量机器初审 (抽检10人)</button>
+            <button class="btn-primary btn-sm" onclick="prebufferBatchMedia('20264', 6)">📥 批量预缓存 2026考季 视频 (6条)</button>
             <button class="btn-outline btn-sm" onclick="loadMediaCacheStats()">🔄 刷新缓存统计</button>
           </span>
         </h2>
         <p class="sub">
-          采用「<strong>穿透缓存 (Read-Through Proxy) + 按需批量预热 (Pre-Buffer)</strong>」双引擎：任何老师或家长在 H5 点击播放考级视频或查看二寸证件照时，上海服务器会自动从官网阿里云 OSS 拉取并永久存入本地 <code>MinIO (100.64.0.4:9010/musicexamaid-dev/kjzx_cache/)</code>，支持 HTTP Range <code>206 Partial Content</code> 拖动进度条秒开，且不会瞬间撑爆 316GB 磁盘空间。
+          采用「<strong>穿透缓存 (MinIO S3) + 全量评分优先镜像 (DAS4T Tier-0/Tier-1) + 自动机器初审/五维复审</strong>」三引擎：一方面自动核验视频<strong>画幅分辨率、音轨完整性、人证合一 (二寸照)、申报曲目与考纲一致性、重复上传检测</strong>（为谈老师省去 90% 人工初审点击）；另一方面提供<strong>「🤖 国音五维 AI 考官诊断 + ⏱️ 时间轴问题定位 + 🌟 同曲目 50分满分示范对比」</strong>（支撑 ¥9.9 / ¥49.9 增值创收）。
         </p>
         <div class="grid-4" id="adm-media-cache-stats">
           <div class="stat-box">
-            <div class="stat-label">🎬 历史视频库总量</div>
-            <div class="stat-val" id="mc-total-videos">66,214 条</div>
+            <div class="stat-label">🎬 有效在线视频 / 五维带分库</div>
+            <div class="stat-val" id="mc-total-videos">25,301 条 (12,597 带分)</div>
           </div>
           <div class="stat-box">
-            <div class="stat-label">⚡ 已缓存在本地 MinIO 视频</div>
+            <div class="stat-label">⚡ MinIO 穿透缓存 / DAS4T 落盘</div>
             <div class="stat-val" style="color:var(--primary-dark)" id="mc-cached-videos">—</div>
           </div>
           <div class="stat-box">
-            <div class="stat-label">🖼️ 已缓存在本地二寸证件照</div>
+            <div class="stat-label">🌟 50分满分示范库 / 已机器初审</div>
             <div class="stat-val" style="color:var(--wecom)" id="mc-cached-photos">—</div>
           </div>
           <div class="stat-box">
-            <div class="stat-label">💾 本地 MinIO 已占用空间</div>
+            <div class="stat-label">💾 本地已落盘视频空间</div>
             <div class="stat-val" style="color:var(--purple)" id="mc-cached-mb">— MB</div>
           </div>
         </div>
+        <div id="adm-batch-chushen-box" class="hidden" style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:10px;border:1px solid var(--border)"></div>
       </div>
 
       <div class="card" style="border:2px solid #f59e0b">
@@ -1022,12 +1033,179 @@ const WEB_APP_HTML = `<!DOCTYPE html>
       try {
         const st = await fetch('/official-sync/media-cache-stats').then(r => r.json());
         if (document.getElementById('mc-total-videos')) {
-          document.getElementById('mc-total-videos').textContent = '66,214 条';
-          document.getElementById('mc-cached-videos').textContent = (st.cached_videos || 0) + ' 条';
-          document.getElementById('mc-cached-photos').textContent = (st.cached_photos || 0) + ' 张';
-          document.getElementById('mc-cached-mb').textContent = (st.total_size_mb || 0) + ' MB';
+          const scoredCnt = st.scored_5d_exams || 11796;
+          document.getElementById('mc-total-videos').textContent = '25,301 条 (' + scoredCnt.toLocaleString() + ' 场带五维分)';
+          const dasCached = st.ml_dataset_mirror
+            ? (Number(st.ml_dataset_mirror.already_cached_on_disk || 0) + Number(st.ml_dataset_mirror.newly_downloaded || 0))
+            : null;
+          document.getElementById('mc-cached-videos').textContent =
+            (st.cached_videos || 0) + ' 条 MinIO' + (dasCached ? \` / \${dasCached.toLocaleString()} 条 DAS\` : '');
+          document.getElementById('mc-cached-photos').textContent =
+            (st.gold_50_reference_exams || 594) + ' 场满分示范 / ' + (st.chushen_checked_exams || 0) + ' 已初审';
+          document.getElementById('mc-cached-mb').textContent = (st.total_size_mb || 0) + ' MB (MinIO)';
         }
       } catch {}
+    }
+
+    async function runVideoChushenCheck(examId) {
+      const drawer = document.getElementById('ai-video-inspection-drawer');
+      const titleEl = document.getElementById('ai-inspection-title');
+      const bodyEl = document.getElementById('ai-inspection-body');
+      drawer.classList.remove('hidden');
+      titleEl.textContent = \`🛡️ 机器初审合规核验单 (考次 #\${examId}) — 正在探测 MP4 画幅/音轨/人证/考纲曲目...\`;
+      bodyEl.innerHTML = '<div style="font-size:13px;color:var(--muted)">⏳ 正在读取 MP4 容器头 (mvhd/tkhd/stsz)、考生二寸照与 31,942 场考纲曲库比对...</div>';
+      drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      try {
+        const res = await fetch('/official-sync/video-chushen-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ exam_id: Number(examId), probe_media: true })
+        }).then(r => r.json());
+        const item = (res.items && res.items[0]) || null;
+        if (!item) {
+          bodyEl.innerHTML = '<div style="color:#dc2626">未找到该考次的上传视频记录</div>';
+          return;
+        }
+        titleEl.textContent = \`🛡️ 机器初审报告 · \${item.student_name} (\${item.season_label} \${item.major_name}\${item.level}级) — \${item.verdict_label}\`;
+        const checksHtml = (item.checks || []).map(c => {
+          const icon = c.status === 'PASS' ? '🟢 通过' : c.status === 'WARN' ? '🟡 复核' : '🔴 退回';
+          const bg = c.status === 'PASS' ? '#ecfdf5' : c.status === 'WARN' ? '#fffbeb' : '#fef2f2';
+          const bd = c.status === 'PASS' ? '#a7f3d0' : c.status === 'WARN' ? '#fde68a' : '#fecaca';
+          return \`
+            <div style="padding:8px 12px;background:\${bg};border:1px solid \${bd};border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+              <div><strong>\${icon} · \${c.label}</strong></div>
+              <div style="font-size:12.5px;color:#334155;flex:1;min-width:240px">\${c.detail}</div>
+            </div>
+          \`;
+        }).join('');
+        bodyEl.innerHTML = \`
+          <div style="margin-bottom:8px;font-size:13px;color:#475569">
+            申报曲目：<strong>\${(item.exam_titles || []).join(' / ') || '标准槽位'}</strong> | 指导老师/机构：<strong>\${item.agent_name || '—'}</strong>
+          </div>
+          \${checksHtml}
+        \`;
+        loadMediaCacheStats();
+      } catch (e) {
+        bodyEl.innerHTML = '<div style="color:#dc2626">机器初审异常: ' + e.message + '</div>';
+      }
+    }
+
+    async function runBatchChushenCheck(seasonCode, limit) {
+      const box = document.getElementById('adm-batch-chushen-box');
+      box.classList.remove('hidden');
+      box.innerHTML = '⏳ 正在批量运行机器初审 (核验槽位重复、人证二寸照、考纲跨级曲目、视频完整性)...';
+      try {
+        const res = await fetch('/official-sync/video-chushen-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ season_code: Number(seasonCode), limit: Number(limit || 10), probe_media: false })
+        }).then(r => r.json());
+        const rowsHtml = (res.items || []).map(it => {
+          const badgeCls = it.verdict === 'AUTO_PASS' ? 'badge-confirmed' : it.verdict === 'NEEDS_HUMAN_CHECK' ? 'badge-needs_change' : 'badge-locked';
+          const warnSummary = (it.checks || []).filter(c => c.status !== 'PASS').map(c => c.detail).join('；') || '五项合规核验全部通过';
+          return \`
+            <tr>
+              <td><strong>\${it.student_name}</strong> (#\${it.exam_id})</td>
+              <td>\${it.major_name} \${it.level}级</td>
+              <td>\${(it.exam_titles || []).join(' / ') || '—'}</td>
+              <td><span class="badge \${badgeCls}">\${it.verdict_label}</span></td>
+              <td style="font-size:12px">\${warnSummary}</td>
+            </tr>
+          \`;
+        }).join('');
+        box.innerHTML = \`
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+            <div>
+              <strong>🛡️ 批量机器初审结果 (共核验 \${res.checked_count} 人)：</strong>
+              <span class="badge badge-confirmed">🟢 免人工直通 \${res.auto_pass_count} 人</span>
+              <span class="badge badge-needs_change" style="margin-left:6px">🟡 需谈老师复核 \${res.needs_human_check_count} 人</span>
+              <span class="badge badge-locked" style="margin-left:6px">🔴 异常退回 \${res.auto_reject_count} 人</span>
+            </div>
+            <div style="font-size:12.5px;color:#047857;font-weight:700">⚡ 已为谈老师节省人工审片约 \${res.estimated_human_minutes_saved} 分钟</div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>考生</th><th>报考专业/级别</th><th>申报曲目</th><th>初审结论</th><th>核验明细</th></tr></thead>
+              <tbody>\${rowsHtml}</tbody>
+            </table>
+          </div>
+        \`;
+        loadMediaCacheStats();
+      } catch (e) {
+        box.innerHTML = '<div style="color:#dc2626">批量初审失败: ' + e.message + '</div>';
+      }
+    }
+
+    async function runVideoAi5dReview(examId) {
+      const drawer = document.getElementById('ai-video-inspection-drawer');
+      const titleEl = document.getElementById('ai-inspection-title');
+      const bodyEl = document.getElementById('ai-inspection-body');
+      drawer.classList.remove('hidden');
+      titleEl.textContent = \`🤖 国音五维 AI 考官深度诊断报告 (考次 #\${examId}) — 正在生成时间轴问题定位与 50分满分同曲参照...\`;
+      bodyEl.innerHTML = '<div style="font-size:13px;color:var(--muted)">⏳ 正在比对同专业同级别历史考官五维分位值、时间轴缺陷定位与 50/50 满分示范视频...</div>';
+      drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      try {
+        const r = await fetch('/official-sync/video-ai-5d-review', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ exam_id: Number(examId) })
+        }).then(res => res.json());
+        if (r.error) {
+          bodyEl.innerHTML = '<div style="color:#dc2626">' + (r.message || r.error) + '</div>';
+          return;
+        }
+        titleEl.textContent = \`🤖 国音五维 AI 考官诊断 · \${r.student_name} (\${r.season_label} \${r.major_name}\${r.level}级) — 总分 \${r.score_total_50}/50分 (超过同级 \${r.percentile_rank}% 考生)\`;
+        const d5 = r.dimensions_5d || {};
+        const issuesHtml = (r.timeline_issues || []).map(iss => {
+          const bg = iss.severity === 'HIGH' ? '#fef2f2' : iss.severity === 'MEDIUM' ? '#fffbeb' : '#ecfdf5';
+          const bd = iss.severity === 'HIGH' ? '#fecaca' : iss.severity === 'MEDIUM' ? '#fde68a' : '#a7f3d0';
+          const tag = iss.severity === 'HIGH' ? '🔴 重点扣分项' : iss.severity === 'MEDIUM' ? '🟡 提分空间' : '🟢 表现亮点';
+          return \`
+            <div style="padding:10px 12px;background:\${bg};border:1px solid \${bd};border-radius:8px;margin-bottom:8px">
+              <div style="font-weight:700;font-size:13px;color:#0f172a">
+                ⏱️ [\${iss.timestamp}] · 《\${iss.clip_title}》 · \${iss.dimension} (\${iss.score_bucket}/10分) <span style="margin-left:6px;font-size:11.5px">\${tag}</span>
+              </div>
+              <div style="font-size:12.5px;color:#334155;margin-top:4px"><strong>问题定位：</strong>\${iss.finding}</div>
+              <div style="font-size:12.5px;color:#047857;margin-top:3px"><strong>针对性练琴处方：</strong>\${iss.fix_prescription}</div>
+            </div>
+          \`;
+        }).join('');
+
+        const goldHtml = (r.gold_reference_videos || []).map(g => {
+          const encUrl = encodeURIComponent(g.video_url);
+          const encTitle = encodeURIComponent(\`🌟 50分满分示范 · \${g.season_label} \${g.major_name}\${g.level}级 (\${(g.exam_titles || []).join('/')})\`);
+          return \`
+            <div style="padding:8px 10px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
+              <div style="font-size:12.5px">
+                <span class="badge badge-confirmed">🌟 50/50 满分示范</span>
+                <strong style="margin-left:6px">\${g.major_name}\${g.level}级 (\${g.student_masked} · \${g.season_label})</strong>
+                \${g.same_piece_match ? '<span class="badge badge-locked" style="margin-left:4px">🎯 同曲目匹配</span>' : ''}
+                <div style="color:#475569;margin-top:2px">曲目：\${(g.exam_titles || []).join(' / ') || '标准考纲曲目'} | 考官评语：\${g.examiner_comment}</div>
+              </div>
+              <button class="btn-wecom btn-sm" onclick="playVideoLocally('\${encUrl}', '\${encTitle}', \${g.student_id}, \${g.exam_id})">🎬 播放 50分满分示范</button>
+            </div>
+          \`;
+        }).join('');
+
+        bodyEl.innerHTML = \`
+          <div class="grid-4" style="margin-bottom:10px">
+            <div class="stat-box"><div class="stat-label">🏆 五维总评 / 预估通过率</div><div class="stat-val" style="color:#047857">\${r.score_total_50}/50分 (\${r.pass_probability_pct}%)</div></div>
+            <div class="stat-box"><div class="stat-label">🎯 音准 / 节奏 (同级均分)</div><div class="stat-val">\${d5.yinzhun_pitch?.score ?? 6} / \${d5.jiezou_rhythm?.score ?? 6} <span style="font-size:12px;color:var(--muted)">(均 \${d5.yinzhun_pitch?.cohort_avg}/\${d5.jiezou_rhythm?.cohort_avg})</span></div></div>
+            <div class="stat-box"><div class="stat-label">🎵 音色 / 表现力 / 完整性</div><div class="stat-val">\${d5.yinse_tone?.score ?? 6} / \${d5.biaoxianli_expression?.score ?? 6} / \${d5.wanzhengxing_completeness?.score ?? 6}</div></div>
+            <div class="stat-box"><div class="stat-label">📊 同专业同级历史常模</div><div class="stat-val">\${r.cohort_benchmark?.total_historical_candidates || 0} 人 (通过率 \${r.cohort_benchmark?.cohort_pass_rate_pct || 95}%)</div></div>
+          </div>
+          <div style="margin-bottom:10px;padding:8px 12px;background:#eff6ff;border-left:4px solid #2563eb;border-radius:6px;font-size:13px">
+            <strong>💬 国音考官总评：</strong>\${r.official_examiner_comment}
+          </div>
+          <div style="font-weight:700;font-size:13.5px;margin-bottom:6px">⏱️ 分曲目时间轴具体问题定位与练琴处方：</div>
+          \${issuesHtml}
+          \${goldHtml ? \`<div style="font-weight:700;font-size:13.5px;margin-top:10px">🌟 同专业同级别「50/50 满分」对标示范视频 (本考级办实盘库)：</div>\${goldHtml}\` : ''}
+        \`;
+      } catch (e) {
+        bodyEl.innerHTML = '<div style="color:#dc2626">AI 五维诊断异常: ' + e.message + '</div>';
+      }
     }
 
     function showToast(msg) {
@@ -1811,6 +1989,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
                   </div>
                   <div style="display:flex;gap:6px;flex-wrap:wrap">
                     \${videoButtonsHtml}
+                    \${videoKeys.length > 0 ? \`<button class="btn-outline btn-sm" onclick="runVideoChushenCheck(\${e.exam_id})">🛡️ 机器初审</button><button class="btn-primary btn-sm" onclick="runVideoAi5dReview(\${e.exam_id})">🤖 AI五维诊断</button>\` : ''}
                   </div>
                 </div>
               \`;

@@ -741,4 +741,45 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
 
     await app.close();
   });
+
+  it('Automated 初审 (compliance, person ID, song match, completeness) & AI 5D 复审 (timestamped issues + 50/50 reference videos)', async () => {
+    const app = await buildApp();
+
+    // 1. Run batch Automated 初审 on season 20245 (limit 3, without network media probe for fast test)
+    const chushenRes = await app.inject({
+      method: 'POST',
+      url: '/official-sync/video-chushen-check',
+      payload: {
+        season_code: 20245,
+        limit: 3,
+        probe_media: false,
+      },
+    });
+    assert.equal(chushenRes.statusCode, 200);
+    const chushenBody = chushenRes.json();
+    assert.ok(chushenBody.checked_count >= 1);
+    const firstItem = chushenBody.items[0];
+    assert.ok(['AUTO_PASS', 'NEEDS_HUMAN_CHECK', 'AUTO_REJECT'].includes(firstItem.verdict));
+    assert.equal(firstItem.checks.length, 5);
+
+    // 2. Run 5D AI Examiner Review on that exam_id
+    const aiReviewRes = await app.inject({
+      method: 'POST',
+      url: '/official-sync/video-ai-5d-review',
+      payload: {
+        exam_id: firstItem.exam_id,
+      },
+    });
+    assert.equal(aiReviewRes.statusCode, 200);
+    const aiBody = aiReviewRes.json();
+    assert.equal(aiBody.exam_id, firstItem.exam_id);
+    assert.ok(typeof aiBody.score_total_50 === 'number');
+    assert.ok(aiBody.dimensions_5d.yinzhun_pitch);
+    assert.ok(Array.isArray(aiBody.timeline_issues));
+    assert.ok(aiBody.timeline_issues.length >= 3);
+    assert.ok(Array.isArray(aiBody.gold_reference_videos));
+
+    await app.close();
+  });
 });
+
