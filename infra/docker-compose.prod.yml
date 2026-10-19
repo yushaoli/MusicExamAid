@@ -12,6 +12,8 @@ services:
       ENABLE_LIVE_STORAGE: "1"
     ports:
       - "3100:3100"
+    volumes:
+      - ../services/api/data:/app/services/api/data:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3100/health?live=1"]
       interval: 30s
