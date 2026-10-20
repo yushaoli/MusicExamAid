@@ -19,7 +19,11 @@ import {
 } from '@musicexamaid/shared';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getPostgresPool } from '../store/postgres';
+import { getPostgresPool as getLivePostgresPool } from '../store/postgres';
+import type { Pool } from 'pg';
+import { buildSignedFamilyToken, verifySignedFamilyToken, extractAndVerifyRequestFamilySession,
+  requireFamilyAdminPreHandler, familySessionCookie } from '../auth/family-session';
+export { buildSignedFamilyToken, verifySignedFamilyToken } from '../auth/family-session';
 import { minioClient } from '../store/minio';
 
 // Strict 3-person WeChat OpenID allowlist (Me, Wife, Mom) from kjzx002120 admin bindings
@@ -75,92 +79,6 @@ function savePersistedSession(sess: CachedOfficialSession): void {
 
 let cachedOfficialSession: CachedOfficialSession | null = loadPersistedSession();
 
-function getFamilySigningSecret(): string {
-  return (
-    process.env.SNAPSHOT_AES_KEY_HEX ||
-    process.env.ENCRYPTION_KEY ||
-    'mea_family_secret_002120'
-  );
-}
-
-function buildLegacyFamilyToken(): string {
-  return crypto
-    .createHmac('sha256', getFamilySigningSecret())
-    .update('authorized_family_wechat_002120_3person_only')
-    .digest('hex')
-    .slice(0, 32);
-}
-
-export function buildSignedFamilyToken(ttlSeconds = 604800): string {
-  const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
-  const payload = `v1.${expiresAt}`;
-  const sig = crypto
-    .createHmac('sha256', getFamilySigningSecret())
-    .update(payload)
-    .digest('hex')
-    .slice(0, 32);
-  return `${payload}.${sig}`;
-}
-
-export function verifySignedFamilyToken(rawToken?: string | null): boolean {
-  const token = String(rawToken || '').trim();
-  if (!token) return false;
-  if (token.startsWith('v1.')) {
-    const parts = token.split('.');
-    if (parts.length !== 3) return false;
-    const expiresAt = Number(parts[1]);
-    const sig = parts[2];
-    if (!Number.isFinite(expiresAt) || expiresAt < Math.floor(Date.now() / 1000)) {
-      return false;
-    }
-    const expectedSig = crypto
-      .createHmac('sha256', getFamilySigningSecret())
-      .update(`v1.${expiresAt}`)
-      .digest('hex')
-      .slice(0, 32);
-    if (sig.length !== expectedSig.length) return false;
-    return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig));
-  }
-  const legacy = buildLegacyFamilyToken();
-  if (token.length === legacy.length) {
-    return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(legacy));
-  }
-  return false;
-}
-
-export function extractAndVerifyRequestFamilySession(req: FastifyRequest): boolean {
-  const headerToken = String(req.headers['x-mea-session'] || '').trim();
-  if (headerToken && verifySignedFamilyToken(headerToken)) return true;
-
-  const authHeader = String(req.headers.authorization || '').trim();
-  if (authHeader.toLowerCase().startsWith('bearer ')) {
-    const bearer = authHeader.slice(7).trim();
-    if (verifySignedFamilyToken(bearer)) return true;
-  }
-
-  const cookieHeader = String(req.headers.cookie || '');
-  const match = cookieHeader.match(/(?:^|;\s*)mea_family_session=([^;]+)/);
-  if (match && match[1] && verifySignedFamilyToken(decodeURIComponent(match[1].trim()))) {
-    return true;
-  }
-  return false;
-}
-
-async function requireFamilyAdminPreHandler(
-  req: FastifyRequest,
-  reply: FastifyReply,
-): Promise<void> {
-  if (process.env.ENFORCE_SERVER_AUTH !== '1') {
-    return;
-  }
-  if (!extractAndVerifyRequestFamilySession(req)) {
-    return reply.code(401).send({
-      error: 'UNAUTHORIZED',
-      message: '请先使用授权微信号扫码登录',
-    });
-  }
-}
-
 /**
  * Safety kill switch: outbound writes to kjzx002120 (`/admins/exam/check_video`,
  * `/admins/student/up_img`, `/admins/exam/modify_cert`) are disabled unless
@@ -191,7 +109,12 @@ function resolveSafeOfficialPortalUrl(rawPath: string): string | null {
   }
 }
 
-export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
+export interface OfficialSyncOptions {
+  postgresPool?: Pick<Pool, 'query'>;
+}
+
+export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyncOptions = {}): Promise<void> {
+  const getPostgresPool = () => opts.postgresPool ?? getLivePostgresPool();
   // 0. Check whether ubtxiaomi already holds an active authenticated PHPSESSID session
   app.get('/official-sync/session-status', async (_req, reply) => {
     if (!cachedOfficialSession) {
@@ -354,7 +277,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         const familyToken = buildSignedFamilyToken();
         reply.header(
           'set-cookie',
-          `mea_family_session=${familyToken}; Path=/; Max-Age=604800; HttpOnly; SameSite=Lax`,
+          familySessionCookie(familyToken),
         );
         return reply.code(200).send({
           authenticated: true,
@@ -398,7 +321,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         const freshToken = buildSignedFamilyToken();
         reply.header(
           'set-cookie',
-          `mea_family_session=${freshToken}; Path=/; Max-Age=604800; HttpOnly; SameSite=Lax`,
+          familySessionCookie(freshToken),
         );
         return reply.code(200).send({
           authorized: true,
@@ -884,7 +807,9 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // 7. List all Partner Teachers/Agents with invite_token, parent_referral_code & WeChat binding status (`GET /official-sync/partner-agents`)
-  app.get('/official-sync/partner-agents', async (_req, reply) => {
+  app.get('/official-sync/partner-agents', async (req, reply) => {
+    await requireFamilyAdminPreHandler(req, reply);
+    if (reply.sent) return;
     const pool = getPostgresPool();
     const { rows } = await pool.query(`
       SELECT
@@ -1061,7 +986,9 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // 8b. Full-Year Combined (`寒假 + 暑假`) Teacher & Studio Evaluation (`GET /official-sync/studio-growth-intelligence`)
-  app.get('/official-sync/studio-growth-intelligence', async (_req, reply) => {
+  app.get('/official-sync/studio-growth-intelligence', async (req, reply) => {
+    await requireFamilyAdminPreHandler(req, reply);
+    if (reply.sent) return;
     const pool = getPostgresPool();
     const [studiosRes, theoryGapRes] = await Promise.all([
       pool.query(`
@@ -1222,6 +1149,9 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       const pool = getPostgresPool();
       const { invite_token, ref, wx_openid, role } = req.query ?? {};
 
+      if (wx_openid && !invite_token && !extractAndVerifyRequestFamilySession(req)) {
+        return reply.code(401).send({ error: 'UNAUTHORIZED' });
+      }
       if (invite_token || wx_openid) {
         const { rows } = await pool.query(
           `
@@ -1229,7 +1159,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
                  invite_token, parent_referral_code, wx_openid, wx_nickname, bound_at
           FROM kjzx_partner_agents
           WHERE ($1::text IS NOT NULL AND invite_token = $1::text)
-             OR ($2::text IS NOT NULL AND wx_openid = $2::text)
+             OR ($1::text IS NULL AND $2::text IS NOT NULL AND wx_openid = $2::text)
           LIMIT 1
           `,
           [invite_token || null, wx_openid || null],
@@ -1265,6 +1195,11 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
+      if (invite_token || ref) {
+        return reply.code(401).send({ error: 'INVALID_INVITE' });
+      }
+      await requireFamilyAdminPreHandler(req, reply);
+      if (reply.sent) return;
       return reply.code(200).send({
         role: role === 'parent' ? 'parent' : 'admin',
         is_isolated: role === 'parent',
@@ -1298,26 +1233,29 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       }
 
       // When binding/unbinding by numeric agent_id without the secret invite_token, require admin auth
-      if (!body.invite_token && process.env.ENFORCE_SERVER_AUTH === '1') {
-        if (!extractAndVerifyRequestFamilySession(req)) {
-          return reply.code(401).send({
-            error: 'UNAUTHORIZED',
-            message: 'Binding by agent_id requires an invite_token or admin session',
-          });
-        }
+      if (body.agent_id !== undefined && (!Number.isInteger(body.agent_id) || body.agent_id <= 0)) {
+        return reply.code(400).send({ error: 'VALIDATION_ERROR', message: 'agent_id must be a positive integer' });
       }
+      if (!body.invite_token) {
+        await requireFamilyAdminPreHandler(req, reply);
+        if (reply.sent) return;
+      }
+      // A token grants access only to its own row; a supplied numeric ID must also match.
+      const targetWhere = body.invite_token
+        ? 'invite_token = $1::text AND ($2::int IS NULL OR agent_id = $2::int)'
+        : '($1::text IS NULL) AND agent_id = $2::int';
 
       if (body.unbind) {
         const { rows } = await pool.query(
           `
           UPDATE kjzx_partner_agents
           SET wx_openid = NULL, wx_nickname = NULL, bound_at = NULL
-          WHERE ($1::text IS NOT NULL AND invite_token = $1::text)
-             OR ($2::int IS NOT NULL AND agent_id = $2::int)
+          WHERE ${targetWhere}
           RETURNING agent_id, code, name, manager, invite_token, parent_referral_code, wx_openid, wx_nickname, bound_at
           `,
           [body.invite_token || null, body.agent_id ?? null],
         );
+        if (!rows[0]) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Invalid invite_token or agent_id' });
         return reply.code(200).send({
           bound: false,
           agent: rows[0] || null,
@@ -1340,8 +1278,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         SET wx_openid = $3::text,
             wx_nickname = $4::text,
             bound_at = NOW()
-        WHERE ($1::text IS NOT NULL AND invite_token = $1::text)
-           OR ($2::int IS NOT NULL AND agent_id = $2::int)
+        WHERE ${targetWhere}
         RETURNING agent_id, code, name, manager, invite_token, parent_referral_code, wx_openid, wx_nickname, bound_at
         `,
         [body.invite_token || null, body.agent_id ?? null, wxOpenId, wxNickname],
@@ -3004,6 +2941,10 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       const limit = Math.min(Math.max(Number(body.limit || (body.exam_id ? 1 : 30)), 1), 200);
       const shouldProbeMedia = body.probe_media ?? Boolean(body.exam_id);
       const shouldAutoPersist = body.auto_persist === true;
+      if (shouldAutoPersist) {
+        await requireFamilyAdminPreHandler(req, reply);
+        if (reply.sent) return;
+      }
       const agentKw = (body.agent_keyword || '').trim();
       const acousticModel = loadYushenAcousticModel();
 

@@ -25,3 +25,16 @@
 ## Next Up (Optional External Console Cutover)
 - [ ] Add `WECOM_RELAY_TOKEN` to `/opt/stacks/musicexamaid/infra/.env.shared` on `ubtxiaomi` if anonymous WeCom push notifications are desired
 - [ ] Open `apps/wechat-mini` in WeChat DevTools to publish the dual-mode Mainland Mini Program (`wx_mini_program_appid`)
+
+## Security / ML / Reliability follow-ups (2026-10-20 handover)
+
+- [x] Review PR #2 and fix invite-token/agent-ID authorization bypass, token disclosure endpoints, production signing fallback, legacy nonexpiring sessions, dynamic inline handlers, and invited-teacher binding.
+- [x] Make default API tests offline; add isolated auth/XSS/storage-boundary and migration rollback coverage.
+- [x] Commit schema changes and migration ledger entries atomically; serialize migration runners with an advisory lock. Migration 009 replaces 008's tokens with 16 cryptographically random bytes without replaying old seeds.
+- [x] Prepare exact-commit mainland deployment with host lock, retained secrets/model data, SHA-tagged images, and image rollback on failed health/auth checks.
+- [ ] Complete role-scoped server auth for student lookup, exports, learners, registrations, archives, financial routes, media and RPC. Derive teacher/parent ownership from verified sessions; reject cross-owner access regardless of client-supplied IDs.
+- [ ] Train the four ordered 5D classes (好/较好/一般/尚可) per instrument family; report grouped validation, baselines and acoustic-only ablation. Default/prior scores must not be presented as measured performance.
+- [ ] Collect 200 teacher-labeled clips and measure 初审 false rejection / false acceptance before enabling automatic portal writes or launching paid reports. Confirm the authorized basis for training on minors' videos before commercial use.
+- [ ] Make Postgres authoritative for registrations, payment orders, concessions and withdrawals, including startup reload, transactions, idempotency and restart tests.
+- [ ] Move heavy media work to background jobs, split `official-sync.ts` / `web-app.ts`, and reconcile `PRD.md`, `ARCH.md`, and `openapi.yaml` with implemented routes.
+- [ ] Rotate previously tracked Postgres / MinIO credentials and address repository history exposure in a separate authorized infrastructure change.

@@ -10,6 +10,9 @@ import { loadConfig } from '@musicexamaid/shared';
 let sharedPool: Pool | null = null;
 
 export function getPostgresPool(connectionString?: string): Pool {
+  if (process.env.NODE_ENV === 'test' && process.env.LIVE_E2E !== '1') {
+    throw new Error('Live PostgreSQL is disabled in tests; inject a fixture pool or opt in with LIVE_E2E=1');
+  }
   if (!sharedPool) {
     const envPath = path.resolve(__dirname, '../../../../infra/.env.shared');
     const url =
@@ -46,6 +49,7 @@ export async function runSqlMigrations(
   const applied: string[] = [];
   const client = await pool.connect();
   try {
+    await client.query(`SELECT pg_advisory_lock(hashtext('musicexamaid_schema_migrations'))`);
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         filename   TEXT PRIMARY KEY,
@@ -62,16 +66,30 @@ export async function runSqlMigrations(
         continue;
       }
       const fullPath = path.join(migrationsDir, file);
-      const sql = fs.readFileSync(fullPath, 'utf8');
-      await client.query(sql);
-      await client.query(
-        `INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT (filename) DO NOTHING`,
-        [file],
-      );
+      // Historical scripts own their BEGIN/COMMIT. Strip only those standalone
+      // wrappers so schema changes and the ledger record share one transaction.
+      const sql = fs.readFileSync(fullPath, 'utf8')
+        .replace(/^\s*BEGIN\s*;\s*$/im, '')
+        .replace(/^\s*COMMIT\s*;\s*$/im, '');
+      await client.query('BEGIN');
+      try {
+        await client.query(sql);
+        await client.query(
+          `INSERT INTO schema_migrations (filename) VALUES ($1)`, [file],
+        );
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      }
       applied.push(file);
     }
   } finally {
-    client.release();
+    try {
+      await client.query(`SELECT pg_advisory_unlock(hashtext('musicexamaid_schema_migrations'))`);
+    } finally {
+      client.release();
+    }
   }
   return applied;
 }

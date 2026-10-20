@@ -1,10 +1,13 @@
 services:
   musicexamaid-api:
+    image: musicexamaid-api:${MEA_RELEASE_SHA:-local}
     build:
       context: ..
       dockerfile: Dockerfile
     container_name: musicexamaid-api
     restart: unless-stopped
+    labels:
+      org.opencontainers.image.revision: ${MEA_RELEASE_SHA:-local}
     env_file:
       - ./.env.shared
     environment:

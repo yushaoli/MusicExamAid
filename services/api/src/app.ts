@@ -11,6 +11,8 @@ import { paymentConcessionRoutes } from './routes/payments-concessions';
 import { officialSyncRoutes } from './routes/official-sync';
 import { valueAddedRoutes } from './routes/value-added';
 import { DomainRepository } from './store/repository';
+import { assertProductionAuthConfig } from './auth/family-session';
+import type { OfficialSyncOptions } from './routes/official-sync';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -21,9 +23,11 @@ declare module 'fastify' {
 export interface BuildAppOptions {
   logger?: boolean | { level: string };
   store?: DomainRepository;
+  officialSync?: OfficialSyncOptions;
 }
 
 export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
+  assertProductionAuthConfig();
   const app = Fastify({
     logger: opts.logger ?? false,
   });
@@ -48,7 +52,7 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
   app.register(webAppRoutes);
   app.register(rpcRoutes);
   app.register(paymentConcessionRoutes);
-  app.register(officialSyncRoutes);
+  app.register(officialSyncRoutes, opts.officialSync ?? {});
   app.register(valueAddedRoutes);
 
   return app;
