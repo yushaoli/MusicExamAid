@@ -75,12 +75,90 @@ function savePersistedSession(sess: CachedOfficialSession): void {
 
 let cachedOfficialSession: CachedOfficialSession | null = loadPersistedSession();
 
-function buildSignedFamilyToken(): string {
+function getFamilySigningSecret(): string {
+  return (
+    process.env.SNAPSHOT_AES_KEY_HEX ||
+    process.env.ENCRYPTION_KEY ||
+    'mea_family_secret_002120'
+  );
+}
+
+function buildLegacyFamilyToken(): string {
   return crypto
-    .createHmac('sha256', process.env.SNAPSHOT_AES_KEY_HEX || 'mea_family_secret_002120')
+    .createHmac('sha256', getFamilySigningSecret())
     .update('authorized_family_wechat_002120_3person_only')
     .digest('hex')
     .slice(0, 32);
+}
+
+export function buildSignedFamilyToken(ttlSeconds = 604800): string {
+  const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
+  const payload = `v1.${expiresAt}`;
+  const sig = crypto
+    .createHmac('sha256', getFamilySigningSecret())
+    .update(payload)
+    .digest('hex')
+    .slice(0, 32);
+  return `${payload}.${sig}`;
+}
+
+export function verifySignedFamilyToken(rawToken?: string | null): boolean {
+  const token = String(rawToken || '').trim();
+  if (!token) return false;
+  if (token.startsWith('v1.')) {
+    const parts = token.split('.');
+    if (parts.length !== 3) return false;
+    const expiresAt = Number(parts[1]);
+    const sig = parts[2];
+    if (!Number.isFinite(expiresAt) || expiresAt < Math.floor(Date.now() / 1000)) {
+      return false;
+    }
+    const expectedSig = crypto
+      .createHmac('sha256', getFamilySigningSecret())
+      .update(`v1.${expiresAt}`)
+      .digest('hex')
+      .slice(0, 32);
+    if (sig.length !== expectedSig.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig));
+  }
+  const legacy = buildLegacyFamilyToken();
+  if (token.length === legacy.length) {
+    return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(legacy));
+  }
+  return false;
+}
+
+export function extractAndVerifyRequestFamilySession(req: FastifyRequest): boolean {
+  const headerToken = String(req.headers['x-mea-session'] || '').trim();
+  if (headerToken && verifySignedFamilyToken(headerToken)) return true;
+
+  const authHeader = String(req.headers.authorization || '').trim();
+  if (authHeader.toLowerCase().startsWith('bearer ')) {
+    const bearer = authHeader.slice(7).trim();
+    if (verifySignedFamilyToken(bearer)) return true;
+  }
+
+  const cookieHeader = String(req.headers.cookie || '');
+  const match = cookieHeader.match(/(?:^|;\s*)mea_family_session=([^;]+)/);
+  if (match && match[1] && verifySignedFamilyToken(decodeURIComponent(match[1].trim()))) {
+    return true;
+  }
+  return false;
+}
+
+async function requireFamilyAdminPreHandler(
+  req: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  if (process.env.ENFORCE_SERVER_AUTH !== '1') {
+    return;
+  }
+  if (!extractAndVerifyRequestFamilySession(req)) {
+    return reply.code(401).send({
+      error: 'UNAUTHORIZED',
+      message: '请先使用授权微信号扫码登录',
+    });
+  }
 }
 
 /**
@@ -276,7 +354,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         const familyToken = buildSignedFamilyToken();
         reply.header(
           'set-cookie',
-          `mea_family_session=${familyToken}; Path=/; Max-Age=31536000; SameSite=Lax`,
+          `mea_family_session=${familyToken}; Path=/; Max-Age=604800; HttpOnly; SameSite=Lax`,
         );
         return reply.code(200).send({
           authenticated: true,
@@ -309,25 +387,23 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       }>,
       reply: FastifyReply,
     ) => {
-      const expectedToken = buildSignedFamilyToken();
       const body = req.body ?? {};
-      const cookieHeader = String(req.headers.cookie || '');
-      const hasValidCookie = cookieHeader.includes(`mea_family_session=${expectedToken}`);
+      const isAuthorized =
+        extractAndVerifyRequestFamilySession(req) || verifySignedFamilyToken(body.token);
 
-      if (hasValidCookie || body.token === expectedToken) {
+      if (isAuthorized) {
         if (!cachedOfficialSession) {
           cachedOfficialSession = loadPersistedSession();
         }
+        const freshToken = buildSignedFamilyToken();
         reply.header(
           'set-cookie',
-          `mea_family_session=${expectedToken}; Path=/; Max-Age=31536000; SameSite=Lax`,
+          `mea_family_session=${freshToken}; Path=/; Max-Age=604800; HttpOnly; SameSite=Lax`,
         );
         return reply.code(200).send({
           authorized: true,
-          family_token: expectedToken,
+          family_token: freshToken,
           operator: cachedOfficialSession?.operator_label || '已授权管理员',
-          admin_user: cachedOfficialSession?.admin_user || '',
-          openid: cachedOfficialSession?.openid || '',
           has_official_wx_session: Boolean(cachedOfficialSession),
         });
       }
@@ -467,6 +543,8 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       }>,
       reply: FastifyReply,
     ) => {
+      await requireFamilyAdminPreHandler(req, reply);
+      if (reply.sent) return;
       const body = req.body ?? {};
       const sessId = body.php_sess_id || cachedOfficialSession?.php_sess_id;
       if (!sessId) {
@@ -1219,6 +1297,16 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      // When binding/unbinding by numeric agent_id without the secret invite_token, require admin auth
+      if (!body.invite_token && process.env.ENFORCE_SERVER_AUTH === '1') {
+        if (!extractAndVerifyRequestFamilySession(req)) {
+          return reply.code(401).send({
+            error: 'UNAUTHORIZED',
+            message: 'Binding by agent_id requires an invite_token or admin session',
+          });
+        }
+      }
+
       if (body.unbind) {
         const { rows } = await pool.query(
           `
@@ -1236,8 +1324,15 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const wxOpenId = body.wx_openid || `wx_oid_${Date.now().toString(36)}`;
-      const wxNickname = body.wx_nickname || '微信实名绑定老师';
+      const wxOpenId = String(body.wx_openid || `wx_oid_${Date.now().toString(36)}`)
+        .replace(/[<>"'&]/g, '')
+        .trim()
+        .slice(0, 128);
+      const wxNickname =
+        String(body.wx_nickname || '微信实名绑定老师')
+          .replace(/[<>"'&]/g, '')
+          .trim()
+          .slice(0, 64) || '微信实名绑定老师';
 
       const { rows } = await pool.query(
         `
@@ -2082,31 +2177,14 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       }>,
       reply: FastifyReply,
     ) => {
+      await requireFamilyAdminPreHandler(req, reply);
+      if (reply.sent) return;
       const pool = getPostgresPool();
       const b = req.body ?? ({} as any);
       const studentId = Number(b.student_id);
       if (!studentId) {
         return reply.code(400).send({ error: 'VALIDATION_ERROR', message: 'student_id is required' });
       }
-
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS kjzx_mom_upload_log (
-          id SERIAL PRIMARY KEY,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          operator_name TEXT NOT NULL DEFAULT '老妈/老婆',
-          student_id INT NOT NULL,
-          student_name TEXT NOT NULL,
-          exam_id INT,
-          kind TEXT NOT NULL,
-          target_slot TEXT NOT NULL,
-          major_name TEXT,
-          level TEXT,
-          cert_no TEXT,
-          oss_url TEXT NOT NULL,
-          official_synced BOOLEAN NOT NULL DEFAULT FALSE,
-          official_msg TEXT
-        )
-      `);
 
       // 1) If image_base64 is provided, upload directly to Aliyun OSS via kjzx002120 STS (`kaoji-backend-upload` Step 3)
       let ossUrl = (b.existing_picture_url || '').trim();
@@ -2306,24 +2384,6 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/official-sync/mom-upload-log', async (_req, reply) => {
     const pool = getPostgresPool();
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS kjzx_mom_upload_log (
-        id SERIAL PRIMARY KEY,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        operator_name TEXT NOT NULL DEFAULT '老妈/老婆',
-        student_id INT NOT NULL,
-        student_name TEXT NOT NULL,
-        exam_id INT,
-        kind TEXT NOT NULL,
-        target_slot TEXT NOT NULL,
-        major_name TEXT,
-        level TEXT,
-        cert_no TEXT,
-        oss_url TEXT NOT NULL,
-        official_synced BOOLEAN NOT NULL DEFAULT FALSE,
-        official_msg TEXT
-      )
-    `);
     const rows = await pool.query(
       `SELECT * FROM kjzx_mom_upload_log ORDER BY id DESC LIMIT 30`,
     );
@@ -3468,6 +3528,8 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       }>,
       reply: FastifyReply,
     ) => {
+      await requireFamilyAdminPreHandler(req, reply);
+      if (reply.sent) return;
       const pool = getPostgresPool();
       const operatorName = (req.body?.operator_name || '谈老师 (AI初审台)').trim();
       const isDryRun = req.body?.dry_run === true;

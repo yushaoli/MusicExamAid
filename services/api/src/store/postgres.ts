@@ -46,10 +46,28 @@ export async function runSqlMigrations(
   const applied: string[] = [];
   const client = await pool.connect();
   try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        filename   TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    const { rows: existingRows } = await client.query<{ filename: string }>(
+      `SELECT filename FROM schema_migrations`,
+    );
+    const alreadyApplied = new Set(existingRows.map(r => r.filename));
+
     for (const file of files) {
+      if (alreadyApplied.has(file)) {
+        continue;
+      }
       const fullPath = path.join(migrationsDir, file);
       const sql = fs.readFileSync(fullPath, 'utf8');
       await client.query(sql);
+      await client.query(
+        `INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT (filename) DO NOTHING`,
+        [file],
+      );
       applied.push(file);
     }
   } finally {

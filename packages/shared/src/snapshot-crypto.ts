@@ -10,7 +10,16 @@ import * as crypto from 'crypto';
 const DEFAULT_DEV_KEY = 'default-32-char-key-for-dev-only!';
 
 function normalizeKey(key?: string): Buffer {
-  const raw = (key || process.env.ENCRYPTION_KEY || DEFAULT_DEV_KEY)
+  const configured = key || process.env.ENCRYPTION_KEY || process.env.SNAPSHOT_AES_KEY_HEX;
+  if (
+    process.env.NODE_ENV === 'production' &&
+    (!configured || configured === DEFAULT_DEV_KEY)
+  ) {
+    throw new Error(
+      'ENCRYPTION_KEY or SNAPSHOT_AES_KEY_HEX must be configured in production (refusing DEFAULT_DEV_KEY)',
+    );
+  }
+  const raw = (configured || DEFAULT_DEV_KEY)
     .padEnd(32, '0')
     .slice(0, 32);
   return Buffer.from(raw, 'utf8');

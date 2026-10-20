@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeWeChatSignature } from '@musicexamaid/shared';
 import { buildApp } from '../app';
+import { buildSignedFamilyToken } from '../routes/official-sync';
 
 describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Account H5 Web App', () => {
   it('GET /health returns 200 ok with stub and live dependency probes', async () => {
@@ -815,6 +816,49 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     });
     assert.equal(ssrfRes.statusCode, 400);
     assert.equal(ssrfRes.json().error, 'INVALID_TABLE_URL');
+
+    // 1d. Server-side auth preHandler guard (ENFORCE_SERVER_AUTH=1) & stored XSS sanitization
+    const prevEnforce = process.env.ENFORCE_SERVER_AUTH;
+    process.env.ENFORCE_SERVER_AUTH = '1';
+    try {
+      const unauthApply = await app.inject({
+        method: 'POST',
+        url: '/official-sync/video-chushen-apply',
+        payload: { dry_run: true, items: [{ exam_id: firstItem.exam_id, action: 'PASS' }] },
+      });
+      assert.equal(unauthApply.statusCode, 401);
+
+      const unauthBindById = await app.inject({
+        method: 'POST',
+        url: '/official-sync/bind-teacher-wechat',
+        payload: { agent_id: 999, wx_nickname: '<script>alert(1)</script>张老师' },
+      });
+      assert.equal(unauthBindById.statusCode, 401);
+
+      const validToken = buildSignedFamilyToken(3600);
+      const authedApply = await app.inject({
+        method: 'POST',
+        url: '/official-sync/video-chushen-apply',
+        headers: { 'x-mea-session': validToken },
+        payload: { dry_run: true, items: [{ exam_id: firstItem.exam_id, action: 'PASS' }] },
+      });
+      assert.equal(authedApply.statusCode, 200);
+
+      const xssSanitizedBind = await app.inject({
+        method: 'POST',
+        url: '/official-sync/bind-teacher-wechat',
+        payload: {
+          invite_token: 't_inv_999_testdemo',
+          wx_nickname: '<img src=x onerror=alert(1)>测试张老师',
+        },
+      });
+      assert.equal(xssSanitizedBind.statusCode, 200);
+      assert.ok(!String(xssSanitizedBind.json().agent.wx_nickname).includes('<'));
+      assert.ok(!String(xssSanitizedBind.json().agent.wx_nickname).includes('>'));
+    } finally {
+      if (prevEnforce === undefined) delete process.env.ENFORCE_SERVER_AUTH;
+      else process.env.ENFORCE_SERVER_AUTH = prevEnforce;
+    }
 
     // 2. Run 5D AI Pre-Exam Assessment (考前预审) on that exam_id
     const aiReviewRes = await app.inject({
