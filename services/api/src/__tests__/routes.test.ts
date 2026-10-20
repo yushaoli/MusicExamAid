@@ -753,7 +753,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     assert.equal(modelStRes.statusCode, 200);
     assert.ok(typeof modelStRes.json().model_version === 'string');
 
-    // 1. Run batch Automated 初审 on season 20245 (limit 3, without network media probe for fast test)
+    // 1. Run batch Automated 初审 on season 20245 (limit 3, read-only default: auto_persist=false)
     const chushenRes = await app.inject({
       method: 'POST',
       url: '/official-sync/video-chushen-check',
@@ -766,18 +766,23 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     assert.equal(chushenRes.statusCode, 200);
     const chushenBody = chushenRes.json();
     assert.ok(chushenBody.checked_count >= 1);
+    assert.equal(chushenBody.auto_updated_status_count, 0);
+    assert.equal(chushenBody.portal_write_enabled, false);
     const firstItem = chushenBody.items[0];
     assert.ok(['AUTO_PASS', 'NEEDS_HUMAN_CHECK', 'AUTO_REJECT'].includes(firstItem.verdict));
     assert.equal(firstItem.checks.length, 5);
     assert.ok(typeof firstItem.ai_chushen_comment === 'string' && firstItem.ai_chushen_comment.length > 0);
-    assert.ok([10, 15].includes(firstItem.official_video_review_status));
+    const expectedReviewStatus =
+      firstItem.verdict === 'AUTO_PASS' ? 10 : firstItem.verdict === 'AUTO_REJECT' ? 15 : 0;
+    assert.equal(firstItem.official_video_review_status, expectedReviewStatus);
 
-    // 1b. Apply / override 初审 status + AI comment via POST /official-sync/video-chushen-apply
+    // 1b. Apply / override 初审 status in dry_run mode (no DB or official portal writes during tests)
     const applyRes = await app.inject({
       method: 'POST',
       url: '/official-sync/video-chushen-apply',
       payload: {
         operator_name: '谈老师 (AI初审台)',
+        dry_run: true,
         items: [
           {
             exam_id: firstItem.exam_id,
@@ -793,8 +798,23 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
       },
     });
     assert.equal(applyRes.statusCode, 200);
+    assert.equal(applyRes.json().dry_run, true);
+    assert.equal(applyRes.json().portal_write_enabled, false);
     assert.equal(applyRes.json().applied_count, 1);
+    assert.equal(applyRes.json().official_synced_count, 0);
     assert.equal(applyRes.json().results[0].video_review_status, 10);
+
+    // 1c. SSRF guard: pull-remote must reject external table_url
+    const ssrfRes = await app.inject({
+      method: 'POST',
+      url: '/official-sync/pull-remote',
+      payload: {
+        php_sess_id: 'dummy_test_session',
+        table_url: 'https://evil.example.com/steal-cookie',
+      },
+    });
+    assert.equal(ssrfRes.statusCode, 400);
+    assert.equal(ssrfRes.json().error, 'INVALID_TABLE_URL');
 
     // 2. Run 5D AI Pre-Exam Assessment (考前预审) on that exam_id
     const aiReviewRes = await app.inject({

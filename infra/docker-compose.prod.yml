@@ -10,6 +10,7 @@ services:
     environment:
       PORT: "3100"
       ENABLE_LIVE_STORAGE: "1"
+      PORTAL_WRITE_ENABLED: "0"
     ports:
       - "3100:3100"
     volumes:
