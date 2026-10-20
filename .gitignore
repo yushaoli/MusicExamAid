@@ -13,7 +13,11 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+!infra/.env.shared.example
 infra/.env.shared
+
+# Generated ML model weights / pseudonymous acoustic index (mounted from DAS at runtime)
+services/api/data/yushen_5d_model_weights.json
 
 # OS/editor
 .DS_Store

@@ -83,6 +83,36 @@ function buildSignedFamilyToken(): string {
     .slice(0, 32);
 }
 
+/**
+ * Safety kill switch: outbound writes to kjzx002120 (`/admins/exam/check_video`,
+ * `/admins/student/up_img`, `/admins/exam/modify_cert`) are disabled unless
+ * `PORTAL_WRITE_ENABLED=1` is explicitly set in the environment.
+ */
+function isPortalWriteEnabled(): boolean {
+  return process.env.PORTAL_WRITE_ENABLED === '1';
+}
+
+/**
+ * SSRF guard: ensure any scraped or caller-provided path resolves strictly to
+ * an `/admins/...` path on `OFFICIAL_PORTAL_BASE_URL` before sending PHPSESSID.
+ */
+function resolveSafeOfficialPortalUrl(rawPath: string): string | null {
+  const trimmed = String(rawPath || '').trim();
+  if (!trimmed.startsWith('/admins/') || trimmed.startsWith('//') || trimmed.includes('..')) {
+    return null;
+  }
+  try {
+    const base = new URL(OFFICIAL_PORTAL_BASE_URL);
+    const resolved = new URL(trimmed, OFFICIAL_PORTAL_BASE_URL);
+    if (resolved.origin !== base.origin || !resolved.pathname.startsWith('/admins/')) {
+      return null;
+    }
+    return resolved.toString();
+  } catch {
+    return null;
+  }
+}
+
 export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
   // 0. Check whether ubtxiaomi already holds an active authenticated PHPSESSID session
   app.get('/official-sync/session-status', async (_req, reply) => {
@@ -91,20 +121,13 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
     }
     return reply.code(200).send({
       has_active_session: Boolean(cachedOfficialSession),
+      portal_write_enabled: isPortalWriteEnabled(),
       session: cachedOfficialSession
         ? {
-            php_sess_id_masked: `${cachedOfficialSession.php_sess_id.slice(0, 6)}...`,
             authenticated_at: cachedOfficialSession.authenticated_at,
-            openid: cachedOfficialSession.openid || 'oTC3O6cFs-DGo7e2aS_rWEZGRook',
-            admin_user: cachedOfficialSession.admin_user || 'duwei - 杜薇',
-            operator_label: cachedOfficialSession.operator_label || '老婆 (杜薇)',
-            ip_value: cachedOfficialSession.ip_value || '',
+            operator_label: cachedOfficialSession.operator_label || '已授权家人微信',
           }
         : null,
-      allowed_wechat_admins: Object.entries(ALLOWED_ADMIN_WECHAT_OPENIDS).map(([openid, info]) => ({
-        openid,
-        ...info,
-      })),
       oauth_mechanism: {
         qr_payload_pattern:
           'https://gzh.zgyyxykj.com/wx_qrcode/?time=<time>&token=<wxauth_token>&sign=<md5>',
@@ -192,10 +215,10 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         );
         const confirmJson = await confirmRes.json();
 
-        // Inspect /admins/user_log/get_list?limit=3 to verify exact WeChat openid of the scanner
+        // Inspect /admins/user_log/get_list?limit=3 to verify exact WeChat openid of the scanner (fail-closed)
         let verifiedOpenid = '';
         let verifiedAdminUser = '';
-        let verifiedOperatorLabel = '已授权家人微信';
+        let verifiedOperatorLabel = '';
         let verifiedIp = '';
         try {
           const logRes = await fetch(
@@ -220,17 +243,24 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
             verifiedOpenid = String(latestLogin.openid);
             verifiedAdminUser = String(latestLogin.admin_user || '');
             verifiedIp = String(latestLogin.ip_value || '');
-            const matched = ALLOWED_ADMIN_WECHAT_OPENIDS[verifiedOpenid];
-            if (!matched) {
-              return reply.code(403).send({
-                authenticated: false,
-                error: 'UNAUTHORIZED_WECHAT_OPENID',
-                message: '该微信号未授权登录',
-              });
-            }
-            verifiedOperatorLabel = matched.operator_label;
           }
-        } catch {}
+        } catch {
+          return reply.code(403).send({
+            authenticated: false,
+            error: 'WECHAT_OPENID_VERIFICATION_FAILED',
+            message: '无法核验扫码微信号绑定身份，已拒绝登录',
+          });
+        }
+
+        const matchedAdmin = verifiedOpenid ? ALLOWED_ADMIN_WECHAT_OPENIDS[verifiedOpenid] : undefined;
+        if (!matchedAdmin) {
+          return reply.code(403).send({
+            authenticated: false,
+            error: 'UNAUTHORIZED_WECHAT_OPENID',
+            message: '该微信号未在授权名单内，已拒绝登录',
+          });
+        }
+        verifiedOperatorLabel = matchedAdmin.operator_label;
 
         cachedOfficialSession = {
           php_sess_id,
@@ -478,15 +508,21 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       extractTableUrls(manageHtml);
 
       if (body.table_url) {
+        const safeCallerUrl = resolveSafeOfficialPortalUrl(body.table_url);
+        if (!safeCallerUrl) {
+          return reply.code(400).send({
+            error: 'INVALID_TABLE_URL',
+            message: 'table_url must be a relative /admins/... path on the official portal',
+          });
+        }
         tableUrls.add(body.table_url);
       }
 
       for (const link of menuLinks.slice(0, 6)) {
         try {
-          const subRes = await fetch(
-            link.startsWith('http') ? link : `${OFFICIAL_PORTAL_BASE_URL}${link}`,
-            { method: 'GET', headers },
-          );
+          const safeSubUrl = resolveSafeOfficialPortalUrl(link);
+          if (!safeSubUrl) continue;
+          const subRes = await fetch(safeSubUrl, { method: 'GET', headers });
           const subHtml = await subRes.text();
           extractTableUrls(subHtml);
         } catch {
@@ -499,7 +535,8 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
 
       for (const tUrl of tableUrls) {
         try {
-          const fullUrl = tUrl.startsWith('http') ? tUrl : `${OFFICIAL_PORTAL_BASE_URL}${tUrl}`;
+          const fullUrl = resolveSafeOfficialPortalUrl(tUrl);
+          if (!fullUrl) continue;
           const sep = fullUrl.includes('?') ? '&' : '?';
           const ajaxRes = await fetch(
             `${fullUrl}${sep}limit=10000&offset=0&pageSize=10000&pageNumber=1`,
@@ -2174,13 +2211,15 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
-      // 3) If WeChat official session (`cachedOfficialSession`) is active, also push directly to kjzx002120!
+      // 3) If WeChat official session (`cachedOfficialSession`) is active AND `PORTAL_WRITE_ENABLED=1`, push to kjzx002120
       let officialSynced = false;
-      let officialMsg = cachedOfficialSession
-        ? '已同步至国音后台会话'
-        : '已写入本地考级库与阿里云OSS（国音后台待微信扫码后自动同步）';
+      let officialMsg = !isPortalWriteEnabled()
+        ? '🔒 安全只读预演模式 (PORTAL_WRITE_ENABLED=0)：已写入本地考级库与阿里云OSS，暂不自动改写国音官方后台'
+        : cachedOfficialSession
+          ? '已同步至国音后台会话'
+          : '已写入本地考级库与阿里云OSS（国音后台待微信扫码后自动同步）';
 
-      if (cachedOfficialSession?.php_sess_id) {
+      if (cachedOfficialSession?.php_sess_id && isPortalWriteEnabled()) {
         try {
           if (b.kind === 'id_photo') {
             const form = new URLSearchParams();
@@ -2823,6 +2862,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
   }
 
   let cachedYushenModel: YushenAcousticModelArtifact | null = null;
+  let cachedYushenModelPath = '';
   let cachedYushenModelMtimeMs = 0;
 
   function loadYushenAcousticModel(): YushenAcousticModelArtifact | null {
@@ -2837,11 +2877,16 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       try {
         if (!fs.existsSync(p)) continue;
         const st = fs.statSync(p);
-        if (cachedYushenModel && st.mtimeMs === cachedYushenModelMtimeMs) {
+        if (
+          cachedYushenModel &&
+          cachedYushenModelPath === p &&
+          st.mtimeMs === cachedYushenModelMtimeMs
+        ) {
           return cachedYushenModel;
         }
         const raw = fs.readFileSync(p, 'utf-8');
         cachedYushenModel = JSON.parse(raw) as YushenAcousticModelArtifact;
+        cachedYushenModelPath = p;
         cachedYushenModelMtimeMs = st.mtimeMs;
         return cachedYushenModel;
       } catch {
@@ -2889,6 +2934,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           agent_keyword?: string;
           limit?: number;
           probe_media?: boolean;
+          auto_persist?: boolean;
         };
       }>,
       reply: FastifyReply,
@@ -2897,6 +2943,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       const body = req.body ?? {};
       const limit = Math.min(Math.max(Number(body.limit || (body.exam_id ? 1 : 30)), 1), 200);
       const shouldProbeMedia = body.probe_media ?? Boolean(body.exam_id);
+      const shouldAutoPersist = body.auto_persist === true;
       const agentKw = (body.agent_keyword || '').trim();
       const acousticModel = loadYushenAcousticModel();
 
@@ -3323,7 +3370,8 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           nonPassIssues.length > 0
             ? `【初审待补正】${nonPassIssues.join('；')}。请按考级要求核实或重新上传后提交。`
             : `【AI初审通过】已上传${clipEntries.length}首曲目无重复、二寸证件照合规、申报曲目与考纲级别一致、视频流完整。`;
-        const officialVideoReviewStatus = verdict === 'AUTO_PASS' ? 10 : 15;
+        const officialVideoReviewStatus =
+          verdict === 'AUTO_PASS' ? 10 : verdict === 'AUTO_REJECT' ? 15 : 0;
         const wechatNoticeText =
           nonPassIssues.length > 0
             ? `【考级办视频初审提醒】${ex.agent_name || '指导'}老师您好，考生【${ex.student_name}】（${ex.major_name}${ex.level}级）机器初审发现以下待核对项：${nonPassIssues.join('；')}。烦请协助核实或补正，谢谢！`
@@ -3344,43 +3392,45 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           verdict,
           verdict_label:
             verdict === 'AUTO_PASS'
-              ? '🟢 机器初审通过 (已自动标为通过)'
+              ? '🟢 机器初审通过 (建议通过)'
               : verdict === 'NEEDS_HUMAN_CHECK'
-                ? '🟡 疑似异常 (已生成AI评语·待谈老师确认)'
+                ? '🟡 疑似异常 (待谈老师人工确认·不自动退回)'
                 : '🔴 初审不合规 (已生成AI退回评语)',
           official_video_review_status: officialVideoReviewStatus,
           ai_chushen_comment: aiChushenComment,
-          no_pass_video_reson: nonPassIssues.length > 0 ? aiChushenComment : '',
-          status_auto_updated: true,
+          no_pass_video_reson: verdict === 'AUTO_REJECT' ? aiChushenComment : '',
+          status_auto_updated: shouldAutoPersist,
           wechat_notice_text: wechatNoticeText,
           checks,
           clip_probes: clipProbes,
         };
         items.push(reportItem);
 
-        await pool
-          .query(
-            `
-            UPDATE kjzx_historical_exams
-            SET chushen_status = $1,
-                chushen_report_json = $2::jsonb,
-                video_review_status = $3,
-                no_pass_video_reson = $4,
-                chushen_ai_comment = $5,
-                chushen_synced_at = NOW()
-            WHERE exam_id = $6 AND season_code = $7
-            `,
-            [
-              verdict,
-              JSON.stringify(reportItem),
-              officialVideoReviewStatus,
-              nonPassIssues.length > 0 ? aiChushenComment : '',
-              aiChushenComment,
-              Number(ex.exam_id),
-              Number(ex.season_code),
-            ],
-          )
-          .catch(() => {});
+        if (shouldAutoPersist) {
+          await pool
+            .query(
+              `
+              UPDATE kjzx_historical_exams
+              SET chushen_status = $1,
+                  chushen_report_json = $2::jsonb,
+                  video_review_status = $3,
+                  no_pass_video_reson = $4,
+                  chushen_ai_comment = $5,
+                  chushen_synced_at = NOW()
+              WHERE exam_id = $6 AND season_code = $7
+              `,
+              [
+                verdict,
+                JSON.stringify(reportItem),
+                officialVideoReviewStatus,
+                verdict === 'AUTO_REJECT' ? aiChushenComment : '',
+                aiChushenComment,
+                Number(ex.exam_id),
+                Number(ex.season_code),
+              ],
+            )
+            .catch(() => {});
+        }
       }
 
       return reply.code(200).send({
@@ -3388,7 +3438,8 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         auto_pass_count: autoPassCount,
         needs_human_check_count: needsHumanCount,
         auto_reject_count: autoRejectCount,
-        auto_updated_status_count: items.length,
+        auto_updated_status_count: shouldAutoPersist ? items.length : 0,
+        portal_write_enabled: isPortalWriteEnabled(),
         estimated_human_minutes_saved: Number((autoPassCount * 2.5).toFixed(1)),
         items,
       });
@@ -3402,6 +3453,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       req: FastifyRequest<{
         Body?: {
           operator_name?: string;
+          dry_run?: boolean;
           items?: Array<{
             exam_id: number;
             season_code?: number;
@@ -3418,6 +3470,8 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
     ) => {
       const pool = getPostgresPool();
       const operatorName = (req.body?.operator_name || '谈老师 (AI初审台)').trim();
+      const isDryRun = req.body?.dry_run === true;
+      const portalWriteAllowed = isPortalWriteEnabled() && !isDryRun;
       const rawItems = Array.isArray(req.body?.items) ? req.body!.items : [];
       if (rawItems.length === 0) {
         return reply.code(400).send({
@@ -3425,15 +3479,6 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
           message: 'items array is required',
         });
       }
-
-      await pool
-        .query(`
-          ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS video_review_status INTEGER DEFAULT 0;
-          ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS no_pass_video_reson TEXT;
-          ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS chushen_ai_comment TEXT;
-          ALTER TABLE kjzx_historical_exams ADD COLUMN IF NOT EXISTS chushen_synced_at TIMESTAMPTZ;
-        `)
-        .catch(() => {});
 
       const appliedResults = [];
       let officialSyncedCount = 0;
@@ -3454,38 +3499,44 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         const noPassReson = isPass ? '' : aiComment;
         const chushenStatus = isPass ? 'AUTO_PASS' : 'AUTO_REJECT';
 
-        await pool.query(
-          `
-          UPDATE kjzx_historical_exams
-          SET chushen_status = $1,
-              video_review_status = $2,
-              status = CASE WHEN $3 = 30 THEN 30 ELSE status END,
-              is_reject = $4,
-              reject_reason = $5,
-              no_pass_video_reson = $5,
-              chushen_ai_comment = $6,
-              chushen_synced_at = NOW()
-          WHERE exam_id = $7
-            AND ($8::int IS NULL OR season_code = $8::int)
-          `,
-          [
-            chushenStatus,
-            videoReviewStatus,
-            examStatus,
-            isReject,
-            noPassReson,
-            aiComment,
-            examId,
-            it.season_code ?? null,
-          ],
-        );
+        if (!isDryRun) {
+          await pool.query(
+            `
+            UPDATE kjzx_historical_exams
+            SET chushen_status = $1,
+                video_review_status = $2,
+                status = CASE WHEN $3 = 30 THEN 30 ELSE status END,
+                is_reject = $4,
+                reject_reason = $5,
+                no_pass_video_reson = $5,
+                chushen_ai_comment = $6,
+                chushen_synced_at = NOW()
+            WHERE exam_id = $7
+              AND ($8::int IS NULL OR season_code = $8::int)
+            `,
+            [
+              chushenStatus,
+              videoReviewStatus,
+              examStatus,
+              isReject,
+              noPassReson,
+              aiComment,
+              examId,
+              it.season_code ?? null,
+            ],
+          );
+        }
 
         let officialSynced = false;
-        let officialMsg = cachedOfficialSession?.php_sess_id
-          ? '已同步至国音考级后台'
-          : '已更新本地考级库初审状态与AI评语（扫码连接国音后台后可直推官网）';
+        let officialMsg = isDryRun
+          ? '🧪 预演模式 (dry_run=true)：未改动数据库与国音后台'
+          : !portalWriteAllowed
+            ? '🔒 安全只读预演模式 (PORTAL_WRITE_ENABLED=0)：已保存在本地，请谈老师核对后在国音后台操作'
+            : cachedOfficialSession?.php_sess_id
+              ? '已同步至国音考级后台'
+              : '已更新本地考级库初审状态与AI评语（扫码连接国音后台后可直推官网）';
 
-        if (cachedOfficialSession?.php_sess_id) {
+        if (cachedOfficialSession?.php_sess_id && portalWriteAllowed) {
           try {
             const form = new URLSearchParams();
             form.set('id', String(examId));
@@ -3521,33 +3572,37 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         }
         if (officialSynced) officialSyncedCount++;
 
-        await pool
-          .query(
-            `
-            INSERT INTO kjzx_mom_upload_log
-              (operator_name, student_id, student_name, exam_id, kind, target_slot, major_name, level, cert_no, oss_url, official_synced, official_msg)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-            `,
-            [
-              operatorName,
-              Number(it.student_id || 0),
-              String(it.student_name || `考次#${examId}`),
-              examId,
-              isPass ? 'chushen_pass' : 'chushen_reject',
-              isPass ? '机器初审 → 设为通过 (10)' : '机器初审 → 退回修改 (15)',
-              String(it.major_name || ''),
-              String(it.level || ''),
-              '',
-              aiComment.slice(0, 200),
-              officialSynced,
-              officialMsg,
-            ],
-          )
-          .catch(() => {});
+        if (!isDryRun) {
+          await pool
+            .query(
+              `
+              INSERT INTO kjzx_mom_upload_log
+                (operator_name, student_id, student_name, exam_id, kind, target_slot, major_name, level, cert_no, oss_url, official_synced, official_msg)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+              `,
+              [
+                operatorName,
+                Number(it.student_id || 0),
+                String(it.student_name || `考次#${examId}`),
+                examId,
+                isPass ? 'chushen_pass' : 'chushen_reject',
+                isPass ? '机器初审 → 设为通过 (10)' : '机器初审 → 退回修改 (15)',
+                String(it.major_name || ''),
+                String(it.level || ''),
+                '',
+                aiComment.slice(0, 200),
+                officialSynced,
+                officialMsg,
+              ],
+            )
+            .catch(() => {});
+        }
 
         appliedResults.push({
           exam_id: examId,
           action: it.action,
+          dry_run: isDryRun,
+          portal_write_enabled: isPortalWriteEnabled(),
           chushen_status: chushenStatus,
           video_review_status: videoReviewStatus,
           no_pass_video_reson: noPassReson,
@@ -3559,6 +3614,8 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
 
       return reply.code(200).send({
         ok: true,
+        dry_run: isDryRun,
+        portal_write_enabled: isPortalWriteEnabled(),
         applied_count: appliedResults.length,
         official_synced_count: officialSyncedCount,
         results: appliedResults,
@@ -3769,33 +3826,26 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       if (realRhythmClip && realRhythmClip.defects.rhythm_rush_drag_windows?.[0]) {
         const rw = realRhythmClip.defects.rhythm_rush_drag_windows[0];
         timelineIssues.push({
-          timestamp: rw.mmss.replace('-', '–'),
+          timestamp: `${rw.mmss.replace('-', '–')} (声学启发式区间·供参考)`,
           clip_title: realRhythmClip.piece_title || piece1,
-          dimension: '节奏 (Rhythm & Pulse · 实测声学定位)',
+          dimension: '节奏 (Rhythm & Pulse · 声学启发式检测)',
           score_bucket: jiezou,
           severity: jiezou <= 5 || Math.abs(rw.deviation_pct) >= 40 ? 'HIGH' : 'MEDIUM',
-          finding: `《${realRhythmClip.piece_title || piece1}》在 ${rw.mmss} 处实测检测到${rw.issue} (局部音头密度偏移 ${rw.deviation_pct > 0 ? '+' : ''}${rw.deviation_pct}%，全曲节拍变异系数 CV=${(realRhythmClip.tempo_cv * 100).toFixed(1)}%)`,
+          finding: `《${realRhythmClip.piece_title || piece1}》在 ${rw.mmss} 区间检测到局部音头密度变化 (${rw.deviation_pct > 0 ? '+' : ''}${rw.deviation_pct}%，全曲节拍变异系数 CV=${(realRhythmClip.tempo_cv * 100).toFixed(1)}%)`,
           fix_prescription:
             '使用节拍器从原速 75% 分手对准拍点慢练该乐句，稳定每拍音头间隔后再恢复原速。',
         });
-      } else if (jiezou <= 3) {
-        timelineIssues.push({
-          timestamp: fmtTs(0.18, 0.36),
-          clip_title: piece1,
-          dimension: '节奏 (Rhythm & Pulse)',
-          score_bucket: jiezou,
-          severity: 'HIGH',
-          finding: `《${piece1}》十六分音符快速跑动乐句出现明显抢拍加速 (局部 BPM 漂移 >18%)，重音点不够稳定`,
-          fix_prescription: '使用节拍器从原速 75% (约 76 BPM) 分手慢练跑动句，每四音一拍对齐拍点后再提速。',
-        });
       } else {
         timelineIssues.push({
-          timestamp: fmtTs(0.15, 0.32),
+          timestamp: '全曲综合评估 (无实测切片时间戳)',
           clip_title: piece1,
           dimension: '节奏 (Rhythm & Pulse)',
           score_bucket: jiezou,
-          severity: jiezou >= 9 ? 'GOOD' : 'MEDIUM',
-          finding: `《${piece1}》整体律动平稳，但在转调/换把衔接处有轻微时值压缩`,
+          severity: jiezou <= 3 ? 'HIGH' : jiezou >= 9 ? 'GOOD' : 'MEDIUM',
+          finding:
+            jiezou <= 3
+              ? `《${piece1}》历史考官节奏维度评分偏低 (${jiezou}/10)，需重点排查快速跑动乐句的节拍稳定性`
+              : `《${piece1}》全曲节奏维度综合评估 (${jiezou}/10)，建议结合节拍器核对转调/换把衔接处的时值稳定性`,
           fix_prescription: '注意句末长音与休止符时值留足，避免乐句之间急促抢进。',
         });
       }
@@ -3803,38 +3853,32 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       if (realPitchClip && realPitchClip.defects.pitch_instability_windows?.[0]) {
         const pw = realPitchClip.defects.pitch_instability_windows[0];
         timelineIssues.push({
-          timestamp: pw.mmss.replace('-', '–'),
+          timestamp: `${pw.mmss.replace('-', '–')} (声学启发式区间·供参考)`,
           clip_title: realPitchClip.piece_title || piece2,
-          dimension: '音准与音色 (Pitch & Tone · 实测频谱定位)',
+          dimension: '音准与音色 (Pitch & Tone · 声学启发式检测)',
           score_bucket: Math.min(yinzhun, yinse),
           severity: Math.min(yinzhun, yinse) <= 5 ? 'HIGH' : 'MEDIUM',
-          finding: `《${realPitchClip.piece_title || piece2}》在 ${pw.mmss} 处基频谐波清晰度下降 (clarity=${pw.clarity})，高把位/快速换指处音准与音色集中度波动`,
+          finding: `《${realPitchClip.piece_title || piece2}》在 ${pw.mmss} 区间基频谐波清晰度下降 (clarity=${pw.clarity})，建议复核该处音准与触键/运弓音色`,
           fix_prescription: String(ex.major_name).includes('钢琴')
             ? '保持手腕平稳放松、掌关节支撑，练习指尖高抬慢下以提升颗粒清晰度。'
             : '针对该时间窗内换把/按音音准做慢速长音听辨校准，保持触弦/运弓角度通透。',
         });
-      } else if (yinzhun <= 3 || yinse <= 3) {
-        timelineIssues.push({
-          timestamp: fmtTs(0.38, 0.58),
-          clip_title: piece2,
-          dimension: '音准与音色 (Pitch & Tone)',
-          score_bucket: Math.min(yinzhun, yinse),
-          severity: 'HIGH',
-          finding: String(ex.major_name).includes('钢琴')
-            ? `《${piece2}》高音区快速颗粒性触键不够均匀，手腕紧张导致部分和弦声部发闷`
-            : `《${piece2}》中段高把位/按音转换处存在约 25–35 音分偏低，触弦音色偏紧`,
-          fix_prescription: String(ex.major_name).includes('钢琴')
-            ? '保持手腕平稳放松、掌关节支撑，练习指尖高抬慢下以提升颗粒清晰度。'
-            : '针对换把/按音音准做慢速长音听辨校准，注意运弓/触弦角度保持通透音色。',
-        });
       } else {
         timelineIssues.push({
-          timestamp: fmtTs(0.4, 0.62),
+          timestamp: '全曲综合评估 (无实测切片时间戳)',
           clip_title: piece2,
           dimension: '音准与音色 (Pitch & Tone)',
           score_bucket: Math.min(yinzhun, yinse),
-          severity: yinzhun >= 9 && yinse >= 9 ? 'GOOD' : 'MEDIUM',
-          finding: `《${piece2}》主旋律发音清晰干净，伴奏声部与主旋律的音量层次对比可进一步拉开`,
+          severity:
+            yinzhun <= 3 || yinse <= 3
+              ? 'HIGH'
+              : yinzhun >= 9 && yinse >= 9
+                ? 'GOOD'
+                : 'MEDIUM',
+          finding:
+            yinzhun <= 3 || yinse <= 3
+              ? `《${piece2}》音准/音色维度评分偏低 (${Math.min(yinzhun, yinse)}/10)，需重点复核高把位音准或快速触键均匀度`
+              : `《${piece2}》全曲音准与音色综合评估 (${Math.min(yinzhun, yinse)}/10)，建议进一步拉开主旋律与伴奏声部的层次对比`,
           fix_prescription: '突出高音声部歌唱性线条，伴奏声部力度控制在 mp–p 之间。',
         });
       }
@@ -3842,24 +3886,14 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       if (realPauseClip && realPauseClip.defects.hesitation_windows?.[0]) {
         const hw = realPauseClip.defects.hesitation_windows[0];
         timelineIssues.push({
-          timestamp: hw.mmss.replace('-', '–'),
+          timestamp: `${hw.mmss.replace('-', '–')} (声学启发式区间·供参考)`,
           clip_title: realPauseClip.piece_title || piece3,
-          dimension: '表现力与完整性 (Expression & Flow · 实测断奏定位)',
+          dimension: '表现力与完整性 (Expression & Flow · 声学启发式检测)',
           score_bucket: Math.min(biaoxianli, wanzhengxing),
           severity: 'HIGH',
-          finding: `《${realPauseClip.piece_title || piece3}》在 ${hw.mmss} 处检测到 ${hw.duration_sec} 秒演奏中断/卡顿，且全曲强弱动态范围为 ${realPauseClip.dynamic_range_db} dB`,
+          finding: `《${realPauseClip.piece_title || piece3}》在 ${hw.mmss} 区间检测到 ${hw.duration_sec} 秒低能量停顿，全曲强弱动态范围为 ${realPauseClip.dynamic_range_db} dB`,
           fix_prescription:
-            '将该卡顿窗口前后 4 小节单独循环抽练消除衔接盲点，并拉开乐句 p 到 f 的强弱张力。',
-        });
-      } else if (biaoxianli <= 3 || wanzhengxing <= 3) {
-        timelineIssues.push({
-          timestamp: fmtTs(0.65, 0.88),
-          clip_title: piece3,
-          dimension: '表现力与完整性 (Expression & Flow)',
-          score_bucket: Math.min(biaoxianli, wanzhengxing),
-          severity: 'HIGH',
-          finding: `《${piece3}》再现部难点段落出现约 1.2 秒卡顿犹豫，且全曲强弱动态范围偏平 (缺乏渐强推向高潮的张力)`,
-          fix_prescription: '将再现部难点拆分为 4 小节循环抽练，明确标注 p -> cresc. -> f 的呼吸起伏点。',
+            '将该停顿窗口前后 4 小节单独循环抽练消除衔接盲点，并拉开乐句 p 到 f 的强弱张力。',
         });
       } else {
         const dynInfo =
@@ -3867,12 +3901,20 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
             ? ` (实测动态范围 ${acousticClips[0].dynamic_range_db} dB)`
             : '';
         timelineIssues.push({
-          timestamp: fmtTs(0.66, 0.9),
+          timestamp: '全曲综合评估 (无实测切片时间戳)',
           clip_title: piece3,
           dimension: '表现力与完整性 (Expression & Flow)',
           score_bucket: Math.min(biaoxianli, wanzhengxing),
-          severity: biaoxianli >= 9 ? 'GOOD' : 'MEDIUM',
-          finding: `《${piece3}》全曲一气呵成无中断${dynInfo}，若在展开部乐句呼吸与曲风对比上更鲜明，冲击优秀 (50分) 把握更大`,
+          severity:
+            biaoxianli <= 3 || wanzhengxing <= 3
+              ? 'HIGH'
+              : biaoxianli >= 9
+                ? 'GOOD'
+                : 'MEDIUM',
+          finding:
+            biaoxianli <= 3 || wanzhengxing <= 3
+              ? `《${piece3}》表现力/完整性维度评分偏低 (${Math.min(biaoxianli, wanzhengxing)}/10)，需排查难点段落衔接与强弱起伏`
+              : `《${piece3}》全曲表现力与完整性综合评估${dynInfo}，建议对照下方同级别满分示范提升乐句呼吸感`,
           fix_prescription: '对照下方同级别 50 分满分示范视频，模仿乐句收尾的渐慢与呼吸感。',
         });
       }

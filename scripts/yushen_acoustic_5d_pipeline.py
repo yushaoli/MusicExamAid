@@ -39,7 +39,7 @@ from scipy.signal import stft
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, r2_score
-from sklearn.model_selection import KFold
+from sklearn.model_selection import GroupKFold, KFold
 from sklearn.preprocessing import StandardScaler
 
 DATASET_ROOT_DEFAULT = "/mnt/DAS1T/musicexamaid_ml_dataset"
@@ -459,7 +459,7 @@ def run_analyze_and_train(dataset_root: Path, api_model_path: Path, max_clips: i
 
     print(f"Total acoustically analyzed clips in cache: {len(existing_cache)} (newly analyzed: {new_analyzed}).")
 
-    # Build Per-Piece Reference Chroma & Duration Templates for 初审 song verification
+    # Build Per-Piece Reference Chroma & Duration Templates (unsupervised, min 3 samples, leave-one-out similarity)
     piece_groups: dict[str, list[dict[str, Any]]] = {}
     for entry in existing_cache.values():
         title = (entry.get("piece_title") or "").strip()
@@ -469,45 +469,79 @@ def run_analyze_and_train(dataset_root: Path, api_model_path: Path, max_clips: i
         piece_groups.setdefault(key, []).append(entry)
 
     piece_templates: dict[str, dict[str, Any]] = {}
+    piece_chroma_sums: dict[str, tuple[np.ndarray, int]] = {}
     for key, items in piece_groups.items():
-        # Prefer high-scoring clips (>=35/50) when building reference template
-        gold_items = [it for it in items if (it.get("score_total_50") or 0) >= 35] or items
-        chromas = np.array([it["chroma_12"] for it in gold_items], dtype=np.float32)
-        mean_chroma = np.mean(chromas, axis=0)
+        if len(items) < 3:
+            continue
+        chromas = np.array([it["chroma_12"] for it in items], dtype=np.float32)
+        chroma_sum = np.sum(chromas, axis=0)
+        piece_chroma_sums[key] = (chroma_sum, len(items))
+        mean_chroma = chroma_sum / float(len(items))
         mean_chroma = mean_chroma / (np.linalg.norm(mean_chroma) + 1e-8)
-        durs = [it["features"]["duration_sec"] for it in gold_items]
+        durs = [it["features"]["duration_sec"] for it in items]
         piece_templates[key] = {
-            "sample_count": len(gold_items),
+            "sample_count": len(items),
             "median_duration_sec": round(float(np.median(durs)), 1),
             "min_duration_sec": round(float(np.percentile(durs, 10)), 1),
             "max_duration_sec": round(float(np.percentile(durs, 90)), 1),
             "reference_chroma_12": [round(float(v), 4) for v in mean_chroma],
         }
 
-    # Compute per-instrument acoustic statistics (so piano vs guzheng vs violin are normalized within instrument)
-    inst_groups: dict[str, list[dict[str, Any]]] = {}
-    for entry in existing_cache.values():
-        inst_groups.setdefault(entry["instrument_cn"], []).append(entry)
+    def compute_loo_chroma_sim(entry: dict[str, Any]) -> float | None:
+        title = (entry.get("piece_title") or "").strip()
+        if not title or title.startswith("clip_"):
+            return None
+        t_key = f"{entry['instrument_cn']}::{entry['grade_level']}::{title}"
+        sum_info = piece_chroma_sums.get(t_key)
+        if not sum_info or sum_info[1] < 3:
+            return None
+        total_vec, cnt = sum_info
+        c_vec = np.array(entry["chroma_12"], dtype=np.float32)
+        loo_mean = (total_vec - c_vec) / float(cnt - 1)
+        return round(
+            float(np.dot(c_vec, loo_mean) / (np.linalg.norm(c_vec) * np.linalg.norm(loo_mean) + 1e-8)),
+            3,
+        )
 
-    inst_stats: dict[str, dict[str, float]] = {}
-    for inst_name, items in inst_groups.items():
-        centroids = [it["features"]["spectral_centroid_hz_mean"] for it in items]
-        clarities = [it["features"]["pitch_clarity_mean"] for it in items]
-        dyn_ranges = [it["features"]["dynamic_range_db"] for it in items]
-        tempo_cvs = [it["features"]["tempo_cv"] for it in items]
-        scored_items = [it["score_total_50"] for it in items if it.get("score_total_50") is not None]
-        inst_stats[inst_name] = {
-            "count": len(items),
-            "centroid_mean": float(np.mean(centroids)),
-            "centroid_std": max(20.0, float(np.std(centroids))),
-            "clarity_mean": float(np.mean(clarities)),
-            "clarity_std": max(0.01, float(np.std(clarities))),
-            "dyn_mean": float(np.mean(dyn_ranges)),
-            "dyn_std": max(0.5, float(np.std(dyn_ranges))),
-            "tempo_cv_mean": float(np.mean(tempo_cvs)),
-            "tempo_cv_std": max(0.02, float(np.std(tempo_cvs))),
-            "avg_score_50": float(np.mean(scored_items)) if scored_items else 32.5,
-        }
+    def fit_inst_cohort_stats(subset: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for entry in subset:
+            groups.setdefault(entry["instrument_cn"], []).append(entry)
+        all_scored_50 = [
+            float(it["score_total_50"]) for it in subset if it.get("score_total_50") is not None
+        ]
+        global_avg_50 = float(np.mean(all_scored_50)) if all_scored_50 else 32.5
+        stats: dict[str, dict[str, float]] = {}
+        for inst_name, items in groups.items():
+            centroids = [it["features"]["spectral_centroid_hz_mean"] for it in items]
+            clarities = [it["features"]["pitch_clarity_mean"] for it in items]
+            dyn_ranges = [it["features"]["dynamic_range_db"] for it in items]
+            tempo_cvs = [it["features"]["tempo_cv"] for it in items]
+            scored_items = [
+                float(it["score_total_50"]) for it in items if it.get("score_total_50") is not None
+            ]
+            # Empirical Bayes shrinkage toward global mean for small instrument cohorts
+            n_sc = len(scored_items)
+            inst_mean_50 = (
+                (float(np.sum(scored_items)) + 10.0 * global_avg_50) / (n_sc + 10.0)
+                if n_sc > 0
+                else global_avg_50
+            )
+            stats[inst_name] = {
+                "count": len(items),
+                "centroid_mean": float(np.mean(centroids)),
+                "centroid_std": max(20.0, float(np.std(centroids))),
+                "clarity_mean": float(np.mean(clarities)),
+                "clarity_std": max(0.01, float(np.std(clarities))),
+                "dyn_mean": float(np.mean(dyn_ranges)),
+                "dyn_std": max(0.5, float(np.std(dyn_ranges))),
+                "tempo_cv_mean": float(np.mean(tempo_cvs)),
+                "tempo_cv_std": max(0.02, float(np.std(tempo_cvs))),
+                "avg_score_50": inst_mean_50,
+            }
+        return stats
+
+    inst_stats = fit_inst_cohort_stats(list(existing_cache.values()))
 
     ext_feature_names = FEATURE_NAMES + [
         "inst_z_centroid",
@@ -518,8 +552,10 @@ def run_analyze_and_train(dataset_root: Path, api_model_path: Path, max_clips: i
         "chroma_piece_similarity",
     ]
 
-    def build_ext_vec(entry: dict[str, Any]) -> tuple[list[float], float | None]:
-        ist = inst_stats.get(entry["instrument_cn"]) or {
+    def build_ext_vec(
+        entry: dict[str, Any], cohort_stats: dict[str, dict[str, float]] = inst_stats
+    ) -> tuple[list[float], float | None]:
+        ist = cohort_stats.get(entry["instrument_cn"]) or {
             "centroid_mean": 1200.0,
             "centroid_std": 400.0,
             "clarity_mean": 0.25,
@@ -531,16 +567,7 @@ def run_analyze_and_train(dataset_root: Path, api_model_path: Path, max_clips: i
             "avg_score_50": 32.5,
         }
         ft = entry["features"]
-        t_key = f"{entry['instrument_cn']}::{entry['grade_level']}::{entry.get('piece_title', '').strip()}"
-        tpl = piece_templates.get(t_key)
-        chroma_sim: float | None = None
-        if tpl:
-            c_vec = np.array(entry["chroma_12"], dtype=np.float32)
-            r_vec = np.array(tpl["reference_chroma_12"], dtype=np.float32)
-            chroma_sim = round(
-                float(np.dot(c_vec, r_vec) / (np.linalg.norm(c_vec) * np.linalg.norm(r_vec) + 1e-8)),
-                3,
-            )
+        chroma_sim = compute_loo_chroma_sim(entry)
         ext = list(entry["feature_vec"]) + [
             (ft["spectral_centroid_hz_mean"] - ist["centroid_mean"]) / ist["centroid_std"],
             (ft["pitch_clarity_mean"] - ist["clarity_mean"]) / ist["clarity_std"],
@@ -559,47 +586,96 @@ def run_analyze_and_train(dataset_root: Path, api_model_path: Path, max_clips: i
         and all(e["score_5d"].get(d) is not None for d in DIMENSIONS_5D)
         and len(e.get("feature_vec") or []) == len(FEATURE_NAMES)
     ]
-    print(f"Training 5D acoustic models (v1.1 instrument-calibrated) on {len(labeled)} labeled clips...")
+    print(f"Training 5D acoustic models (v1.2 honest GroupKFold + baselines) on {len(labeled)} labeled clips...")
 
-    X = np.array([build_ext_vec(e)[0] for e in labeled], dtype=np.float64)
+    X_full = np.array([build_ext_vec(e, inst_stats)[0] for e in labeled], dtype=np.float64)
     scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X) if len(labeled) >= 10 else X
+    X_scaled = scaler.fit_transform(X_full) if len(labeled) >= 10 else X_full
+    exam_groups = np.array([f"{e.get('season_code', 0)}:{e.get('exam_id', 0)}" for e in labeled])
 
     models_export: dict[str, Any] = {}
     metrics_summary: dict[str, Any] = {}
     trained_gbrs: dict[str, GradientBoostingRegressor] = {}
+
+    # Precompute out-of-fold feature matrices so CV never leaks held-out exam labels or cohort stats
+    unique_exams = len(set(exam_groups.tolist()))
+    gkf = GroupKFold(n_splits=5) if unique_exams >= 5 else KFold(n_splits=5, shuffle=True, random_state=42)
+    split_indices = list(
+        gkf.split(X_full, groups=exam_groups) if unique_exams >= 5 else gkf.split(X_full)
+    )
+    fold_scalers_and_vecs: list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, dict[str, float]]]] = []
+    for tr_idx, va_idx in split_indices:
+        tr_entries = [labeled[i] for i in tr_idx]
+        va_entries = [labeled[i] for i in va_idx]
+        tr_cohort = fit_inst_cohort_stats(tr_entries)
+        X_tr_raw = np.array([build_ext_vec(e, tr_cohort)[0] for e in tr_entries], dtype=np.float64)
+        X_va_raw = np.array([build_ext_vec(e, tr_cohort)[0] for e in va_entries], dtype=np.float64)
+        fold_sc = StandardScaler()
+        X_tr_sc = fold_sc.fit_transform(X_tr_raw)
+        X_va_sc = fold_sc.transform(X_va_raw)
+        fold_scalers_and_vecs.append((tr_idx, va_idx, X_tr_sc, X_va_sc, tr_cohort))
 
     for dim in DIMENSIONS_5D:
         y = np.array([float(e["score_5d"][dim]) for e in labeled], dtype=np.float64)
         if len(labeled) >= 20:
             ridge = Ridge(alpha=20.0)
             ridge.fit(X_scaled, y)
-            gbr = GradientBoostingRegressor(
+            gbr_params = dict(
                 n_estimators=90,
-                max_depth=4,
-                min_samples_leaf=12,
+                max_depth=3,
+                min_samples_leaf=15,
                 learning_rate=0.05,
                 subsample=0.85,
                 random_state=42,
             )
+            gbr = GradientBoostingRegressor(**gbr_params)
             gbr.fit(X_scaled, y)
             trained_gbrs[dim] = gbr
 
-            # 5-fold CV MAE using GBR + Ridge ensemble
-            kf = KFold(n_splits=5, shuffle=True, random_state=42)
+            # Honest 5-fold GroupKFold (by exam_id) with out-of-fold priors + explicit baselines
             cv_preds = np.zeros_like(y)
-            for tr_idx, va_idx in kf.split(X_scaled):
-                m_gbr = GradientBoostingRegressor(
-                    n_estimators=80,
-                    max_depth=3,
-                    min_samples_leaf=15,
-                    learning_rate=0.05,
-                    subsample=0.85,
-                    random_state=42,
+            global_mean_preds = np.zeros_like(y)
+            inst_prior_preds = np.zeros_like(y)
+            acoustic_only_preds = np.zeros_like(y)
+            # Acoustic-only columns exclude grade_norm (col 18) and inst_prior_score_10 (col 23)
+            acoustic_cols = [
+                idx
+                for idx, name in enumerate(ext_feature_names)
+                if name not in ("inst_prior_score_10", "grade_norm")
+            ]
+
+            for tr_idx, va_idx, X_tr_sc, X_va_sc, _tr_cohort in fold_scalers_and_vecs:
+                y_tr = y[tr_idx]
+                fold_global_mean = float(np.mean(y_tr))
+                global_mean_preds[va_idx] = fold_global_mean
+
+                # Out-of-fold per-instrument dimension mean baseline
+                inst_dim_sums: dict[str, list[float]] = {}
+                for idx_i in tr_idx:
+                    inst_dim_sums.setdefault(labeled[idx_i]["instrument_cn"], []).append(float(y[idx_i]))
+                inst_dim_means = {
+                    k: (float(np.sum(vals)) + 10.0 * fold_global_mean) / (len(vals) + 10.0)
+                    for k, vals in inst_dim_sums.items()
+                }
+                for idx_v in va_idx:
+                    inst_prior_preds[idx_v] = inst_dim_means.get(
+                        labeled[idx_v]["instrument_cn"], fold_global_mean
+                    )
+
+                m_gbr = GradientBoostingRegressor(**gbr_params)
+                m_gbr.fit(X_tr_sc, y_tr)
+                cv_preds[va_idx] = np.clip(m_gbr.predict(X_va_sc), 3.0, 10.0)
+
+                m_ac = GradientBoostingRegressor(**gbr_params)
+                m_ac.fit(X_tr_sc[:, acoustic_cols], y_tr)
+                acoustic_only_preds[va_idx] = np.clip(
+                    m_ac.predict(X_va_sc[:, acoustic_cols]), 3.0, 10.0
                 )
-                m_gbr.fit(X_scaled[tr_idx], y[tr_idx])
-                cv_preds[va_idx] = np.clip(m_gbr.predict(X_scaled[va_idx]), 3.0, 10.0)
+
             cv_mae = float(mean_absolute_error(y, cv_preds))
+            baseline_global_mae = float(mean_absolute_error(y, global_mean_preds))
+            baseline_inst_mae = float(mean_absolute_error(y, inst_prior_preds))
+            acoustic_only_mae = float(mean_absolute_error(y, acoustic_only_preds))
             in_mae = float(mean_absolute_error(y, np.clip(gbr.predict(X_scaled), 3.0, 10.0)))
 
             # Feature importances from GBR
@@ -616,7 +692,12 @@ def run_analyze_and_train(dataset_root: Path, api_model_path: Path, max_clips: i
             }
             metrics_summary[dim] = {
                 "train_samples": len(labeled),
+                "unique_labeled_exams": unique_exams,
+                "cv_scheme": "GroupKFold(n_splits=5, group=exam_id, out_of_fold_priors=True)",
                 "cv_mae_out_of_10": round(cv_mae, 3),
+                "baseline_global_mean_mae": round(baseline_global_mae, 3),
+                "baseline_inst_prior_mae": round(baseline_inst_mae, 3),
+                "acoustic_only_cv_mae": round(acoustic_only_mae, 3),
                 "gbr_in_sample_mae": round(in_mae, 3),
                 "mean_target": round(float(np.mean(y)), 2),
                 "top_features": top_feats,
@@ -631,18 +712,20 @@ def run_analyze_and_train(dataset_root: Path, api_model_path: Path, max_clips: i
     # Build per-exam acoustic telemetry summary keyed by "{season_code}:{exam_id}" for instant Node.js lookup
     exam_acoustic_index: dict[str, dict[str, Any]] = {}
     for entry in existing_cache.values():
-        ekey = f"{entry['season_code']}:{entry['exam_id']}"
+        season_val = int(entry.get("season_code") or 0)
+        exam_val = int(entry.get("exam_id") or 0)
+        ekey = f"{season_val}:{exam_val}"
         rec_exam = exam_acoustic_index.setdefault(
             ekey,
             {
-                "season_code": int(entry["season_code"]),
-                "exam_id": int(entry["exam_id"]),
+                "season_code": season_val,
+                "exam_id": exam_val,
                 "instrument_cn": entry["instrument_cn"],
-                "grade_level": int(entry["grade_level"]),
+                "grade_level": int(entry.get("grade_level") or 1),
                 "clips": {},
             },
         )
-        ext_vec, chroma_sim = build_ext_vec(entry)
+        ext_vec, chroma_sim = build_ext_vec(entry, inst_stats)
         f_vec = np.array(ext_vec, dtype=np.float64)
         f_sc = (f_vec - scaler.mean_) / np.maximum(scaler.scale_, 1e-8) if len(labeled) >= 10 else f_vec
         pred_5d: dict[str, float] = {}
@@ -668,7 +751,7 @@ def run_analyze_and_train(dataset_root: Path, api_model_path: Path, max_clips: i
         }
 
     artifact = {
-        "model_version": "yushen-acoustic-5d-v1.1",
+        "model_version": "yushen-acoustic-5d-v1.2-grouped-cv",
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "total_analyzed_clips": len(existing_cache),
         "total_labeled_training_clips": len(labeled),
@@ -684,14 +767,19 @@ def run_analyze_and_train(dataset_root: Path, api_model_path: Path, max_clips: i
         "exam_acoustic_index": exam_acoustic_index,
     }
 
+    payload_text = json.dumps(artifact, ensure_ascii=False, indent=2)
     out_dataset_json = dataset_root / "yushen_5d_model_weights.json"
-    out_dataset_json.write_text(json.dumps(artifact, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"Saved trained model & acoustic index to {out_dataset_json}")
+    out_dataset_tmp = dataset_root / "yushen_5d_model_weights.json.tmp"
+    out_dataset_tmp.write_text(payload_text, encoding="utf-8")
+    os.replace(out_dataset_tmp, out_dataset_json)
+    print(f"Saved trained model & acoustic index atomically to {out_dataset_json}")
 
     if api_model_path:
         api_model_path.parent.mkdir(parents=True, exist_ok=True)
-        api_model_path.write_text(json.dumps(artifact, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"Synced trained model & acoustic index to API path: {api_model_path}")
+        api_tmp = api_model_path.with_suffix(".json.tmp")
+        api_tmp.write_text(payload_text, encoding="utf-8")
+        os.replace(api_tmp, api_model_path)
+        print(f"Synced trained model & acoustic index atomically to API path: {api_model_path}")
 
     return {
         "model_version": artifact["model_version"],

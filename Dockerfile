@@ -7,7 +7,6 @@ RUN npm ci
 COPY packages/shared/src ./packages/shared/src
 COPY services/api/src ./services/api/src
 COPY infra/migrations ./infra/migrations
-COPY infra/.env.shared ./infra/.env.shared
 RUN npm run build
 ENV NODE_ENV=production
 ENV PORT=3100

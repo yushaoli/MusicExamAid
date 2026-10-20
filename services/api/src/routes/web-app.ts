@@ -1233,7 +1233,16 @@ const WEB_APP_HTML = `<!DOCTYPE html>
     async function momBatchApplyChushenStatus() {
       if (!momLastChushenRes || !(momLastChushenRes.items || []).length) return;
       const opName = localStorage.getItem('mea_operator_name') || '谈老师 (AI初审台)';
-      const payloadItems = (momLastChushenRes.items || []).map(it => {
+      const allItems = momLastChushenRes.items || [];
+      const humanReviewItems = allItems.filter(it => it.verdict === 'NEEDS_HUMAN_CHECK');
+      const eligibleItems = allItems.filter(
+        it => it.verdict === 'AUTO_PASS' || it.verdict === 'AUTO_REJECT'
+      );
+      if (eligibleItems.length === 0) {
+        showToast('🟡 当前批次均为「疑似异常·待人工确认」，请逐条核对后再点击「设为通过」或「退回」');
+        return;
+      }
+      const payloadItems = eligibleItems.map(it => {
         const inp = document.getElementById('mom-chushen-comment-' + it.exam_id);
         return {
           exam_id: Number(it.exam_id),
@@ -1256,7 +1265,8 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           })
         }).then(r => r.json());
         if (res.ok) {
-          showToast(\`⚡ 已一键自动更新本批 \${res.applied_count} 名考生的初审状态与AI评语（官网同步 \${res.official_synced_count} 条）！\`);
+          const skippedMsg = humanReviewItems.length > 0 ? '（另有 ' + humanReviewItems.length + ' 条疑似异常保留待人工确认）' : '';
+          showToast(\`⚡ 已更新本批 \${res.applied_count} 名考生的初审状态与AI评语\${skippedMsg}！\`);
           momLoadUploadLog();
         }
       } catch (e) {
