@@ -19,7 +19,11 @@ import {
 } from '@musicexamaid/shared';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getPostgresPool } from '../store/postgres';
+import { getPostgresPool as getLivePostgresPool } from '../store/postgres';
+import type { Pool } from 'pg';
+import { buildSignedFamilyToken, verifySignedFamilyToken, extractAndVerifyRequestFamilySession,
+  requireFamilyAdminPreHandler, familySessionCookie } from '../auth/family-session';
+export { buildSignedFamilyToken, verifySignedFamilyToken } from '../auth/family-session';
 import { minioClient } from '../store/minio';
 
 // Strict 3-person WeChat OpenID allowlist (Me, Wife, Mom) from kjzx002120 admin bindings
@@ -75,14 +79,6 @@ function savePersistedSession(sess: CachedOfficialSession): void {
 
 let cachedOfficialSession: CachedOfficialSession | null = loadPersistedSession();
 
-function buildSignedFamilyToken(): string {
-  return crypto
-    .createHmac('sha256', process.env.SNAPSHOT_AES_KEY_HEX || 'mea_family_secret_002120')
-    .update('authorized_family_wechat_002120_3person_only')
-    .digest('hex')
-    .slice(0, 32);
-}
-
 /**
  * Safety kill switch: outbound writes to kjzx002120 (`/admins/exam/check_video`,
  * `/admins/student/up_img`, `/admins/exam/modify_cert`) are disabled unless
@@ -113,7 +109,12 @@ function resolveSafeOfficialPortalUrl(rawPath: string): string | null {
   }
 }
 
-export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
+export interface OfficialSyncOptions {
+  postgresPool?: Pick<Pool, 'query'>;
+}
+
+export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyncOptions = {}): Promise<void> {
+  const getPostgresPool = () => opts.postgresPool ?? getLivePostgresPool();
   // 0. Check whether ubtxiaomi already holds an active authenticated PHPSESSID session
   app.get('/official-sync/session-status', async (_req, reply) => {
     if (!cachedOfficialSession) {
@@ -276,7 +277,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         const familyToken = buildSignedFamilyToken();
         reply.header(
           'set-cookie',
-          `mea_family_session=${familyToken}; Path=/; Max-Age=31536000; SameSite=Lax`,
+          familySessionCookie(familyToken),
         );
         return reply.code(200).send({
           authenticated: true,
@@ -309,25 +310,23 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       }>,
       reply: FastifyReply,
     ) => {
-      const expectedToken = buildSignedFamilyToken();
       const body = req.body ?? {};
-      const cookieHeader = String(req.headers.cookie || '');
-      const hasValidCookie = cookieHeader.includes(`mea_family_session=${expectedToken}`);
+      const isAuthorized =
+        extractAndVerifyRequestFamilySession(req) || verifySignedFamilyToken(body.token);
 
-      if (hasValidCookie || body.token === expectedToken) {
+      if (isAuthorized) {
         if (!cachedOfficialSession) {
           cachedOfficialSession = loadPersistedSession();
         }
+        const freshToken = buildSignedFamilyToken();
         reply.header(
           'set-cookie',
-          `mea_family_session=${expectedToken}; Path=/; Max-Age=31536000; SameSite=Lax`,
+          familySessionCookie(freshToken),
         );
         return reply.code(200).send({
           authorized: true,
-          family_token: expectedToken,
+          family_token: freshToken,
           operator: cachedOfficialSession?.operator_label || '已授权管理员',
-          admin_user: cachedOfficialSession?.admin_user || '',
-          openid: cachedOfficialSession?.openid || '',
           has_official_wx_session: Boolean(cachedOfficialSession),
         });
       }
@@ -467,6 +466,8 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       }>,
       reply: FastifyReply,
     ) => {
+      await requireFamilyAdminPreHandler(req, reply);
+      if (reply.sent) return;
       const body = req.body ?? {};
       const sessId = body.php_sess_id || cachedOfficialSession?.php_sess_id;
       if (!sessId) {
@@ -806,7 +807,9 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // 7. List all Partner Teachers/Agents with invite_token, parent_referral_code & WeChat binding status (`GET /official-sync/partner-agents`)
-  app.get('/official-sync/partner-agents', async (_req, reply) => {
+  app.get('/official-sync/partner-agents', async (req, reply) => {
+    await requireFamilyAdminPreHandler(req, reply);
+    if (reply.sent) return;
     const pool = getPostgresPool();
     const { rows } = await pool.query(`
       SELECT
@@ -983,7 +986,9 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // 8b. Full-Year Combined (`寒假 + 暑假`) Teacher & Studio Evaluation (`GET /official-sync/studio-growth-intelligence`)
-  app.get('/official-sync/studio-growth-intelligence', async (_req, reply) => {
+  app.get('/official-sync/studio-growth-intelligence', async (req, reply) => {
+    await requireFamilyAdminPreHandler(req, reply);
+    if (reply.sent) return;
     const pool = getPostgresPool();
     const [studiosRes, theoryGapRes] = await Promise.all([
       pool.query(`
@@ -1144,6 +1149,9 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       const pool = getPostgresPool();
       const { invite_token, ref, wx_openid, role } = req.query ?? {};
 
+      if (wx_openid && !invite_token && !extractAndVerifyRequestFamilySession(req)) {
+        return reply.code(401).send({ error: 'UNAUTHORIZED' });
+      }
       if (invite_token || wx_openid) {
         const { rows } = await pool.query(
           `
@@ -1151,7 +1159,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
                  invite_token, parent_referral_code, wx_openid, wx_nickname, bound_at
           FROM kjzx_partner_agents
           WHERE ($1::text IS NOT NULL AND invite_token = $1::text)
-             OR ($2::text IS NOT NULL AND wx_openid = $2::text)
+             OR ($1::text IS NULL AND $2::text IS NOT NULL AND wx_openid = $2::text)
           LIMIT 1
           `,
           [invite_token || null, wx_openid || null],
@@ -1187,6 +1195,11 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
+      if (invite_token || ref) {
+        return reply.code(401).send({ error: 'INVALID_INVITE' });
+      }
+      await requireFamilyAdminPreHandler(req, reply);
+      if (reply.sent) return;
       return reply.code(200).send({
         role: role === 'parent' ? 'parent' : 'admin',
         is_isolated: role === 'parent',
@@ -1219,25 +1232,45 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      // When binding/unbinding by numeric agent_id without the secret invite_token, require admin auth
+      if (body.agent_id !== undefined && (!Number.isInteger(body.agent_id) || body.agent_id <= 0)) {
+        return reply.code(400).send({ error: 'VALIDATION_ERROR', message: 'agent_id must be a positive integer' });
+      }
+      if (!body.invite_token) {
+        await requireFamilyAdminPreHandler(req, reply);
+        if (reply.sent) return;
+      }
+      // A token grants access only to its own row; a supplied numeric ID must also match.
+      const targetWhere = body.invite_token
+        ? 'invite_token = $1::text AND ($2::int IS NULL OR agent_id = $2::int)'
+        : '($1::text IS NULL) AND agent_id = $2::int';
+
       if (body.unbind) {
         const { rows } = await pool.query(
           `
           UPDATE kjzx_partner_agents
           SET wx_openid = NULL, wx_nickname = NULL, bound_at = NULL
-          WHERE ($1::text IS NOT NULL AND invite_token = $1::text)
-             OR ($2::int IS NOT NULL AND agent_id = $2::int)
+          WHERE ${targetWhere}
           RETURNING agent_id, code, name, manager, invite_token, parent_referral_code, wx_openid, wx_nickname, bound_at
           `,
           [body.invite_token || null, body.agent_id ?? null],
         );
+        if (!rows[0]) return reply.code(404).send({ error: 'NOT_FOUND', message: 'Invalid invite_token or agent_id' });
         return reply.code(200).send({
           bound: false,
           agent: rows[0] || null,
         });
       }
 
-      const wxOpenId = body.wx_openid || `wx_oid_${Date.now().toString(36)}`;
-      const wxNickname = body.wx_nickname || '微信实名绑定老师';
+      const wxOpenId = String(body.wx_openid || `wx_oid_${Date.now().toString(36)}`)
+        .replace(/[<>"'&]/g, '')
+        .trim()
+        .slice(0, 128);
+      const wxNickname =
+        String(body.wx_nickname || '微信实名绑定老师')
+          .replace(/[<>"'&]/g, '')
+          .trim()
+          .slice(0, 64) || '微信实名绑定老师';
 
       const { rows } = await pool.query(
         `
@@ -1245,8 +1278,7 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
         SET wx_openid = $3::text,
             wx_nickname = $4::text,
             bound_at = NOW()
-        WHERE ($1::text IS NOT NULL AND invite_token = $1::text)
-           OR ($2::int IS NOT NULL AND agent_id = $2::int)
+        WHERE ${targetWhere}
         RETURNING agent_id, code, name, manager, invite_token, parent_referral_code, wx_openid, wx_nickname, bound_at
         `,
         [body.invite_token || null, body.agent_id ?? null, wxOpenId, wxNickname],
@@ -2082,31 +2114,14 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       }>,
       reply: FastifyReply,
     ) => {
+      await requireFamilyAdminPreHandler(req, reply);
+      if (reply.sent) return;
       const pool = getPostgresPool();
       const b = req.body ?? ({} as any);
       const studentId = Number(b.student_id);
       if (!studentId) {
         return reply.code(400).send({ error: 'VALIDATION_ERROR', message: 'student_id is required' });
       }
-
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS kjzx_mom_upload_log (
-          id SERIAL PRIMARY KEY,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          operator_name TEXT NOT NULL DEFAULT '老妈/老婆',
-          student_id INT NOT NULL,
-          student_name TEXT NOT NULL,
-          exam_id INT,
-          kind TEXT NOT NULL,
-          target_slot TEXT NOT NULL,
-          major_name TEXT,
-          level TEXT,
-          cert_no TEXT,
-          oss_url TEXT NOT NULL,
-          official_synced BOOLEAN NOT NULL DEFAULT FALSE,
-          official_msg TEXT
-        )
-      `);
 
       // 1) If image_base64 is provided, upload directly to Aliyun OSS via kjzx002120 STS (`kaoji-backend-upload` Step 3)
       let ossUrl = (b.existing_picture_url || '').trim();
@@ -2306,24 +2321,6 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/official-sync/mom-upload-log', async (_req, reply) => {
     const pool = getPostgresPool();
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS kjzx_mom_upload_log (
-        id SERIAL PRIMARY KEY,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        operator_name TEXT NOT NULL DEFAULT '老妈/老婆',
-        student_id INT NOT NULL,
-        student_name TEXT NOT NULL,
-        exam_id INT,
-        kind TEXT NOT NULL,
-        target_slot TEXT NOT NULL,
-        major_name TEXT,
-        level TEXT,
-        cert_no TEXT,
-        oss_url TEXT NOT NULL,
-        official_synced BOOLEAN NOT NULL DEFAULT FALSE,
-        official_msg TEXT
-      )
-    `);
     const rows = await pool.query(
       `SELECT * FROM kjzx_mom_upload_log ORDER BY id DESC LIMIT 30`,
     );
@@ -2944,6 +2941,10 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       const limit = Math.min(Math.max(Number(body.limit || (body.exam_id ? 1 : 30)), 1), 200);
       const shouldProbeMedia = body.probe_media ?? Boolean(body.exam_id);
       const shouldAutoPersist = body.auto_persist === true;
+      if (shouldAutoPersist) {
+        await requireFamilyAdminPreHandler(req, reply);
+        if (reply.sent) return;
+      }
       const agentKw = (body.agent_keyword || '').trim();
       const acousticModel = loadYushenAcousticModel();
 
@@ -3468,6 +3469,8 @@ export async function officialSyncRoutes(app: FastifyInstance): Promise<void> {
       }>,
       reply: FastifyReply,
     ) => {
+      await requireFamilyAdminPreHandler(req, reply);
+      if (reply.sent) return;
       const pool = getPostgresPool();
       const operatorName = (req.body?.operator_name || '谈老师 (AI初审台)').trim();
       const isDryRun = req.body?.dry_run === true;

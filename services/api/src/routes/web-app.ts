@@ -992,6 +992,35 @@ const WEB_APP_HTML = `<!DOCTYPE html>
   </nav>
 
   <script>
+    function escapeHtml(val) {
+      return String(val == null ? '' : val)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // Automatically attach signed family session token (X-Mea-Session) on same-origin API calls
+    (function wrapFetchWithSession() {
+      const origFetch = window.fetch.bind(window);
+      window.fetch = function(input, init) {
+        const urlStr = typeof input === 'string' ? input : (input && input.url) || '';
+        const targetUrl = new URL(urlStr, location.href);
+        if (targetUrl.origin === location.origin) {
+          const nextInit = Object.assign({ credentials: 'same-origin' }, init || {});
+          const headers = new Headers(nextInit.headers || (input instanceof Request ? input.headers : {}));
+          const savedToken = localStorage.getItem('mea_family_token') || '';
+          if (savedToken && !headers.has('X-Mea-Session')) {
+            headers.set('X-Mea-Session', savedToken);
+          }
+          nextInit.headers = headers;
+          return origFetch(input, nextInit);
+        }
+        return origFetch(input, init);
+      };
+    })();
+
     const LEVEL_FEES = { 1:200, 2:240, 3:280, 4:320, 5:360, 6:390, 7:420, 8:450, 9:480, 10:510, 11:620 };
     const SUBJECT_MAP_CN_TO_ID = {
       '钢琴': 'piano',
@@ -1288,25 +1317,25 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         const encNotice = encodeURIComponent(it.wechat_notice_text || '');
         const encUrl = encodeURIComponent(it.first_video_url || '');
         const encTitle = encodeURIComponent(\`\${it.student_name} · \${it.major_name}\${it.level}级\`);
-        const aiCommentVal = String(it.ai_chushen_comment || '').replace(/"/g, '&quot;');
+        const aiCommentVal = escapeHtml(it.ai_chushen_comment || '');
         return \`
           <tr style="font-size:17px">
-            <td><strong>\${it.student_name}</strong><div style="font-size:14px;color:#64748b">指导老师：\${it.agent_name || '—'}</div></td>
-            <td><strong>\${it.major_name} \${it.level}级</strong><div style="font-size:14px;color:#64748b">共 \${it.clip_count} 首视频</div></td>
-            <td style="font-size:15.5px">\${(it.exam_titles || []).join(' / ') || '标准槽位'}</td>
-            <td><span class="badge \${badgeCls}" style="font-size:15px;padding:6px 10px">\${it.verdict_label}</span></td>
+            <td><strong>\${escapeHtml(it.student_name)}</strong><div style="font-size:14px;color:#64748b">指导老师：\${escapeHtml(it.agent_name || '—')}</div></td>
+            <td><strong>\${escapeHtml(it.major_name)} \${Number(it.level)}级</strong><div style="font-size:14px;color:#64748b">共 \${Number(it.clip_count)} 首视频</div></td>
+            <td style="font-size:15.5px">\${escapeHtml((it.exam_titles || []).join(' / ') || '标准槽位')}</td>
+            <td><span class="badge \${badgeCls}" style="font-size:15px;padding:6px 10px">\${escapeHtml(it.verdict_label)}</span></td>
             <td style="font-size:15.5px;color:\${it.verdict === 'AUTO_PASS' ? '#047857' : '#b45309'}">
-              <div>\${warnSummary}</div>
+              <div>\${escapeHtml(warnSummary)}</div>
               <div style="margin-top:6px;display:flex;gap:6px;align-items:center">
                 <span style="font-size:13px;color:#475569;white-space:nowrap">🤖 AI初审评语：</span>
-                <input id="mom-chushen-comment-\${it.exam_id}" value="\${aiCommentVal}" style="font-size:14px;padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;width:100%" />
+                <input id="mom-chushen-comment-\${Number(it.exam_id)}" value="\${aiCommentVal}" style="font-size:14px;padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;width:100%" />
               </div>
             </td>
             <td>
               <div style="display:flex;gap:6px;flex-wrap:wrap">
-                \${it.first_video_url ? \`<button class="btn-wecom btn-sm" style="font-size:14px" onclick="playVideoLocally('\${encUrl}','\${encTitle}',\${it.student_id},\${it.exam_id})">🎬 抽看视频</button>\` : ''}
-                <button class="btn-primary btn-sm" style="font-size:14px;background:#059669" onclick="momApplySingleChushen(\${it.exam_id},'PASS')">✅ 设为通过</button>
-                \${it.verdict !== 'AUTO_PASS' ? \`<button class="btn-primary btn-sm" style="font-size:14px;background:#dc2626" onclick="momApplySingleChushen(\${it.exam_id},'REJECT')">🔴 带AI评语退回</button><button class="btn-primary btn-sm" style="font-size:14px;background:#d97706" onclick="momCopyChushenNotice('\${encNotice}')">📋 复制微信提醒</button>\` : ''}
+                \${it.first_video_url ? \`<button class="btn-wecom btn-sm" style="font-size:14px" data-chushen-action="video" data-url="\${escapeHtml(encUrl)}" data-title="\${escapeHtml(encTitle)}" data-student-id="\${Number(it.student_id)}" data-exam-id="\${Number(it.exam_id)}">🎬 抽看视频</button>\` : ''}
+                <button class="btn-primary btn-sm" style="font-size:14px;background:#059669" data-chushen-action="PASS" data-exam-id="\${Number(it.exam_id)}">✅ 设为通过</button>
+                \${it.verdict !== 'AUTO_PASS' ? \`<button class="btn-primary btn-sm" style="font-size:14px;background:#dc2626" data-chushen-action="REJECT" data-exam-id="\${Number(it.exam_id)}">🔴 带AI评语退回</button><button class="btn-primary btn-sm" style="font-size:14px;background:#d97706" data-chushen-action="notice" data-notice="\${escapeHtml(encNotice)}">📋 复制微信提醒</button>\` : ''}
               </div>
             </td>
           </tr>
@@ -1345,6 +1374,18 @@ const WEB_APP_HTML = `<!DOCTYPE html>
           </table>
         </div>
       \`;
+      box.querySelectorAll('[data-chushen-action]').forEach(button => {
+        button.addEventListener('click', () => {
+          const d = button.dataset;
+          if (d.chushenAction === 'video') {
+            playVideoLocally(d.url, d.title, Number(d.studentId), Number(d.examId));
+          } else if (d.chushenAction === 'notice') {
+            momCopyChushenNotice(d.notice);
+          } else {
+            momApplySingleChushen(Number(d.examId), d.chushenAction);
+          }
+        });
+      });
     }
 
     async function momRunBatchChushen(probeMedia) {
@@ -2573,7 +2614,9 @@ const WEB_APP_HTML = `<!DOCTYPE html>
     let partnerAgentsList = [];
     async function initTeacherTab() {
       if (partnerAgentsList.length === 0) {
-        const res = await fetch('/official-sync/partner-agents').then(r => r.json());
+        const res = currentSession.locked_agent
+          ? { items: [currentSession.locked_agent] }
+          : await fetch('/official-sync/partner-agents').then(r => r.json());
         partnerAgentsList = res.items || [];
         const sel = document.getElementById('teacher-agent-select');
         const allOpt = \`<option value="">🌐 全部合作机构汇总</option>\`;
@@ -2624,6 +2667,7 @@ const WEB_APP_HTML = `<!DOCTYPE html>
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           agent_id: agentId,
+          invite_token: currentSession.locked_agent?.invite_token || undefined,
           wx_nickname: nick,
           unbind: Boolean(unbind)
         })
@@ -2822,29 +2866,33 @@ const WEB_APP_HTML = `<!DOCTYPE html>
 
         // Populate top 12 teachers in invite table (sorted by 2025+2026 full-year volume, starting with 999 sandbox teacher)
         const inviteRows = (agentsRes.items || []).slice(0, 12).map(a => {
-          const tUrl = \`\${location.origin}/app?invite=\${a.invite_token}&tab=teacher\`;
-          const pUrl = \`\${location.origin}/app?ref=\${a.parent_referral_code}&tab=parent\`;
+          const tUrl = \`\${location.origin}/app?invite=\${encodeURIComponent(a.invite_token || '')}&tab=teacher\`;
+          const pUrl = \`\${location.origin}/app?ref=\${encodeURIComponent(a.parent_referral_code || '')}&tab=parent\`;
           const inviteMsg = encodeURIComponent(\`【中国音乐学院九江考级办】\${a.manager || a.name}老师您好！您的机构「\${a.name}」专属考级工作台已开通（含名下历年考生档案、2026待升班提醒与优待金提现账本）。请点击您的专属链接一键绑定微信：\${tUrl}\`);
           const bindBadge = a.wx_openid
-            ? \`<span class="badge badge-confirmed">🟢 已绑: \${a.wx_nickname || a.wx_openid.slice(0,8)}</span>\`
+            ? \`<span class="badge badge-confirmed">🟢 已绑: \${escapeHtml(a.wx_nickname || a.wx_openid.slice(0,8))}</span>\`
             : \`<span class="badge badge-draft">未绑定</span>\`;
           return \`
             <tr style="\${a.agent_id === 999 ? 'background:#f0fdf4' : ''}">
-              <td><code>[\${a.code || a.agent_id}]</code> <strong>\${a.name}</strong></td>
+              <td><code>[\${escapeHtml(a.code || a.agent_id)}]</code> <strong>\${escapeHtml(a.name)}</strong></td>
               <td>25全年:<strong>\${a.y2025 ?? 0}</strong><small style="color:var(--muted)">(寒\${a.y2025_w ?? 0}+暑\${a.y2025_s ?? 0})</small> → 26全年:<strong>\${a.y2026 ?? 0}</strong><small style="color:var(--muted)">(寒\${a.y2026_w ?? 0}+暑\${a.y2026_s ?? 0})</small> <small style="color:var(--muted)">| 7年\${a.total_exams}次</small></td>
               <td>\${bindBadge}</td>
               <td>
-                <button class="btn-purple btn-sm" onclick="copyTextUri('\${inviteMsg}')">📋 复制老师绑定邀请函</button>
+                <button class="btn-purple btn-sm" data-copy-uri="\${escapeHtml(inviteMsg)}">📋 复制老师绑定邀请函</button>
                 <a href="\${tUrl}" style="margin-left:4px;font-size:12px">直接进入</a>
               </td>
               <td>
-                <button class="btn-outline btn-sm" onclick="copyTextUri('\${encodeURIComponent(pUrl)}')">📲 复制家长报名链接</button>
+                <button class="btn-outline btn-sm" data-copy-uri="\${escapeHtml(encodeURIComponent(pUrl))}">📲 复制家长报名链接</button>
                 <a href="\${pUrl}" style="margin-left:4px;font-size:12px">预览</a>
               </td>
             </tr>
           \`;
         }).join('');
-        document.getElementById('adm-invite-tbody').innerHTML = inviteRows;
+        const inviteTable = document.getElementById('adm-invite-tbody');
+        inviteTable.innerHTML = inviteRows;
+        inviteTable.querySelectorAll('[data-copy-uri]').forEach(button => {
+          button.addEventListener('click', () => copyTextUri(button.dataset.copyUri));
+        });
 
         const annualHtml = (data.annual_combined || []).map(a => {
           const yoyBadge = a.yoy_pct == null

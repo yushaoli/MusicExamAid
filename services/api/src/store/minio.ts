@@ -92,6 +92,9 @@ export class MinioStorageClient {
   }
 
   async ensureBucket(): Promise<void> {
+    if (process.env.NODE_ENV === 'test' && process.env.LIVE_E2E !== '1') {
+      throw new Error('Live MinIO writes are disabled in tests; opt in with LIVE_E2E=1');
+    }
     if (this.bucketEnsured) return;
     const uri = `/${encodeURIComponent(this.bucket)}`;
     const headHeaders = this.signRequest("HEAD", uri, Buffer.alloc(0));

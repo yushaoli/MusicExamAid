@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { computeWeChatSignature } from '@musicexamaid/shared';
 import { buildApp } from '../app';
 
+if (process.env.LIVE_E2E !== '1') process.env.ENABLE_LIVE_STORAGE = '0';
+
 describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Account H5 Web App', () => {
   it('GET /health returns 200 ok with stub and live dependency probes', async () => {
     const app = buildApp();
@@ -12,10 +14,11 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     assert.equal(body.status, 'ok');
     assert.equal(body.dependencies.postgres.status, 'stub');
 
-    const liveRes = await app.inject({ method: 'GET', url: '/health?live=1' });
-    assert.equal(liveRes.statusCode, 200);
-    const liveBody = liveRes.json();
-    assert.ok(['ok', 'degraded'].includes(liveBody.status));
+    if (process.env.LIVE_E2E === '1') {
+      const liveRes = await app.inject({ method: 'GET', url: '/health?live=1' });
+      assert.equal(liveRes.statusCode, 200);
+      assert.ok(['ok', 'degraded'].includes(liveRes.json().status));
+    }
     await app.close();
   });
 
@@ -260,7 +263,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     await app.close();
   });
 
-  it('Persists learner, portrait photo, registration, and export ZIP to live Postgres & MinIO S3 (100.64.0.4)', async () => {
+  it('Persists learner, portrait photo, registration, and export ZIP to live Postgres & MinIO S3 (100.64.0.4)', { skip: process.env.LIVE_E2E !== '1' }, async () => {
     const app = buildApp();
     const healthRes = await app.inject({
       method: 'GET',
@@ -742,7 +745,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     await app.close();
   });
 
-  it('Automated 初审 (compliance, person ID, song match, completeness) & AI 5D 考前预审 (timestamped issues + 50/50 reference videos + acoustic model status)', async () => {
+  it('Automated 初审 (compliance, person ID, song match, completeness) & AI 5D 考前预审 (timestamped issues + 50/50 reference videos + acoustic model status)', { skip: process.env.LIVE_E2E !== '1' }, async () => {
     const app = await buildApp();
 
     // 0. Check yushen model status endpoint

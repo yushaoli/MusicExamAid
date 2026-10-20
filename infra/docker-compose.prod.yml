@@ -1,16 +1,20 @@
 services:
   musicexamaid-api:
+    image: musicexamaid-api:${MEA_RELEASE_SHA:-local}
     build:
       context: ..
       dockerfile: Dockerfile
     container_name: musicexamaid-api
     restart: unless-stopped
+    labels:
+      org.opencontainers.image.revision: ${MEA_RELEASE_SHA:-local}
     env_file:
       - ./.env.shared
     environment:
       PORT: "3100"
       ENABLE_LIVE_STORAGE: "1"
       PORTAL_WRITE_ENABLED: "0"
+      ENFORCE_SERVER_AUTH: "1"
     ports:
       - "3100:3100"
     volumes:

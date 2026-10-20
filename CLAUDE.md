@@ -36,7 +36,8 @@ Follow [`/Users/flintstone/.agents/COLLABORATION.md`](/Users/flintstone/.agents/
 Run before any milestone handoff or merge:
 
 ```bash
-make migrate && npm run build && npm run typecheck && npm test
+npm run build && npm run typecheck && npm test
 ```
 
-- **Note on Local ≠ Offline:** `make migrate` and `GET /health?live=1` connect to the shared `devhub-postgres` (`100.64.0.4:55432/musicexamaid_dev`), `devhub-redis` (`:63790`), and `devhub-minio` (`:9010`) on `ubtxiaomi`. Focused unit/E2E tests (`npm test`, `npm run typecheck`, `npm run build`) run in-process without mutating shared database rows.
+- **Default tests are offline:** `npm test` sets `NODE_ENV=test`, rejects live PostgreSQL/MinIO writes, and skips the shared-storage/ML integration cases. Those cases require an explicit `LIVE_E2E=1` and a suitable test environment.
+- **Shared services:** `make migrate` and `GET /health?live=1` connect to `100.64.0.4` (Postgres `:55432`, Redis `:63790`, MinIO `:9010`). Run shared database migrations only as an authorized deployment under the target host lock. `scripts/deploy-xgar.sh --apply <commit>` runs migrations before replacing the service, preserves host secrets/model data, and uses `/tmp/musicexamaid-deploy.lock` with a 60-second bounded wait. Never remove or bypass that lock.

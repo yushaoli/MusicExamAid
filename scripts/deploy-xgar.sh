@@ -1,43 +1,73 @@
 #!/usr/bin/env bash
-# Deploy MusicExamAid API to ubtxiaomi (100.64.0.4:3100) and wire Caddy + WeCom relay on derp-sgr (47.130.165.104).
-# Defaults to --dry-run unless --apply is passed (per COLLABORATION.md human deployment GO gate).
+# Deploy an exact Git commit to mainland ubtxiaomi. Human GO is required for --apply.
 set -euo pipefail
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+MODE="${1:---dry-run}"
+RELEASE_REF="${2:-HEAD}"
+SHA=$(git -C "$ROOT" rev-parse "${RELEASE_REF}^{commit}")
+DEPLOY_HOST="${DEPLOY_HOST:-ubtxiaomi}"
 
-MODE="dry-run"
-if [[ "${1:-}" == "--apply" ]]; then
-  MODE="apply"
-fi
-
-UBT_HOST="${UBT_HOST:-100.64.0.4}"
-UBT_USER="${UBT_USER:-flintstone}"
-UBT_STACK_DIR="/opt/stacks/musicexamaid"
-
-SGR_HOST="${SGR_HOST:-47.130.165.104}"
-SGR_USER="${SGR_USER:-ubuntu}"
-SGR_CORE_DIR="/home/ubuntu/headscale-core"
-
-echo "=== MusicExamAid xgar.com.cn Deployment (${MODE}) ==="
-echo "1. Target API Node:   ${UBT_USER}@${UBT_HOST}:${UBT_STACK_DIR} (container port 3100 -> Postgres :55432, Redis :63790, MinIO :9010)"
-echo "2. Target Edge Node:  ${SGR_USER}@${SGR_HOST}:${SGR_CORE_DIR}/caddy/Caddyfile (mea.xgar.com.cn -> 100.64.0.4:3100)"
-echo "3. Target WeCom Env:  ${SGR_USER}@${SGR_HOST}:${SGR_CORE_DIR}/kuma-wecom-relay.env"
-
-if [[ "${MODE}" != "apply" ]]; then
-  echo ""
-  echo "[DRY-RUN] No remote hosts were modified."
-  echo "Run './scripts/deploy-xgar.sh --apply' after human deployment GO."
+if [[ "$MODE" != "--apply" ]]; then
+  echo "Dry run: deploy $SHA to $DEPLOY_HOST under /tmp/musicexamaid-deploy.lock (wait at most 60 seconds)."
+  echo "The existing environment and model data stay on the mainland host."
   exit 0
 fi
 
-echo "[1/3] Syncing repository & starting musicexamaid-api on ${UBT_HOST}..."
-ssh "${UBT_USER}@${UBT_HOST}" "sudo mkdir -p ${UBT_STACK_DIR} && sudo chown -R ${UBT_USER}: ${UBT_STACK_DIR}"
-rsync -az --exclude node_modules --exclude .git ./ "${UBT_USER}@${UBT_HOST}:${UBT_STACK_DIR}/"
-ssh "${UBT_USER}@${UBT_HOST}" "cd ${UBT_STACK_DIR} && docker compose -f infra/docker-compose.prod.yml up -d --build"
+ARCHIVE=$(mktemp "${TMPDIR:-/tmp}/mea-release.XXXXXX")
+trap 'rm -f "$ARCHIVE"' EXIT
+git -C "$ROOT" archive --format=tar "$SHA" | gzip > "$ARCHIVE"
 
-echo "[2/3] Checking mea.xgar.com.cn vhost in ${SGR_HOST}:${SGR_CORE_DIR}/caddy/Caddyfile..."
-ssh "${SGR_USER}@${SGR_HOST}" "grep -q 'mea.xgar.com.cn' ${SGR_CORE_DIR}/caddy/Caddyfile || cat >> ${SGR_CORE_DIR}/caddy/Caddyfile" < infra/Caddyfile.xgar.snippet
-ssh "${SGR_USER}@${SGR_HOST}" "cd ${SGR_CORE_DIR} && docker compose restart caddy"
-
-echo "[3/3] Verifying API health on ${UBT_HOST}:3100..."
-curl -fsSL "http://${UBT_HOST}:3100/health?live=1"
-echo ""
-echo "=== Deployment Complete ==="
+REMOTE_SCRIPT=$(cat <<'REMOTE'
+set -euo pipefail
+sha="$1"
+stack=/opt/stacks/musicexamaid
+release="$stack/releases/$sha"
+previous_image=$(docker inspect --format '{{.Image}}' musicexamaid-api)
+previous_revision=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' musicexamaid-api)
+mkdir -p "$release"
+tar -xz -C "$release"
+# These are host-owned files. Never copy local secrets or model weights over them.
+if [[ ! -e "$release/infra/.env.shared" ]]; then
+  ln -s "$stack/infra/.env.shared" "$release/infra/.env.shared"
+fi
+if [[ ! -e "$release/services/api/data" ]]; then
+  ln -s "$stack/services/api/data" "$release/services/api/data"
+fi
+cd "$release"
+export MEA_RELEASE_SHA="$sha"
+compose=(docker compose --project-name infra -f infra/docker-compose.prod.yml)
+"${compose[@]}" build musicexamaid-api
+"${compose[@]}" run --rm --no-deps -T musicexamaid-api node -e \
+  "require('./services/api/dist/auth/family-session').assertProductionAuthConfig(); require('@musicexamaid/shared').encryptIdNumber('configuration-probe'); console.log('Production configuration valid');"
+"${compose[@]}" run --rm --no-deps -T musicexamaid-api node services/api/dist/store/postgres.js
+"${compose[@]}" up -d --no-build musicexamaid-api
+healthy=0
+for attempt in $(seq 1 20); do
+  if curl -fsS http://127.0.0.1:3100/health > /dev/null 2>&1; then
+    healthy=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$healthy" != 1 ]]; then
+  echo "New release failed health verification; restoring the previous image." >&2
+  docker tag "$previous_image" "musicexamaid-api:rollback-$sha"
+  MEA_RELEASE_SHA="rollback-$sha" "${compose[@]}" up -d --no-build musicexamaid-api
+  exit 1
+fi
+# Prove that auth is active before declaring success. These requests cannot write.
+status=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/official-sync/partner-agents)
+if [[ "$status" != 401 ]]; then
+  echo "Auth verification failed ($status); restoring the previous image." >&2
+  docker tag "$previous_image" "musicexamaid-api:rollback-$sha"
+  MEA_RELEASE_SHA="rollback-$sha" "${compose[@]}" up -d --no-build musicexamaid-api
+  exit 1
+fi
+printf 'Deployed %s (previous revision: %s)\n' "$sha" "$previous_revision"
+curl -fsS 'http://127.0.0.1:3100/health?live=1'
+REMOTE
+)
+# flock retains the same inode, waits for its holder, and releases on process exit.
+printf -v QUOTED_SCRIPT '%q' "$REMOTE_SCRIPT"
+ssh -o BatchMode=yes -o ConnectTimeout=10 "$DEPLOY_HOST" \
+  "flock -w 60 /tmp/musicexamaid-deploy.lock bash -c $QUOTED_SCRIPT -- $SHA" < "$ARCHIVE"
