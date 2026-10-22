@@ -34,7 +34,9 @@ The numeric labels observed are 0, 3, 6 and 10. Their correspondence to 好/较�
 
 A blinded 200-clip packet reserves 200 independent learner/duplicate-video groups across six families, with 100 calibration clips and 100 held-out test clips. All recordings belonging to those learners/groups are excluded from training, including their other exams. Official and model scores are absent from the teacher CSV.
 
-The labels remain blank: 0 reviewed, 200 pending. Validation succeeds and reports that calibration must wait for real teacher labels and feature coverage. No teacher judgments or safety metrics were invented. Dedicated packet-only extraction can complete its feature coverage without placing those clips in training.
+The labels remain blank: 0 reviewed, 200 pending. Validation succeeds; no teacher judgments or safety metrics were invented. A follow-up using code `819e5cf634ca0b6f82bb9398d64912b22f88e3a3` completed packet-only feature extraction: all 200 reserved clips now have features, stored separately in `teacher-features/features.jsonl`.
+
+The saved models also passed a real offline inference check on the reserved packet, producing 835 dimension predictions. The 33 voice clips have no fitted voice model, so their 165 dimension predictions are absent rather than replaced with default scores. Prediction outputs stay separate from the blinded CSV. `gate-readiness-complete-features/` still reports that calibration must await real teacher labels. Protected shared-cache/live-weight file sizes and modification times were unchanged after this follow-up too.
 
 Next steps:
 
