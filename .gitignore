@@ -19,6 +19,12 @@ infra/.env.shared
 # Generated ML model weights / pseudonymous acoustic index (mounted from DAS at runtime)
 services/api/data/yushen_5d_model_weights.json
 
+# Private ML experiments, local environments and Python caches
+experiments/
+.venv/
+**/__pycache__/
+*.joblib
+
 # OS/editor
 .DS_Store
 .vscode/
