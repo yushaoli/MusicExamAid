@@ -32,9 +32,13 @@
 - [x] Make default API tests offline; add isolated auth/XSS/storage-boundary and migration rollback coverage.
 - [x] Commit schema changes and migration ledger entries atomically; serialize migration runners with an advisory lock. Migration 009 replaces 008's tokens with 16 cryptographically random bytes without replaying old seeds.
 - [x] Prepare exact-commit mainland deployment with host lock, retained secrets/model data, SHA-tagged images, and image rollback on failed health/auth checks.
+- [x] Add offline ML audit, incremental feature extraction, learner/duplicate-video-disjoint ordinal trials, model inference and teacher-label tooling; complete an initial trial on downloaded audio. See [trial evidence](ML_TOOLING_TRIAL.md) and [commands](../scripts/ml_lab/README.md).
+- [x] Prepare a blinded 200-clip teacher packet with 100 calibration and 100 held-out test clips, reserving their learners from all training. Labels remain unfilled.
 - [ ] Complete role-scoped server auth for student lookup, exports, learners, registrations, archives, financial routes, media and RPC. Derive teacher/parent ownership from verified sessions; reject cross-owner access regardless of client-supplied IDs.
 - [ ] Train the four ordered 5D classes (好/较好/一般/尚可) per instrument family; report grouped validation, baselines and acoustic-only ablation. Default/prior scores must not be presented as measured performance.
+- [ ] Confirm the named-rating mapping and zero-score semantics; expand the trial beyond its current partial cache and resolve rare/missing-class coverage before claiming four-class recognition.
 - [ ] Collect 200 teacher-labeled clips and measure 初审 false rejection / false acceptance before enabling automatic portal writes or launching paid reports. Confirm the authorized basis for training on minors' videos before commercial use.
 - [ ] Make Postgres authoritative for registrations, payment orders, concessions and withdrawals, including startup reload, transactions, idempotency and restart tests.
 - [ ] Move heavy media work to background jobs, split `official-sync.ts` / `web-app.ts`, and reconcile `PRD.md`, `ARCH.md`, and `openapi.yaml` with implemented routes.
 - [ ] Rotate previously tracked Postgres / MinIO credentials and address repository history exposure in a separate authorized infrastructure change.
+- [ ] Resolve dependency advisories identified in the 2026-10-20 build/audit before public launch.

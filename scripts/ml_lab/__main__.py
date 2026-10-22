@@ -8,14 +8,16 @@ import wave
 from pathlib import Path
 
 from .calibration import calibrate_gate, make_packet, validate_labels
-from .data import (clip_key, digest, load_dataset, media_path, new_output, provenance,
+from .data import (digest, load_dataset, media_path, new_output, provenance,
                    read_jsonl, reserved_groups, stamp, write_json, write_jsonl)
 from .ordinal import predict_rows, run_trial
 
 
-def extract_features(root: Path, rows: list[dict], out: Path, limit: int, seed: int) -> dict:
+def extract_features(root: Path, rows: list[dict], out: Path, limit: int, seed: int,
+                     sample_ids: set[str] | None = None) -> dict:
     from scripts.yushen_acoustic_5d_pipeline import analyze_single_wav
-    candidates = [r for r in rows if r["audio_available"] and r["features"] is None]
+    candidates = [r for r in rows if r["audio_available"] and r["features"] is None
+                  and (sample_ids is None or r["sample_id"] in sample_ids)]
     candidates.sort(key=lambda r: digest(f"{seed}:{r['sample_id']}"))
     extracted, failed = [], 0
     for row in candidates[:limit]:
@@ -89,7 +91,8 @@ def main():
         elif args.command == "packet":
             result = make_packet(rows, out, args.size, args.seed)
         elif args.command == "extract":
-            result = extract_features(args.dataset_root, rows, out, args.limit, args.seed)
+            sample_ids = {r["sample_id"] for r in read_jsonl(args.packet / "items.jsonl")} if args.packet else None
+            result = extract_features(args.dataset_root, rows, out, args.limit, args.seed, sample_ids)
         elif args.command == "trial":
             result = run_trial(rows, reserved_groups(rows, args.packet), out,
                                folds=args.folds, max_groups=args.max_groups_per_family,
@@ -102,8 +105,11 @@ def main():
             if args.command == "calibrate":
                 result = calibrate_gate(rows, labeled, out)
         else:
-            result = {"predicted_dimension_rows": predict_rows(args.model,
-                [r for r in rows if r["audio_available"]], out / "predictions.jsonl", args.threads)}
+            sample_ids = {r["sample_id"] for r in read_jsonl(args.packet / "items.jsonl")} if args.packet else None
+            available = [r for r in rows if r["audio_available"] and r["features"] and
+                         (sample_ids is None or r["sample_id"] in sample_ids)]
+            result = {"feature_clips": len(available), "predicted_dimension_rows": predict_rows(args.model,
+                available, out / "predictions.jsonl", args.threads)}
         write_json(out / "run_status.json", {"state": "completed", "completed_at": stamp(),
                                             "command": args.command})
         # Trial details may contain local pseudonymous identifiers: print only aggregate progress.

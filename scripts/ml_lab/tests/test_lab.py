@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -223,6 +222,9 @@ class LabTests(unittest.TestCase):
         before = (self.root / "acoustic_features_cache.jsonl").read_bytes()
         rows, _ = load_dataset(self.root)
         out = new_output(self.root, self.base / "features")
+        skipped = new_output(self.root, self.base / "unselected-features")
+        self.assertEqual(extract_features(self.root, rows, skipped, limit=1, seed=42,
+                                         sample_ids={"not-selected"})["new_feature_clips"], 0)
         report = extract_features(self.root, rows, out, limit=1, seed=42)
         self.assertEqual(report["new_feature_clips"], 1)
         self.assertEqual((self.root / "acoustic_features_cache.jsonl").read_bytes(), before)

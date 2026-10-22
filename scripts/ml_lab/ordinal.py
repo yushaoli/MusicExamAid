@@ -191,16 +191,18 @@ def predict_rows(model_path: Path, rows: list[dict], out: Path, threads: int = 2
     bundle = joblib.load(model_path)
     predictions = []
     with threadpool_limits(limits=threads):
-        for row in rows:
-            if not row.get("features"):
+        for family in sorted({r["family"] for r in rows}):
+            subset = [r for r in rows if r["family"] == family and r.get("features")]
+            if not subset:
                 continue
+            features = [feature_dict(r, "full") for r in subset]
             for dim in DIMENSIONS:
-                model = bundle["models"].get(f"{row['family']}:{dim}")
+                model = bundle["models"].get(f"{family}:{dim}")
                 if model is None:
                     continue
-                p = model.predict_proba([feature_dict(row, "full")])[0]
-                predictions.append({"sample_id": row["sample_id"], "dimension": dim,
-                                    "probabilities": p.tolist(),
-                                    "predicted_native_score": SCORE_LEVELS[int(np.argmax(p))]})
+                for row, p in zip(subset, model.predict_proba(features)):
+                    predictions.append({"sample_id": row["sample_id"], "dimension": dim,
+                                        "probabilities": p.tolist(),
+                                        "predicted_native_score": SCORE_LEVELS[int(np.argmax(p))]})
     write_jsonl(out, predictions)
     return len(predictions)

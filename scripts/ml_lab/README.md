@@ -9,7 +9,8 @@ Run from the repository root with Python 3.11 or newer:
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r scripts/ml_lab/requirements.txt
-make test-ml  # activate the environment first, or use its python -m unittest directly
+. .venv/bin/activate
+make test-ml
 ```
 
 The DAS dataset already has a Python environment at `/mnt/DAS1T/musicexamaid_ml_dataset/.venv`. Use it for private experiments on `ubtxiaomi`; do not upgrade that shared environment as part of a trial. Trial reports record the actual Python, NumPy, SciPy and scikit-learn versions.
@@ -74,6 +75,14 @@ Primary library references: [grouped stratification](https://scikit-learn.org/st
 
 `teacher_labels.csv` is blank and blinded to official/model scores. Teachers review the local MP4 paths and enter PASS / NEEDS_HUMAN_CHECK / REJECT, optional native numeric dimension ratings, an internal reviewer alias and a timestamp with timezone. Confirm the scoring rubric before collecting dimension labels. Partial labels remain pending; nothing generates teacher judgments automatically.
 
+Fill missing features for the reserved packet before calibrating; this does not train on it:
+
+```bash
+python -m scripts.ml_lab extract --dataset-root "$DATASET" \
+  --packet "$LAB_RUN/teacher-packet" --out "$LAB_RUN/teacher-features" \
+  --extra-cache "$LAB_RUN/features-001/features.jsonl" --limit 200
+```
+
 ```bash
 python -m scripts.ml_lab validate-labels --dataset-root "$DATASET" \
   --packet "$LAB_RUN/teacher-packet" --labels "$LAB_RUN/teacher-packet/teacher_labels.csv" \
@@ -81,6 +90,8 @@ python -m scripts.ml_lab validate-labels --dataset-root "$DATASET" \
 
 python -m scripts.ml_lab calibrate --dataset-root "$DATASET" \
   --packet "$LAB_RUN/teacher-packet" --labels "$LAB_RUN/teacher-packet/teacher_labels.csv" \
+  --extra-cache "$LAB_RUN/features-001/features.jsonl" \
+  --extra-cache "$LAB_RUN/teacher-features/features.jsonl" \
   --out "$LAB_RUN/gate-calibration"
 ```
 
@@ -94,3 +105,5 @@ python -m scripts.ml_lab predict --dataset-root "$DATASET" \
 ```
 
 Load only trusted `joblib` artifacts produced by this package; they use executable Python serialization. No command replaces the live API's weights. Model promotion, paid launch, real teacher label collection and any production changes require their own review and authorization.
+
+`predict --packet ...` limits inference to that packet for an offline smoke check. Inference batches by family/dimension. Unsupported families or dimensions have no model prediction; no default score is invented. Keep these outputs separate from blinded teacher labels.
