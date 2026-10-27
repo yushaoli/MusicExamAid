@@ -44,6 +44,8 @@ python -m scripts.ml_lab trial --dataset-root "$DATASET" \
 
 Use the same teacher packet so its learners remain reserved. Run another `audit`, extract additional features to a new directory, and pass each cache with repeated `--extra-cache`. Cached rows are joined by season **and** clip ID, never by clip ID alone. Conflicting duplicate feature rows fail instead of silently replacing previous features.
 
+For a supervised trial, use `extract --labeled-only` to process clips with at least one usable historical dimension label first. Unknown scores and ambiguous all-zero vectors are excluded by the same label policy used for training. This saves work on unlabeled audio; it does not supply missing teacher labels. Use bounded batches (for example, `--limit 250`) and include all earlier caches on the next batch. Each batch checkpoints its own output; neither the shared cache nor earlier batches are overwritten.
+
 ```bash
 python -m scripts.ml_lab audit --dataset-root "$DATASET" --out "$LAB_RUN/final-audit"
 python -m scripts.ml_lab extract --dataset-root "$DATASET" \

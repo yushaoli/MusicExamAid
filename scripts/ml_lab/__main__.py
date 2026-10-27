@@ -14,9 +14,10 @@ from .ordinal import predict_rows, run_trial
 
 
 def extract_features(root: Path, rows: list[dict], out: Path, limit: int, seed: int,
-                     sample_ids: set[str] | None = None) -> dict:
+                     sample_ids: set[str] | None = None, *, labeled_only: bool = False) -> dict:
     from scripts.yushen_acoustic_5d_pipeline import analyze_single_wav
     candidates = [r for r in rows if r["audio_available"] and r["features"] is None
+                  and (not labeled_only or any(v is not None for v in r["labels"].values()))
                   and (sample_ids is None or r["sample_id"] in sample_ids)]
     candidates.sort(key=lambda r: digest(f"{seed}:{r['sample_id']}"))
     extracted, failed = [], 0
@@ -46,6 +47,7 @@ def extract_features(root: Path, rows: list[dict], out: Path, limit: int, seed: 
         write_jsonl(out / "features.jsonl", [])
     summary = {"created_at": stamp(), "requested_limit": limit, "new_feature_clips": len(extracted),
                "failed_clips": failed, "remaining_uncached_audio_at_start": len(candidates),
+               "labeled_only": labeled_only,
                "extractor": provenance([Path(__file__).parents[1] / "yushen_acoustic_5d_pipeline.py"])}
     write_json(out / "extraction_report.json", summary)
     return summary
@@ -63,6 +65,8 @@ def main():
     parser.add_argument("--model", type=Path, help="Trusted models.joblib produced by this package")
     parser.add_argument("--size", type=int, default=200)
     parser.add_argument("--limit", type=int, default=100)
+    parser.add_argument("--labeled-only", action="store_true",
+                        help="extract only clips with at least one usable historical dimension label")
     parser.add_argument("--max-groups-per-family", type=int, default=150, help="0 selects all groups")
     parser.add_argument("--min-groups", type=int, default=20)
     parser.add_argument("--folds", type=int, default=3)
@@ -74,6 +78,8 @@ def main():
         parser.error("Positive limits, size, iterations, threads and group minimum required; folds >= 2")
     if args.max_groups_per_family < 0:
         parser.error("max-groups-per-family must be nonnegative")
+    if args.labeled_only and args.command != "extract":
+        parser.error("--labeled-only applies only to extract")
     if args.command in ["trial", "validate-labels", "calibrate"] and not args.packet:
         parser.error("--packet is required to preserve the teacher holdout")
     if args.command in ["validate-labels", "calibrate"] and not args.labels:
@@ -92,7 +98,8 @@ def main():
             result = make_packet(rows, out, args.size, args.seed)
         elif args.command == "extract":
             sample_ids = {r["sample_id"] for r in read_jsonl(args.packet / "items.jsonl")} if args.packet else None
-            result = extract_features(args.dataset_root, rows, out, args.limit, args.seed, sample_ids)
+            result = extract_features(args.dataset_root, rows, out, args.limit, args.seed, sample_ids,
+                                      labeled_only=args.labeled_only)
         elif args.command == "trial":
             result = run_trial(rows, reserved_groups(rows, args.packet), out,
                                folds=args.folds, max_groups=args.max_groups_per_family,

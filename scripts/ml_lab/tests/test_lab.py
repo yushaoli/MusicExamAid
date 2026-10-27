@@ -239,6 +239,31 @@ class LabTests(unittest.TestCase):
         self.assertIn("--packet", result.stderr)
         self.assertFalse(out.exists())
 
+    def test_labeled_extraction_skips_unknown_and_ambiguous_labels_and_reuses_cache(self):
+        self.cache = self.cache[3:]
+        self.manifest[0]["score_5d"] = {d: None for d in DIMENSIONS}
+        self.manifest[1]["score_5d"] = {d: 0 for d in DIMENSIONS}
+        self.manifest[2]["score_5d"] = {d: 3 if i == 0 else None for i, d in enumerate(DIMENSIONS)}
+        self.save()
+        wav = self.root / self.manifest[2]["rel_audio_path"]
+        signal = (12000 * np.sin(2 * np.pi * 440 * np.arange(24000 * 4) / 24000)).astype("<i2")
+        with wave.open(str(wav), "wb") as f:
+            f.setnchannels(1)
+            f.setsampwidth(2)
+            f.setframerate(24000)
+            f.writeframes(signal.tobytes())
+        rows, _ = load_dataset(self.root)
+        out = new_output(self.root, self.base / "labeled-features")
+        report = extract_features(self.root, rows, out, limit=10, seed=42, labeled_only=True)
+        self.assertEqual(report["remaining_uncached_audio_at_start"], 1)
+        self.assertEqual(report["new_feature_clips"], 1)
+        self.assertEqual(report["failed_clips"], 0)
+        self.assertEqual(read_jsonl(out / "features.jsonl")[0]["clip_id"], self.manifest[2]["clip_id"])
+        updated, _ = load_dataset(self.root, out / "features.jsonl")
+        resumed = new_output(self.root, self.base / "labeled-resumed")
+        self.assertEqual(extract_features(self.root, updated, resumed, limit=10, seed=42,
+                                         labeled_only=True)["new_feature_clips"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
