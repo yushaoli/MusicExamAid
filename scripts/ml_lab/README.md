@@ -133,6 +133,13 @@ ssh -F /dev/null -i ~/.ssh/id_rsa -N -o ExitOnForwardFailure=yes \
 
 Then visit `http://127.0.0.1:8765`. Read `state/access.json` privately to obtain the username/password; do not put them in git, URLs or shared messages. The state directory uses mode 0700; the login and saved CSV use mode 0600. No public listener or live API deployment is needed. Keep the page and media within the authorized mainland data boundary.
 
+For the staged review above, read the login in your own terminal:
+
+```bash
+ssh -o ClearAllForwardings=yes ubtxiaomi \
+  'cat /mnt/DAS1T/musicexamaid_ml_dataset/experiments/teacher-review-20261028/state/access.json'
+```
+
 Restart with the same arguments to resume. A state-directory lock prevents two server processes editing the same records; revision checks reject stale browser saves. The original packet, reservation and teacher CSV remain unchanged. Progress is saved atomically to `state/teacher_labels.csv`, and that file is also available through **导出已保存记录**. Exported rows retain the fixed calibration/test membership, which the page hides from reviewers along with historical/model scores. Video playback supports byte-range seeking and serves only packet videos. Host/Origin checks and authentication apply to saves.
 
 Import actual reviews using the original reservation:
