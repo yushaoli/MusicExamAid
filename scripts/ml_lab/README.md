@@ -59,6 +59,22 @@ python -m scripts.ml_lab trial --dataset-root "$DATASET" \
 
 This is a deliberate manual continuation, not a scheduled job or automatic model release.
 
+## Forward-season check
+
+`forward-trial` trains on earlier seasons and evaluates one explicitly chosen season. It uses all available labeled feature clips outside the teacher reservation and purges every group appearing in the test season from historical training, including groups whose test-season recordings are unlabeled or unavailable. Future-season data is excluded. The regular `trial` fold/group-cap options do not apply.
+
+```bash
+python -m scripts.ml_lab forward-trial --dataset-root "$DATASET" \
+  --out "$LAB_RUN/forward-20265" --packet "$LAB_RUN/teacher-packet" \
+  --test-season 20265 --iterations 100 --threads 2 \
+  --min-groups 20 --min-test-groups 5 \
+  --extra-cache "$LAB_RUN/features-001/features.jsonl"
+```
+
+Pass every immutable cache from the full-cohort run, including the packet features and completed labeled-feature batches, using repeated `--extra-cache`. Choose the test season and settings before inspecting its results. The report saves train/test snapshots, every variant's test probabilities, exam-level metrics and training-only model artifacts. Families/dimensions with insufficient historical groups, test groups or training classes have no default prediction.
+
+This is a **retrospective** check: seasons in the existing archive already contributed to earlier grouped CV. It is not a new untouched final test or a basis for tuning repeatedly on the latest season. It checks whether historical training transfers to newer learners/seasons. Partial labels, rare classes and unverified score semantics still limit conclusions; teacher labels remain necessary for gate calibration.
+
 ## Method and limits
 
 - Group by learner and connect identical source videos using nonempty MD5 or source host/path. These groups stay together during validation, including different exams or seasons. Learner IDs can still contain archive mistakes; unrecognized duplicate content remains a limitation.

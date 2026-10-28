@@ -11,6 +11,7 @@ from .calibration import calibrate_gate, make_packet, validate_labels
 from .data import (digest, load_dataset, media_path, new_output, provenance,
                    read_jsonl, reserved_groups, stamp, write_json, write_jsonl)
 from .ordinal import predict_rows, run_trial
+from .forward import run_forward_trial
 
 
 def extract_features(root: Path, rows: list[dict], out: Path, limit: int, seed: int,
@@ -56,7 +57,7 @@ def extract_features(root: Path, rows: list[dict], out: Path, limit: int, seed: 
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description="Private, offline ML trials and teacher calibration preparation")
-    parser.add_argument("command", choices=["audit", "packet", "extract", "trial", "validate-labels", "calibrate", "predict"])
+    parser.add_argument("command", choices=["audit", "packet", "extract", "trial", "forward-trial", "validate-labels", "calibrate", "predict"])
     parser.add_argument("--dataset-root", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True, help="New private experiment directory; must not exist")
     parser.add_argument("--extra-cache", type=Path, action="append", help="Additional immutable cache; repeat for incremental batches")
@@ -67,21 +68,25 @@ def main():
     parser.add_argument("--limit", type=int, default=100)
     parser.add_argument("--labeled-only", action="store_true",
                         help="extract only clips with at least one usable historical dimension label")
-    parser.add_argument("--max-groups-per-family", type=int, default=150, help="0 selects all groups")
+    parser.add_argument("--max-groups-per-family", type=int, default=150, help="trial only: 0 selects all groups")
     parser.add_argument("--min-groups", type=int, default=20)
-    parser.add_argument("--folds", type=int, default=3)
+    parser.add_argument("--test-season", help="forward-trial: explicit held-out five-digit season code")
+    parser.add_argument("--min-test-groups", type=int, default=5)
+    parser.add_argument("--folds", type=int, default=3, help="trial only: number of grouped validation folds")
     parser.add_argument("--iterations", type=int, default=60)
     parser.add_argument("--threads", type=int, default=2)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
-    if min(args.limit, args.size, args.iterations, args.threads, args.min_groups) < 1 or args.folds < 2:
+    if min(args.limit, args.size, args.iterations, args.threads, args.min_groups, args.min_test_groups) < 1 or args.folds < 2:
         parser.error("Positive limits, size, iterations, threads and group minimum required; folds >= 2")
     if args.max_groups_per_family < 0:
         parser.error("max-groups-per-family must be nonnegative")
     if args.labeled_only and args.command != "extract":
         parser.error("--labeled-only applies only to extract")
-    if args.command in ["trial", "validate-labels", "calibrate"] and not args.packet:
+    if args.command in ["trial", "forward-trial", "validate-labels", "calibrate"] and not args.packet:
         parser.error("--packet is required to preserve the teacher holdout")
+    if args.command == "forward-trial" and (not args.test_season or len(args.test_season) != 5 or not args.test_season.isdigit()):
+        parser.error("forward-trial requires an explicit five-digit --test-season")
     if args.command in ["validate-labels", "calibrate"] and not args.labels:
         parser.error("--labels is required")
     if args.command == "predict" and not args.model:
@@ -105,6 +110,11 @@ def main():
                                folds=args.folds, max_groups=args.max_groups_per_family,
                                min_groups=args.min_groups, iterations=args.iterations,
                                seed=args.seed, threads=args.threads)
+        elif args.command == "forward-trial":
+            result = run_forward_trial(rows, reserved_groups(rows, args.packet), out,
+                                       test_season=args.test_season, min_groups=args.min_groups,
+                                       min_test_groups=args.min_test_groups, iterations=args.iterations,
+                                       seed=args.seed, threads=args.threads)
         elif args.command in ["validate-labels", "calibrate"]:
             labeled, result = validate_labels(args.packet, args.labels)
             write_json(out / "label_validation.json", result)
@@ -120,7 +130,7 @@ def main():
         write_json(out / "run_status.json", {"state": "completed", "completed_at": stamp(),
                                             "command": args.command})
         # Trial details may contain local pseudonymous identifiers: print only aggregate progress.
-        if args.command == "trial":
+        if args.command in ["trial", "forward-trial"]:
             print(json.dumps({"out": str(out), "families": len(result["families"]), "production_ready": False}))
         else:
             print(json.dumps(result, ensure_ascii=False, indent=2))
