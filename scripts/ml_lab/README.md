@@ -109,3 +109,39 @@ python -m scripts.ml_lab predict --dataset-root "$DATASET" \
 Load only trusted `joblib` artifacts produced by this package; they use executable Python serialization. No command replaces the live API's weights. Model promotion, paid launch, real teacher label collection and any production changes require their own review and authorization.
 
 `predict --packet ...` limits inference to that packet for an offline smoke check. Inference batches by family/dimension. Unsupported families or dimensions have no model prediction; no default score is invented. Keep these outputs separate from blinded teacher labels.
+
+## Private teacher review page
+
+Teachers can watch the existing reserved clips, enter recording-quality judgments and export a compatible CSV without editing spreadsheet rows. This page collects PASS / NEEDS_HUMAN_CHECK / REJECT, an internal reviewer alias and notes. Five-dimensional ratings stay untouched until their rubric is confirmed. No verdict is selected automatically. Saving records the actual review time; playback and navigation do not create labels.
+
+Run on the mainland dataset host, from the staged code directory:
+
+```bash
+python -m scripts.ml_lab.review \
+  --dataset-root /mnt/DAS1T/musicexamaid_ml_dataset \
+  --packet /mnt/DAS1T/musicexamaid_ml_dataset/experiments/tooling-62d7ae831c7a/teacher-packet \
+  --state-dir /mnt/DAS1T/musicexamaid_ml_dataset/experiments/teacher-review-20261028/state \
+  --port 8765
+```
+
+The server listens only on `127.0.0.1`, requires a random password for every page/API/video/CSV request and prints only its private login-file path. Open the page from an authorized mainland workstation through an SSH tunnel. This command ignores the alias's unrelated configured port forwarding:
+
+```bash
+ssh -F /dev/null -i ~/.ssh/id_rsa -N -o ExitOnForwardFailure=yes \
+  -L 127.0.0.1:8765:127.0.0.1:8765 ubt@100.64.0.4
+```
+
+Then visit `http://127.0.0.1:8765`. Read `state/access.json` privately to obtain the username/password; do not put them in git, URLs or shared messages. The state directory uses mode 0700; the login and saved CSV use mode 0600. No public listener or live API deployment is needed. Keep the page and media within the authorized mainland data boundary.
+
+Restart with the same arguments to resume. A state-directory lock prevents two server processes editing the same records; revision checks reject stale browser saves. The original packet, reservation and teacher CSV remain unchanged. Progress is saved atomically to `state/teacher_labels.csv`, and that file is also available through **导出已保存记录**. Exported rows retain the fixed calibration/test membership, which the page hides from reviewers along with historical/model scores. Video playback supports byte-range seeking and serves only packet videos. Host/Origin checks and authentication apply to saves.
+
+Import actual reviews using the original reservation:
+
+```bash
+python -m scripts.ml_lab validate-labels --dataset-root "$DATASET" \
+  --packet "$LAB_RUN/teacher-packet" \
+  --labels /mnt/DAS1T/musicexamaid_ml_dataset/experiments/teacher-review-20261028/state/teacher_labels.csv \
+  --out "$LAB_RUN/teacher-validation-after-review"
+```
+
+The current review concerns recording quality, not student identity, piece matching, performance scores or official exam approval. Do not turn these judgments into measurements of the full multimodal gate. A playback/network error is not evidence that the original video should be rejected. Teachers should choose NEEDS_HUMAN_CHECK when evidence is uncertain and explain that uncertainty.
