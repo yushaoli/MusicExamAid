@@ -14,6 +14,28 @@ Use official exam-level 5D scores only on the calibration partition to adjust th
 
 Continue using observed numeric scores 0, 3, 6 and 10 under the existing missing/all-zero policy until an authoritative named-rating dictionary and zero semantics are available. Performance scores do not label recording usability or establish 初审 false acceptance/rejection. That gate-calibration work is deferred, and automatic portal decisions remain disabled. The existing CLI `calibrate` evaluates an audio silence heuristic against teacher quality labels and does not accept performance scores as quality verdicts. The separate [official-score workflow](../scripts/ml_lab/README.md#official-score-calibration) now supplies candidate freezing, score-blind enrollment, temperature calibration and a single final evaluation. Temperature scaling adjusts confidence and preserves the most likely class; it cannot fix the observed class-recognition failures.
 
+## Official-score workflow rehearsal — 2026-10-29
+
+Runtime code `6be6e3eb631715283167a5c5c79e23681be7e51f` completed a private rehearsal at `ubtxiaomi:/mnt/DAS1T/musicexamaid_ml_dataset/experiments/official-score-rehearsal-20261029-6be6e3e`. It reused the training-only candidate from the earlier 20265 forward check and fit context/acoustic baselines on that candidate's same historical snapshot. History identities came from all earlier-season manifest rows, including unavailable/unlabeled recordings, plus the original teacher reservation. No full model was retrained or promoted. Every artifact is marked `retrospective_rehearsal`; this archive has already been analyzed and is not a fresh prospective test.
+
+Score-blind enrollment found 79 learner/video groups not connected to that earlier history or reservation: 40 calibration exams and 39 test exams. Cached audio supported predictions for 36 exams in each partition; unavailable/unfeatured exams remained in the coverage counts. The fixed hash split yielded 20 keyboard calibration groups, 14 plucked-string groups, four bowed-string groups and two wind groups. Only keyboard pitch, tone and completeness met the fixed calibration minimums. Seventeen family/dimension cases remained unsupported because of too few groups or too few examples in an observed class; no default calibration was fitted.
+
+All three supported calibration cases use the same 20 keyboard exams and contain only numeric scores 6 and 10. Their results below use the same 19 keyboard test exams, not 57 independent exams. The temperature bounds and support minimums were retained after evaluation.
+
+| Keyboard dimension | Fitted temperature | Test log loss before | Test log loss after |
+|---|---:|---:|---:|
+| Pitch | 2.8819 | 1.8932 | 1.3364 |
+| Tone | 19.9999 | 3.3415 | 1.1862 |
+| Completeness | 19.9999 | 1.9375 | 1.1304 |
+
+Log loss and Brier loss improve on these three small retrospective comparisons. Score-class predictions and confusion matrices remain identical, as required by this confidence-only method. Tone and completeness reach the fixed temperature upper bound of 20, which is a limitation of this fit, not evidence that recognition is solved. No bound expansion or further tuning followed the final test. Missing classes and the selected cohort prevent a four-class or population-accuracy claim.
+
+The final rehearsal evaluates five keyboard and five plucked-string dimensions across 34 unique exams (19 keyboard, 15 plucked). Bowed/wind test groups are too small. Independent saved-artifact checks recomputed all **53** variant confusion matrices, exam counts, accuracy, rank MAE, log loss, Brier loss and confidence-bin totals from 170 exam/dimension rows. Calibrated probabilities were also recomputed separately with power/normalization arithmetic; argmax and exact zero probabilities matched. Calibration/test learner groups and exams have zero overlap, calibration label snapshots contain no test exams, and enrollment predictions contain no official scores.
+
+The complete rehearsal took 63 seconds under the experiment lock, low priority and two-thread limit. Before/after and current fingerprints match for the source manifest/cache, feature batches, original teacher packet, source candidate/snapshot and existing shared/live weights. No API, database or portal writes occurred. Private evidence includes `aggregate_report.json`, `validation_report.json`, the frozen protocol, enrollment snapshots and saved calibration/test outputs.
+
+All **37** ML/reviewer tests pass, including 14 new tests covering score-blind intake, source snapshots and cutoff enforcement, history/reservation exclusion, complete group membership, test-score invariance, missing/unsupported labels, later duplicate links, file changes, single final evaluation and inherited rehearsal status. API build/type checks and **41** existing tests pass; two live tests remain opt-in. The workflow is ready for an actual incoming cohort; its official season, closing time and candidate must be fixed before using its scores. Manual teacher review remains deferred.
+
 ## Initial trial — 2026-10-23
 
 The first trial ran successfully on the downloaded/extracted subset while the mirror continued. Its full model beat all three baselines in 10 of 25 comparisons. The initial and full-cohort trials use different cohorts and settings; their win counts are not a controlled before/after accuracy comparison.
