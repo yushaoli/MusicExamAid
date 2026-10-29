@@ -2,7 +2,7 @@
 
 Prepare tools and run offline trials on downloaded recordings. This package reads existing local files. It never connects to the exam portal or database, changes the shared feature cache, publishes model weights, or enables portal writes.
 
-**Current plan (2026-10-29):** manual teacher review is deferred because teacher capacity is unavailable. Continue development with historical official scores, then use unseen incoming exams with official 5D results for separate calibration and testing. The prepared 200-group reservation stays excluded from training. See the [prospective protocol](../../docs/ML_TOOLING_TRIAL.md#calibration-plan--2026-10-29-owner-decision); it is a plan, not a completed calibration run.
+**Current plan (2026-10-29):** manual teacher review is deferred because teacher capacity is unavailable. Continue development with historical official scores, then use unseen incoming exams with official 5D results for separate calibration and testing. The prepared 200-group reservation stays excluded from training. The [prospective workflow](#official-score-calibration) is implemented; a fresh cohort has not yet been enrolled or evaluated.
 
 ## Environment and tests
 
@@ -76,6 +76,56 @@ python -m scripts.ml_lab forward-trial --dataset-root "$DATASET" \
 Pass every immutable cache from the full-cohort run, including the packet features and completed labeled-feature batches, using repeated `--extra-cache`. Choose the test season and settings before inspecting its results. The report saves train/test snapshots, every variant's test probabilities, exam-level metrics and training-only model artifacts. Families/dimensions with insufficient historical groups, test groups or training classes have no default prediction.
 
 This is a **retrospective** check: seasons in the existing archive already contributed to earlier grouped CV. It is not a new untouched final test or a basis for tuning repeatedly on the latest season. It checks whether historical training transfers to newer learners/seasons. Partial labels, rare classes and unverified score semantics still limit conclusions; teacher labels remain necessary for gate calibration.
+
+## Official-score calibration
+
+`python -m scripts.ml_lab.prospective` provides a separate four-step workflow. It reads local files and needs no new teacher-scoring campaign. Run on the mainland host under the same experiment lock and two-thread limit. Choose the upcoming official season and closing timestamp before examining incoming scores; set `COHORT_SEASON` and `COHORT_CLOSE_AT` accordingly. The commands below illustrate separate stages, not a script to run all at once.
+
+Freeze a trusted existing lab candidate and its training-only snapshot. `freeze` copies the model, records all historical/reserved identity hashes, and fits context/acoustic baselines on that same training snapshot. It fixes the split seed, numeric label policy, temperature bounds, support minimums, closing time and source/code versions.
+
+```bash
+umask 077
+NEXT_RUN="$DATASET/experiments/new-official-cohort"
+python -m scripts.ml_lab.prospective freeze --dataset-root "$DATASET" \
+  --model-dir "$LAB_RUN/full-trial" --packet "$LAB_RUN/teacher-packet" \
+  --season "${COHORT_SEASON:?Set the upcoming official season}" \
+  --close-at "${COHORT_CLOSE_AT:?Set a future ISO timestamp with timezone}" \
+  --out "$NEXT_RUN/frozen" --threads 2
+```
+
+Capture the intake manifest **before the fixed closing time**, then preserve it. Use an ordinary copy with its actual capture time; do not preserve/backdate its modification time. The original manifest can later receive official score updates. Pass every immutable feature cache at enrollment, including incremental batches.
+
+```bash
+cp "$DATASET/manifest_all_clips.jsonl" "$NEXT_RUN/intake_manifest.jsonl"
+```
+
+After the closing time, enroll once from that snapshot. A prospective run rejects snapshots modified after closing. Enrollment ignores scores, excludes groups connected to any historical exam/learner/video or the original teacher reservation, and assigns each new group by a fixed hash to calibration or final test. Groups stay together across exams, clips and instrument families. The approximately half/half split does not guarantee balanced families/classes; `enrollment.json` reports realized family counts. Unavailable/unfeatured groups stay enrolled and appear in coverage counts. Predictions use only available cached audio at enrollment, average probabilities per exam, and are saved separately for each partition without labels.
+
+```bash
+python -m scripts.ml_lab.prospective enroll --dataset-root "$DATASET" \
+  --frozen "$NEXT_RUN/frozen" --intake-manifest "$NEXT_RUN/intake_manifest.jsonl" \
+  --extra-cache "$LAB_RUN/features-001/features.jsonl" --out "$NEXT_RUN/enrolled"
+```
+
+When official exam-level 5D results reach the normal local manifest, fit only against calibration scores. The held-out scores are not inspected by this step. With default settings, each family/dimension needs at least 20 calibration groups, two observed classes and five exams in each observed class. Missing classes are reported. If a true class has zero base probability, calibration is unsupported rather than inventing class support. Missing labels leave the run pending.
+
+```bash
+python -m scripts.ml_lab.prospective calibrate --dataset-root "$DATASET" \
+  --frozen "$NEXT_RUN/frozen" --enrolled "$NEXT_RUN/enrolled" \
+  --out "$NEXT_RUN/calibration-001"
+```
+
+This first method uses [temperature scaling](https://proceedings.mlr.press/v70/guo17a.html): one positive temperature per supported family/dimension, fitted to exam-level log loss over the fixed range 0.05–20. Exact zero probabilities and the most likely class stay unchanged. It adjusts confidence, **not score-class accuracy**, and cannot repair the observed rare-class misses. Reports include classification errors, log loss, multiclass Brier loss (sum across four classes) and confidence-bin counts/accuracy. These scores do not isolate calibration quality by themselves; see the [scikit-learn calibration guide](https://scikit-learn.org/stable/modules/calibration.html). Support minimums are operational checks, not a guarantee of statistical precision.
+
+Freeze the adjustment and wait until the final group's official results are ready before running the final test. It reports available-label counts and all five fixed comparisons plus calibrated full-model probabilities where supported. It requires five test groups per evaluated family/dimension by default. A successful test records completion and rejects subsequent tuning/evaluation on the same enrollment; retain its saved report. Changed identities linking history, calibration and test groups are rejected before using labels.
+
+```bash
+python -m scripts.ml_lab.prospective evaluate --dataset-root "$DATASET" \
+  --frozen "$NEXT_RUN/frozen" --enrolled "$NEXT_RUN/enrolled" \
+  --calibration "$NEXT_RUN/calibration-001" --out "$NEXT_RUN/final-test"
+```
+
+For historical practice only, `freeze --rehearsal` permits a past closing timestamp and marks every subsequent artifact `retrospective_rehearsal`; it cannot become a fresh test. Ordinary prospective runs require a future closing time. Keep all snapshots, predictions, models and labels private; no step promotes a model or changes portal settings. Performance scores do not replace recording-quality labels for the separate silence-heuristic `calibrate` command below.
 
 ## Method and limits
 

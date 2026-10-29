@@ -87,8 +87,9 @@ def provenance(paths: list[Path]) -> dict:
                      "bytes": p.stat().st_size} for p in paths}
 
 
-def load_dataset(root: Path, extra_cache: Path | list[Path] | None = None) -> tuple[list[dict], dict]:
-    manifest = root / "manifest_all_clips.jsonl"
+def load_dataset(root: Path, extra_cache: Path | list[Path] | None = None, *,
+                 include_labels: bool = True, manifest_path: Path | None = None) -> tuple[list[dict], dict]:
+    manifest = manifest_path if manifest_path is not None else root / "manifest_all_clips.jsonl"
     cache_path = root / "acoustic_features_cache.jsonl"
     manifest_rows = read_jsonl(manifest)
     seen = set()
@@ -159,7 +160,7 @@ def load_dataset(root: Path, extra_cache: Path | list[Path] | None = None) -> tu
         features = (entry or {}).get("features", {})
         valid_features = all(isinstance(features.get(k), (int, float)) and
                              math.isfinite(features[k]) for k in ACOUSTIC_FEATURES)
-        scores = r.get("score_5d") or {}
+        scores = (r.get("score_5d") or {}) if include_labels else {}
         all_zero = all(scores.get(d) == 0 for d in DIMENSIONS)
         if all_zero:
             counts["ambiguous_all_zero_labels"] += 1
@@ -188,7 +189,8 @@ def load_dataset(root: Path, extra_cache: Path | list[Path] | None = None) -> tu
                "features": {k: features[k] for k in ACOUSTIC_FEATURES} if valid_features else None,
                "labels": labels}
         rows.append(row)
-    audit = {"as_of": stamp(), "counts": dict(counts), "by_family": dict(by_family),
+    audit = {"as_of": stamp(), "labels_loaded": include_labels,
+             "counts": dict(counts), "by_family": dict(by_family),
              "cached_class_counts": class_counts, "native_score_levels": SCORE_LEVELS,
              "zero_policy": "Exclude all-zero exams as ambiguous; retain mixed zero scores",
              "grouping": "Connected components of learner_anon_id, nonempty video_md5 and source host/path",
