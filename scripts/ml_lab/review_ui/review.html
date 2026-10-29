@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>教师视频复核 · MusicExamAid</title><link rel="stylesheet" href="/review.css"><script src="/review.js" defer></script></head>
+<body>
+<header><h1>教师视频复核</h1><p id="progress" aria-live="polite">正在载入复核包…</p><a href="/labels.csv" download="teacher_labels.csv">导出已保存记录</a></header>
+<main>
+<section class="playback" aria-label="视频与片段信息">
+<div class="clip-heading"><h2 id="clip-title">等待载入</h2><span id="position"></span></div>
+<video id="video" controls preload="metadata" playsinline></video>
+<p id="video-error" role="status"></p><p class="scope">本轮只判断录制质量：画面、声音和片段完整性是否足够供评审。五维表现评分待确认口径后再收集。</p>
+<nav aria-label="浏览片段"><button id="previous" type="button">上一段</button><button id="next" type="button">下一段</button><button id="pending" type="button">跳到待复核</button></nav>
+</section>
+<section class="judgment" aria-label="教师复核表">
+<form id="review-form">
+<label class="field" for="alias">教师代号<input id="alias" required pattern="[A-Za-z0-9_-]{1,32}" maxlength="32" placeholder="例如 T1" autocomplete="off"></label>
+<fieldset><legend>这段视频能否用于评审？</legend>
+<label class="choice"><input type="radio" name="verdict" value="PASS" required><span><strong>可供评审</strong><small>画面与声音足以判断演奏</small></span></label>
+<label class="choice"><input type="radio" name="verdict" value="NEEDS_HUMAN_CHECK"><span><strong>需进一步核对</strong><small>材料不足，或暂时无法确定</small></span></label>
+<label class="choice"><input type="radio" name="verdict" value="REJECT"><span><strong>无法评审</strong><small>无声、严重损坏或大段缺失等</small></span></label>
+</fieldset>
+<label class="field" for="notes">复核备注<textarea id="notes" rows="4" maxlength="2000" placeholder="需核对或无法评审时，请说明看到或听到的问题。"></textarea></label>
+<p id="saved-at" class="saved-at"></p><p id="message" role="status" aria-live="polite"></p>
+<div class="actions"><button id="save" type="submit">保存并复核下一段</button><button id="reload" type="button">重新载入记录</button></div>
+</form>
+</section>
+</main>
+<footer>复核记录只在点击保存后写入。尚未复核的片段保持空白；遇到不确定的情况，请选择“需进一步核对”。</footer>
+</body></html>
