@@ -1,6 +1,8 @@
 # MusicExamAid offline ML lab
 
-Prepare tools and run trials while the video mirror continues. This package reads existing local files. It never connects to the exam portal or database, changes the shared feature cache, publishes model weights, or enables portal writes.
+Prepare tools and run offline trials on downloaded recordings. This package reads existing local files. It never connects to the exam portal or database, changes the shared feature cache, publishes model weights, or enables portal writes.
+
+**Current plan (2026-10-29):** manual teacher review is deferred because teacher capacity is unavailable. Continue development with historical official scores, then use unseen incoming exams with official 5D results for separate calibration and testing. The prepared 200-group reservation stays excluded from training. See the [prospective protocol](../../docs/ML_TOOLING_TRIAL.md#calibration-plan--2026-10-29-owner-decision); it is a plan, not a completed calibration run.
 
 ## Environment and tests
 
@@ -88,6 +90,8 @@ This is a **retrospective** check: seasons in the existing archive already contr
 Primary library references: [grouped stratification](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.StratifiedGroupKFold.html), [histogram gradient boosting](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.HistGradientBoostingClassifier.html).
 
 ## Teacher review and gate calibration
+
+This optional workflow is deferred under the current plan. Its labels concern recording quality; incoming official performance scores must not be entered as PASS / NEEDS_HUMAN_CHECK / REJECT. The `calibrate` command below calibrates the audio silence heuristic, not the 5D performance model.
 
 `packet` selects one available clip per independent learner/video group, balanced across instrument families without conditioning on official scores. The default 200 clips have 100 calibration and 100 held-out test clips. **All recordings from their learners/duplicate-video groups are excluded from every trial using that packet**, including future recordings linked through learner IDs, MD5 or source paths.
 
