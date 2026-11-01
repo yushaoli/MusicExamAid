@@ -7,6 +7,106 @@ servers:
   - url: https://mea.xgar.com.cn
   - url: http://localhost:3000
 paths:
+  /official-sync/resolve-session:
+    get:
+      summary: Resolve the entry role and exchange a current teacher invite for a session
+      description: >-
+        A current random teacher invite (t_inv_<agent_id>_<32 hex characters>) issues an
+        eight-hour HttpOnly, SameSite=Lax mea_teacher_session cookie, Secure in production.
+        The signed token is not returned in JSON. Public demo or legacy invites may resolve
+        the teacher landing page but return history_access=false and clear the teacher cookie.
+        Parent referrals identify an entry channel, grant no historical lookup access, and
+        clear the teacher cookie. Invalid invite/ref values also clear it. Resolving wx_openid
+        without an invite requires verified family-admin credentials. With no invite/ref,
+        the existing family-admin authentication policy applies. Responses are not cacheable.
+      parameters:
+        - in: query
+          name: invite_token
+          schema: { type: string }
+        - in: query
+          name: ref
+          schema: { type: string }
+        - in: query
+          name: wx_openid
+          schema: { type: string }
+        - in: query
+          name: role
+          schema: { type: string, enum: [parent, admin] }
+      responses:
+        "200":
+          description: Resolved role and entry channel; teacher responses include history_access
+          headers:
+            Cache-Control:
+              schema: { type: string, enum: [no-store] }
+            Set-Cookie:
+              description: Issues or clears mea_teacher_session when an invite/ref is resolved
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [role, is_isolated, locked_agent]
+                properties:
+                  role: { type: string, enum: [teacher, parent, admin] }
+                  is_isolated: { type: boolean }
+                  history_access:
+                    type: boolean
+                    description: Whether this teacher invite can issue historical lookup credentials
+                  locked_agent: { type: object, nullable: true }
+        "401":
+          description: Invalid invite/ref or missing family-admin credentials
+  /official-sync/student-lookup:
+    get:
+      summary: Search historical student profiles and exam records within the verified session scope
+      description: >-
+        Always requires verified credentials, including when ENFORCE_SERVER_AUTH=0 in development.
+        Family admins can browse all profiles and full exam histories. Teachers can browse only
+        profiles currently assigned to their signed agent ID and exams recorded under that agent ID.
+        Counts, latest exams and recommendations use the same restricted history. Every teacher
+        request rechecks the current invite digest; invite rotation/removal revokes the session.
+        Parent referrals and client-supplied identities do not grant access. Responses use
+        Cache-Control=no-store. Admin agent_id filters current profiles while retaining full history.
+      security:
+        - familySessionHeader: []
+        - familySessionCookie: []
+        - teacherSessionHeader: []
+        - teacherSessionCookie: []
+        - signedSessionBearer: []
+      parameters:
+        - in: query
+          name: q
+          description: Name, pinyin, masked phone or masked ID search; empty lists authorized profiles
+          schema: { type: string, maxLength: 200, default: "" }
+        - in: query
+          name: agent_id
+          description: Optional admin filter; teachers may specify only their own agent ID
+          schema: { type: integer, minimum: 1, maximum: 2147483647 }
+        - in: query
+          name: limit
+          description: Positive safe integer; values above 50 are capped at 50
+          schema: { type: integer, minimum: 1, maximum: 9007199254740991, default: 12 }
+      responses:
+        "200":
+          description: Authorized profiles with scoped exam histories and upgrade recommendations
+          headers:
+            Cache-Control:
+              schema: { type: string, enum: [no-store] }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, items]
+                properties:
+                  count: { type: integer }
+                  items:
+                    type: array
+                    items: { type: object }
+        "400":
+          description: Invalid query, agent ID or limit
+        "401":
+          description: Missing, expired, invalid or revoked session
+        "403":
+          description: A teacher requested a different agent ID
   /app:
     get:
       summary: WeChat Service Account & WeCom H5 Web Tool (?tab=parent|archive|console)
@@ -277,6 +377,31 @@ paths:
           description: Template payload and dispatch status
 components:
   securitySchemes:
+    familySessionHeader:
+      type: apiKey
+      in: header
+      name: X-Mea-Session
+      description: Expiring HMAC-signed family-admin session
+    familySessionCookie:
+      type: apiKey
+      in: cookie
+      name: mea_family_session
+      description: Expiring HMAC-signed family-admin session
+    teacherSessionHeader:
+      type: apiKey
+      in: header
+      name: X-Mea-Teacher-Session
+      description: Eight-hour HMAC-signed teacher session bound to the current invite
+    teacherSessionCookie:
+      type: apiKey
+      in: cookie
+      name: mea_teacher_session
+      description: Eight-hour HttpOnly teacher cookie issued by resolve-session
+    signedSessionBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: HMAC
+      description: A signed family-admin or teacher session; each retains its own role
     bearerAuth:
       type: http
       scheme: bearer

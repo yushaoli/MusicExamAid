@@ -23,14 +23,19 @@ export function assertProductionAuthConfig(): void {
   }
 }
 
+/** Sign a versioned, role-specific payload; never expose the signing key. */
+export function signSessionPayload(payload: string): string {
+  return crypto.createHmac('sha256', getSigningSecret()).update(payload)
+    .digest('hex').slice(0, 32);
+}
+
 export function buildSignedFamilyToken(ttlSeconds = MAX_SESSION_SECONDS): string {
   if (!Number.isInteger(ttlSeconds) || ttlSeconds <= 0 || ttlSeconds > MAX_SESSION_SECONDS) {
     throw new Error('Session lifetime must be between 1 second and 7 days');
   }
   const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
   const payload = `v1.${expiresAt}`;
-  const sig = crypto.createHmac('sha256', getSigningSecret()).update(payload)
-    .digest('hex').slice(0, 32);
+  const sig = signSessionPayload(payload);
   return `${payload}.${sig}`;
 }
 
@@ -40,8 +45,7 @@ export function verifySignedFamilyToken(rawToken?: string | null): boolean {
   const expiresAt = Number(match[1]);
   const now = Math.floor(Date.now() / 1000);
   if (expiresAt <= now || expiresAt > now + MAX_SESSION_SECONDS) return false;
-  const expected = crypto.createHmac('sha256', getSigningSecret()).update(`v1.${expiresAt}`)
-    .digest('hex').slice(0, 32);
+  const expected = signSessionPayload(`v1.${expiresAt}`);
   return crypto.timingSafeEqual(Buffer.from(match[2], 'hex'), Buffer.from(expected, 'hex'));
 }
 

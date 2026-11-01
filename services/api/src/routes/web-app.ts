@@ -2271,6 +2271,14 @@ const WEB_APP_HTML = `<!DOCTYPE html>
 
       try {
         const res = await fetch('/official-sync/student-lookup?q=' + encodeURIComponent(q) + agentParam + '&limit=8');
+        if (!res.ok) {
+          box.textContent = res.status === 401
+            ? '当前入口没有历史档案查询权限，请通过授权微信或老师专属链接登录。'
+            : res.status === 403
+              ? '只能查询当前老师的学员档案。'
+              : '档案查询暂不可用，请稍后重试。';
+          return;
+        }
         const data = await res.json();
         if (!data.items || data.items.length === 0) {
           box.innerHTML = '<div style="font-size:13px;color:var(--muted)">未找到本机构匹配的历年考生，请尝试清空关键词查看全部本机构学员，或直接下方新建档案。</div>';

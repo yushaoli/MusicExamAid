@@ -23,6 +23,8 @@ import { getPostgresPool as getLivePostgresPool } from '../store/postgres';
 import type { Pool } from 'pg';
 import { buildSignedFamilyToken, verifySignedFamilyToken, extractAndVerifyRequestFamilySession,
   requireFamilyAdminPreHandler, familySessionCookie } from '../auth/family-session';
+import { buildSignedTeacherToken, isStrongTeacherInvite, requireHistoricalLookupScope,
+  teacherSessionCookie } from '../auth/teacher-session';
 export { buildSignedFamilyToken, verifySignedFamilyToken } from '../auth/family-session';
 import { minioClient } from '../store/minio';
 
@@ -860,10 +862,26 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
       }>,
       reply: FastifyReply,
     ) => {
-      const pool = getPostgresPool();
+      const scope = await requireHistoricalLookupScope(req, reply, getPostgresPool);
+      if (!scope) return;
+      if (req.query?.q !== undefined && typeof req.query.q !== 'string') {
+        return reply.code(400).send({error: 'VALIDATION_ERROR', message: '查询条件有误'});
+      }
       const q = (req.query?.q || '').trim();
-      const agentId = req.query?.agent_id ? Number(req.query.agent_id) : null;
-      const limit = Math.min(Math.max(Number(req.query?.limit || 12), 1), 50);
+      const requestedAgent = req.query?.agent_id === undefined ? null : Number(req.query.agent_id);
+      const requestedLimit = req.query?.limit === undefined ? 12 : Number(req.query.limit);
+      if (q.length > 200 || (requestedAgent !== null &&
+          (!Number.isInteger(requestedAgent) || requestedAgent <= 0 || requestedAgent > 2_147_483_647)) ||
+          !Number.isSafeInteger(requestedLimit) || requestedLimit <= 0) {
+        return reply.code(400).send({error: 'VALIDATION_ERROR', message: '查询条件有误'});
+      }
+      if (scope.role === 'teacher' && requestedAgent !== null && requestedAgent !== scope.agentId) {
+        return reply.code(403).send({error: 'FORBIDDEN', message: '只能查询当前老师的学员档案'});
+      }
+      const agentId = scope.role === 'teacher' ? scope.agentId : requestedAgent;
+      const limit = Math.min(requestedLimit, 50);
+      const teacherScoped = scope.role === 'teacher';
+      const pool = getPostgresPool();
 
       const studentsRes = await pool.query(
         `
@@ -880,14 +898,17 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
           s.agent_name,
           s.picture_url,
           s.id_picture_url,
-          s.all_exams
+          CASE WHEN $4::boolean THEN (
+            SELECT COUNT(*)::int FROM kjzx_historical_exams owned
+            WHERE owned.student_id = s.student_id AND owned.agent_id = $2::int
+          ) ELSE s.all_exams END AS all_exams
         FROM kjzx_historical_students s
         WHERE ($1::text = '' OR s.name_cn ILIKE '%' || $1 || '%' OR s.pinyin ILIKE '%' || $1 || '%' OR s.parent_phone_masked ILIKE '%' || $1 || '%' OR s.id_card_masked ILIKE '%' || $1 || '%')
           AND ($2::int IS NULL OR s.agent_id = $2::int)
-        ORDER BY (CASE WHEN s.agent_id = 999 THEN 0 ELSE 1 END) ASC, s.all_exams DESC, s.student_id DESC
+        ORDER BY (CASE WHEN s.agent_id = 999 THEN 0 ELSE 1 END) ASC, all_exams DESC, s.student_id DESC
         LIMIT $3::int
         `,
-        [q, agentId, limit],
+        [q, agentId, limit, teacherScoped],
       );
 
       const studentIds = studentsRes.rows.map(r => r.student_id);
@@ -928,9 +949,10 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
           FROM kjzx_historical_exams e
           LEFT JOIN kjzx_official_levels ol ON ol.level_id = LEAST(e.level + 1, 11)
           WHERE e.student_id = ANY($1::int[])
+            AND ($2::int IS NULL OR e.agent_id = $2::int)
           ORDER BY e.season_code DESC, e.level DESC
           `,
-          [studentIds],
+          [studentIds, teacherScoped ? agentId : null],
         );
 
         for (const row of examsRes.rows) {
@@ -1146,13 +1168,14 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
       }>,
       reply: FastifyReply,
     ) => {
-      const pool = getPostgresPool();
+      reply.header('Cache-Control', 'no-store');
       const { invite_token, ref, wx_openid, role } = req.query ?? {};
 
       if (wx_openid && !invite_token && !extractAndVerifyRequestFamilySession(req)) {
         return reply.code(401).send({ error: 'UNAUTHORIZED' });
       }
       if (invite_token || wx_openid) {
+        const pool = getPostgresPool();
         const { rows } = await pool.query(
           `
           SELECT agent_id, code, name, manager, phone, addr,
@@ -1165,15 +1188,23 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
           [invite_token || null, wx_openid || null],
         );
         if (rows[0]) {
+          const agent = rows[0];
+          const historyAccess = isStrongTeacherInvite(Number(agent.agent_id), agent.invite_token || '');
+          // Public demo/legacy invites may open their existing landing page but
+          // cannot mint credentials for historical student data.
+          reply.header('Set-Cookie', teacherSessionCookie(historyAccess
+            ? buildSignedTeacherToken(Number(agent.agent_id), agent.invite_token) : null));
           return reply.code(200).send({
             role: 'teacher',
             is_isolated: true,
-            locked_agent: rows[0],
+            history_access: historyAccess,
+            locked_agent: agent,
           });
         }
       }
 
       if (ref) {
+        const pool = getPostgresPool();
         const numericId = /^\d+$/.test(ref) ? Number(ref) : null;
         const { rows } = await pool.query(
           `
@@ -1187,6 +1218,7 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
           [ref, numericId],
         );
         if (rows[0]) {
+          reply.header('Set-Cookie', teacherSessionCookie(null));
           return reply.code(200).send({
             role: 'parent',
             is_isolated: true,
@@ -1196,6 +1228,7 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
       }
 
       if (invite_token || ref) {
+        reply.header('Set-Cookie', teacherSessionCookie(null));
         return reply.code(401).send({ error: 'INVALID_INVITE' });
       }
       await requireFamilyAdminPreHandler(req, reply);
