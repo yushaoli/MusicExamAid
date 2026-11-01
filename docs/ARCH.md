@@ -39,3 +39,13 @@
 - `GET|POST /webhooks/wechat-mp`, `GET /webhooks/wechat-mp/menu-config`
 - `GET|POST /webhooks/wecom`
 - `POST /notifications/wecom`, `POST /notifications/wechat-mp`
+
+## Historical student lookup authorization
+
+`GET /official-sync/student-lookup` always requires a verified session, including in development when `ENFORCE_SERVER_AUTH=0`. Family-admin sessions retain full historical access. A client-supplied role, agent ID, OpenID or referral code does not grant access.
+
+`GET /official-sync/resolve-session?invite_token=...` exchanges a current teacher invite matching `t_inv_<agent_id>_<32 hex characters>` for an eight-hour HMAC-signed teacher session. The browser receives the session in the `mea_teacher_session` cookie (`HttpOnly`, `SameSite=Lax`, `Secure` in production); the token is not returned in JSON. Lookup also accepts `X-Mea-Teacher-Session` or a teacher bearer token. Teacher credentials never authorize family-admin routes. Public demo and legacy invites can still resolve their landing page, with `history_access: false`, but cannot create a lookup session.
+
+Each teacher lookup rechecks the current invite digest in Postgres, so rotating or removing the invite revokes existing sessions immediately. The server derives the agent ID from the signed token. An explicit different `agent_id` is rejected with 403. Teachers can see only student profiles currently assigned to their agent ID and exam rows recorded under that agent ID. Counts, latest exams and upgrade recommendations use that same restricted history; exams from other institutions are excluded. Admins may filter profiles by current agent while retaining access to complete exam history.
+
+Session resolution and lookup return `Cache-Control: no-store`. Invalid invites and parent referral resolution clear the teacher cookie. Parent referrals identify an entry channel; they do not prove ownership of any learner. Parent lookup remains unavailable until a verified parent-to-learner ownership model is implemented. Authorization for the other learner, export, registration, archive, financial, media and RPC routes remains a separate follow-up.
