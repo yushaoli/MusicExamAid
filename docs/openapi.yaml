@@ -18,7 +18,7 @@ paths:
         Parent referrals identify an entry channel, grant no historical lookup access, and
         clear the teacher cookie. Invalid invite/ref values also clear it. Resolving wx_openid
         without an invite requires verified family-admin credentials. With no invite/ref,
-        the existing family-admin authentication policy applies. Responses are not cacheable.
+        strict verified family-admin authentication applies in every environment. Responses are not cacheable.
       parameters:
         - in: query
           name: invite_token
@@ -140,6 +140,89 @@ paths:
         "400": { description: Missing exam ID }
         "401": *mediaUnauthorized
         "404": { description: Exam not found }
+  /official-sync/pull-remote:
+    post:
+      summary: Pull official-portal data through an admin-only strict session
+      description: Requires a verified family-admin session before any official-portal request. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Remote pull results }
+        "400": { description: Missing session or invalid table URL }
+        "401": *mediaUnauthorized
+  /official-sync/archive-stats:
+    get:
+      summary: Read admin-only historical archive statistics
+      description: Requires a verified family-admin session before SQL access. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Archive statistics }
+        "401": *mediaUnauthorized
+  /official-sync/archive-upgrade-radar:
+    get:
+      summary: Read admin-only historical upgrade candidates
+      description: Requires a verified family-admin session before reading student history. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Upgrade candidates and revenue estimates }
+        "401": *mediaUnauthorized
+  /official-sync/partner-agents:
+    get:
+      summary: List admin-only partner teacher and invite records
+      description: Requires a verified family-admin session before SQL access. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Partner agent records }
+        "401": *mediaUnauthorized
+  /official-sync/studio-growth-intelligence:
+    get:
+      summary: Read admin-only studio growth intelligence
+      description: Requires a verified family-admin session before reading teacher and student history. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Studio growth analysis }
+        "401": *mediaUnauthorized
+  /official-sync/teacher-fee-and-filing-report:
+    get:
+      summary: Read admin-only teacher fee and filing reports
+      description: Requires a verified family-admin session before reading student or financial history. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Teacher fee and filing report }
+        "401": *mediaUnauthorized
+  /official-sync/mom-upload-log:
+    get:
+      summary: Read the admin-only certificate and photo upload log
+      description: Requires a verified family-admin session before SQL access. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Upload log entries }
+        "401": *mediaUnauthorized
+  /official-sync/look-score-captcha:
+    get:
+      summary: Request an official score-query captcha through an admin-only route
+      description: Requires a verified family-admin session before any official-portal request. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Captcha challenge }
+        "401": *mediaUnauthorized
+  /official-sync/look-score-query:
+    post:
+      summary: Query student scores through an admin-only strict session
+      description: Requires a verified family-admin session before SQL or official-portal access. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Score query results }
+        "400": { description: Missing student name }
+        "401": *mediaUnauthorized
+  /official-sync/yushen-model-status:
+    get:
+      summary: Read admin-only acoustic model status
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Installed model status }
+        "401": *mediaUnauthorized
+        "503": { description: Model is not installed }
   /official-sync/student-lookup:
     get:
       summary: Search historical student profiles and exam records within the verified session scope

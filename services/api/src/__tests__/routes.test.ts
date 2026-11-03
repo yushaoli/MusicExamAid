@@ -801,6 +801,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const modelStRes = await app.inject({
       method: 'GET',
       url: '/official-sync/yushen-model-status',
+      headers: adminHeaders(),
     });
     assert.equal(modelStRes.statusCode, 200);
     assert.ok(typeof modelStRes.json().model_version === 'string');
