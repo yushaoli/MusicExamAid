@@ -13,8 +13,12 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { formatRmbYuan } from '@musicexamaid/shared';
 import { dispatchWeComAlert } from './integrations';
+import { requireVerifiedFamilyAdmin } from '../auth/family-session';
 
 export async function paymentConcessionRoutes(app: FastifyInstance): Promise<void> {
+  // Financial records and mutations fail closed until verified parent/teacher ownership exists.
+  app.addHook('preHandler', requireVerifiedFamilyAdmin);
+
   // 0. Per-Teacher × Per-Grade Rate Card Schedule (GET & PUT)
   app.get(
     '/concessions/rate-cards',
