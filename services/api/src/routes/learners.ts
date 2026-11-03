@@ -9,6 +9,7 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { StoredLearner } from '../store/repository';
+import { requireVerifiedFamilyAdmin } from '../auth/family-session';
 import { minioClient } from '../store/minio';
 import {
   persistLearnerToPostgres,
@@ -56,6 +57,9 @@ function toPublicLearner(learner: StoredLearner) {
 }
 
 export async function learnerRoutes(app: FastifyInstance): Promise<void> {
+  // Learner PII and photos fail closed until verified parent/teacher ownership exists.
+  app.addHook('preHandler', requireVerifiedFamilyAdmin);
+
   app.get('/learners', async (_req: FastifyRequest, reply: FastifyReply) => {
     const items = app.store.listLearners().map(toPublicLearner);
     return reply.code(200).send({ items });

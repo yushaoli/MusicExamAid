@@ -17,6 +17,7 @@ import {
 } from '@musicexamaid/shared';
 import type { RegistrationStatusType } from '@musicexamaid/shared';
 import { dispatchWeComAlert } from './integrations';
+import { requireVerifiedFamilyAdmin } from '../auth/family-session';
 
 interface CreateRegistrationBody {
   learner_id?: string;
@@ -46,6 +47,9 @@ function isRegistrationStatus(val: unknown): val is RegistrationStatusType {
 }
 
 export async function registrationRoutes(app: FastifyInstance): Promise<void> {
+  // Registration PII and workflow writes require verified administrative access.
+  app.addHook('preHandler', requireVerifiedFamilyAdmin);
+
   app.get('/registrations', async (_req: FastifyRequest, reply: FastifyReply) => {
     const items = app.store.listRegistrations().map(r => {
       const learner = app.store.getLearner(r.learner_id);

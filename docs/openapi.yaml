@@ -55,6 +55,17 @@ paths:
                   locked_agent: { type: object, nullable: true }
         "401":
           description: Invalid invite/ref or missing family-admin credentials
+  /official-sync/consolidate:
+    post:
+      summary: Consolidate official and helper registrations with admin-only PII access
+      description: Requires a verified family-admin session in every environment before reading or creating learner, registration or payment records. Responses use Cache-Control=no-store.
+      security:
+        - familySessionHeader: []
+        - familySessionCookie: []
+        - signedSessionBearer: []
+      responses:
+        "200": { description: Consolidation report and ingested registration IDs }
+        "401": { description: Missing, expired or invalid family-admin session }
   /official-sync/student-lookup:
     get:
       summary: Search historical student profiles and exam records within the verified session scope
@@ -131,12 +142,19 @@ paths:
           description: Service health status
   /learners:
     get:
-      summary: List learner profiles with masked IDs (id_last4)
+      summary: List admin-only learner profiles with masked IDs (id_last4)
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: &domainFamilyAdminSecurity
+        - familySessionHeader: []
+        - familySessionCookie: []
+        - signedSessionBearer: []
       responses:
-        "200":
-          description: Learner list
+        "200": { description: Learner list }
+        "401": &domainUnauthorized { description: Missing, expired or invalid family-admin session }
     post:
-      summary: Create learner profile with AES-256-GCM encrypted ID at rest
+      summary: Create an admin-only learner profile with AES-256-GCM encrypted ID at rest
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *domainFamilyAdminSecurity
       requestBody:
         required: true
         content:
@@ -152,22 +170,26 @@ paths:
                 id_number: { type: string }
                 guardian_phone: { type: string }
       responses:
-        "201":
-          description: Learner created (returns id_last4 only)
+        "201": { description: Learner created (returns id_last4 only) }
+        "401": *domainUnauthorized
   /learners/{id}:
     get:
-      summary: Get learner profile (masked ID)
+      summary: Get an admin-only learner profile (masked ID)
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *domainFamilyAdminSecurity
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
       responses:
-        "200":
-          description: Learner profile
+        "200": { description: Learner profile }
+        "401": *domainUnauthorized
   /learners/{id}/photo:
     post:
-      summary: Upload or replace learner portrait photo (base64 JPEG/PNG) for ZIP bundle export
+      summary: Upload or replace an admin-only learner portrait photo (base64 JPEG/PNG) for ZIP bundle export
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *domainFamilyAdminSecurity
       parameters:
         - in: path
           name: id
@@ -183,16 +205,20 @@ paths:
               properties:
                 photo_base64: { type: string }
       responses:
-        "200":
-          description: Portrait photo stored
+        "200": { description: Portrait photo stored }
+        "401": *domainUnauthorized
   /registrations:
     get:
-      summary: List registrations with resolved Chinese subject names
+      summary: List admin-only registrations with resolved Chinese subject names
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *domainFamilyAdminSecurity
       responses:
-        "200":
-          description: Registration list
+        "200": { description: Registration list }
+        "401": *domainUnauthorized
     post:
-      summary: Create draft registration record for an exam cycle
+      summary: Create an admin-only draft registration record for an exam cycle
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *domainFamilyAdminSecurity
       requestBody:
         required: true
         content:
@@ -211,22 +237,26 @@ paths:
                   type: array
                   items: { type: string }
       responses:
-        "201":
-          description: Draft registration created
+        "201": { description: Draft registration created }
+        "401": *domainUnauthorized
   /registrations/{id}:
     get:
-      summary: Get registration detail and status transition history
+      summary: Get admin-only registration detail and status transition history
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *domainFamilyAdminSecurity
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
       responses:
-        "200":
-          description: Registration detail
+        "200": { description: Registration detail }
+        "401": *domainUnauthorized
   /registrations/{id}/status:
     patch:
-      summary: Transition registration status (supports 1-click submitted -> locked, writes encrypted snapshot, triggers WeCom/WeChat MP notifications)
+      summary: Transition an admin-only registration status (supports 1-click submitted -> locked, writes encrypted snapshot, triggers notifications)
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *domainFamilyAdminSecurity
       parameters:
         - in: path
           name: id
@@ -249,21 +279,24 @@ paths:
                 teacher_notes:
                   type: string
       responses:
-        "200":
-          description: Registration status updated
-        "409":
-          description: Invalid status transition
+        "200": { description: Registration status updated }
+        "401": *domainUnauthorized
+        "409": { description: Invalid status transition }
   /archives:
     get:
-      summary: List learner exam archive records
+      summary: List admin-only learner exam archive records
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *domainFamilyAdminSecurity
       responses:
-        "200":
-          description: Archive list
+        "200": { description: Archive list }
+        "401": *domainUnauthorized
     post:
-      summary: Save exam result/certificate record to learner archive
+      summary: Save an admin-only exam result/certificate record to learner archive
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *domainFamilyAdminSecurity
       responses:
-        "201":
-          description: Archive record created
+        "201": { description: Archive record created }
+        "401": *domainUnauthorized
   /exports:
     post:
       summary: Queue an admin-only export batch for locked registrations (generates Template v2.1 preview rows and portrait photo paths)
@@ -352,6 +385,38 @@ paths:
           description: ZIP archive attachment
         "401":
           description: Missing, expired or invalid family-admin session
+  /value-added/catalog:
+    get:
+      summary: List public value-added service catalog entries
+      responses:
+        "200": { description: Service catalog }
+  /value-added/id-photo-polish:
+    post:
+      summary: Process an exam ID photo, with admin-only stored learner access
+      description: Generic processing without learner_id is public. Supplying learner_id requires a verified family-admin session before reading or updating the learner. Learner-linked responses use Cache-Control=no-store.
+      security:
+        - familySessionHeader: []
+        - familySessionCookie: []
+        - signedSessionBearer: []
+        - {}
+      responses:
+        "200": { description: Photo compliance and polish result }
+        "401": { description: learner_id was supplied without a verified family-admin session }
+  /value-added/upgrade-radar:
+    get:
+      summary: Analyze admin-only learner registration and archive history
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *domainFamilyAdminSecurity
+      responses:
+        "200": { description: Upgrade candidates and expected financial totals }
+        "401": *domainUnauthorized
+    post:
+      summary: Analyze admin-only stored and supplied historical learner records
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *domainFamilyAdminSecurity
+      responses:
+        "200": { description: Upgrade candidates and expected financial totals }
+        "401": *domainUnauthorized
   /concessions/rate-cards:
     get:
       summary: Read an admin-only per-teacher pricing and concession schedule
@@ -465,7 +530,13 @@ paths:
   /rpc/{action}:
     post:
       summary: Zero-rewrite RPC bridge for WeChat Mini Program (apps/wechat-mini)
-      description: The superBatchExportOnce action and financial actions (teacherRateCardsGet, adminUpsertTeacherRateCard, paymentCheckout, teacherConcessionWallet, adminConfirmConcession, teacherRequestWithdrawal, adminPayoutWithdrawal) require a verified family-admin session in every environment and return Cache-Control=no-store. Public dictionary actions remain available without a session. Authorization for other actions is route-specific follow-up work.
+      description: >-
+        Protected actions require a verified family-admin session in every environment and return
+        Cache-Control=no-store: superBatchExportOnce; the seven financial actions; learnerList,
+        learnerGet, learnerUpsert, enrollmentCreateOrUpdate, registrationCreate, registrationList,
+        teacherRosterList, registrationGet, teacherRegistrationGetDetail, registrationSubmit,
+        teacherRequestChanges, teacherConfirm, teacherLock and teacherUnlock. Public dictionary
+        actions remain available without a session. Authorization for other actions is follow-up work.
       parameters:
         - in: path
           name: action
@@ -475,7 +546,7 @@ paths:
         "200":
           description: RPC result ({ success, data })
         "401":
-          description: A protected export or financial action requires a verified family-admin session
+          description: A protected export, financial or domain action requires a verified family-admin session
   /webhooks/wechat-mp:
     get:
       summary: WeChat Service Account server URL verification (echostr)

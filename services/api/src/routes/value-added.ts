@@ -15,6 +15,7 @@ import {
   evaluateHistoricalUpgradeRadar,
   type HistoricalStudentRecord,
 } from '@musicexamaid/shared';
+import { requireVerifiedFamilyAdmin } from '../auth/family-session';
 
 export async function valueAddedRoutes(app: FastifyInstance): Promise<void> {
   // 1. List value-added monetization catalog
@@ -45,6 +46,11 @@ export async function valueAddedRoutes(app: FastifyInstance): Promise<void> {
       }>,
       reply: FastifyReply,
     ) => {
+      // Generic photo processing can stay public; stored learner access cannot.
+      if (req.body?.learner_id) {
+        await requireVerifiedFamilyAdmin(req, reply);
+        if (reply.sent) return;
+      }
       const body = req.body ?? {};
       const learner = body.learner_id ? app.store.getLearner(body.learner_id) : undefined;
       const nameCn = body.name_cn || learner?.name_cn || '陈小乐';
@@ -139,6 +145,8 @@ export async function valueAddedRoutes(app: FastifyInstance): Promise<void> {
       }>,
       reply: FastifyReply,
     ) => {
+      await requireVerifiedFamilyAdmin(req, reply);
+      if (reply.sent) return;
       const targetCycleId = req.query?.target_cycle_id || '2025-summer';
       const res = await handleUpgradeRadar(targetCycleId, req.query?.teacher_id);
       return reply.code(200).send(res);
@@ -157,6 +165,8 @@ export async function valueAddedRoutes(app: FastifyInstance): Promise<void> {
       }>,
       reply: FastifyReply,
     ) => {
+      await requireVerifiedFamilyAdmin(req, reply);
+      if (reply.sent) return;
       const body = req.body ?? {};
       const targetCycleId = body.target_cycle_id || '2025-summer';
       const res = await handleUpgradeRadar(
