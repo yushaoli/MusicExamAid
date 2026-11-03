@@ -751,6 +751,60 @@ paths:
           description: Parent role, token expiry and granted learner_ids
         "401": &parentUnauthorized
           description: Missing, expired or invalid parent session
+  /parent/learners:
+    get:
+      summary: List public learner profiles covered by the parent's active grants
+      description: >-
+        Returns only explicitly granted learners. Encrypted ID numbers and ungranted
+        records are never returned. Responses use Cache-Control=no-store.
+      security: *parentSessionSecurity
+      responses:
+        "200": { description: Granted learner profiles with id_last4 but no encrypted ID number }
+        "401": *parentUnauthorized
+  /parent/learners/{learnerId}:
+    get:
+      summary: Read one learner profile through an active parent grant
+      description: >-
+        The grant is checked before repository access. Missing and cross-owner IDs both
+        return 404 to avoid learner enumeration. Responses use Cache-Control=no-store.
+      security: *parentSessionSecurity
+      parameters:
+        - in: path
+          name: learnerId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Granted public learner profile }
+        "401": *parentUnauthorized
+        "404": { description: Learner missing or not granted to this parent }
+  /parent/registrations:
+    get:
+      summary: List registrations whose learner is actively granted to the parent
+      description: >-
+        Registration records are filtered by current learner grants. Responses omit
+        snapshot_json and internal status history and use Cache-Control=no-store.
+      security: *parentSessionSecurity
+      responses:
+        "200": { description: Owned registrations with workflow status and learner name }
+        "401": *parentUnauthorized
+  /parent/registrations/{registrationId}:
+    get:
+      summary: Read one registration only when its learner is granted to the parent
+      description: >-
+        After parent authentication and grant lookup, the server resolves the registration's
+        learner and verifies that learner before returning any fields. Missing and cross-owner
+        IDs both return 404. Responses omit snapshot_json and internal status history and use
+        Cache-Control=no-store.
+      security: *parentSessionSecurity
+      parameters:
+        - in: path
+          name: registrationId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Owned public registration details }
+        "401": *parentUnauthorized
+        "404": { description: Registration missing or its learner is not granted }
   /parent/learners/{learnerId}/grant:
     parameters:
       - in: path

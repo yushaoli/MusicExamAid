@@ -37,6 +37,8 @@
 - `POST /exports`, `GET /exports/:job_id/csv`, `GET /exports/:job_id/bundle.zip`
 - `POST /rpc/:action` — Mini Program RPC bridge
 - `POST /parent/auth`, `GET /parent/session`
+- `GET /parent/learners`, `GET /parent/learners/:learnerId`
+- `GET /parent/registrations`, `GET /parent/registrations/:registrationId`
 - `PUT|DELETE /parent/learners/:learnerId/grant`, `GET /parent/learners/:learnerId/grants`
 - `GET|POST /webhooks/wechat-mp`, `GET /webhooks/wechat-mp/menu-config`
 - `GET|POST /webhooks/wecom`
@@ -58,7 +60,7 @@ The current teacher session identifies a numeric official-portal agent, while fi
 
 All learner, registration and archive routes require a verified family-admin session in every environment, including portrait upload and registration status changes. Their 14 learner/enrollment/registration/teacher-workflow RPC actions enforce the same boundary. `POST /official-sync/consolidate` and both upgrade-radar routes also require admin credentials because they read or create the same domain records. Learner-linked ID-photo polish requires admin credentials; generic photo processing without `learner_id` remains public because it does not open the repository.
 
-Anonymous and teacher credentials are rejected before repository access, and guarded responses use `Cache-Control: no-store`. Parent and teacher domain workflows stay disabled until record-level grant checks are added to those routes. The current parent session exposes only explicitly granted learner IDs. A client-supplied learner, registration, teacher or institution ID is never proof of ownership.
+Anonymous and teacher credentials are rejected before repository access, and guarded responses use `Cache-Control: no-store`. The original admin domain and RPC routes remain admin-only. Separate read-only `/parent/learners` and `/parent/registrations` routes enforce current parent grants at record level; parent writes and teacher domain workflows remain disabled. A client-supplied learner, registration, teacher or institution ID is never proof of ownership.
 
 ## Integration and notification authorization
 
@@ -74,7 +76,7 @@ Only seven entry points are exempt from the plugin-wide admin hook because they 
 
 The media proxy, cache statistics, prebuffer, certificate/photo staging and execution, video initial-review check/apply, and AI 5D review routes require a verified family-admin session before SQL, object-storage, media-processing or portal work. This strict policy also applies in development and returns `Cache-Control: no-store`.
 
-The Mini Program RPC bridge is now default-deny. Only `getDictSubjects`, `getDictCycles` and the static `institutionList` remain public; every other current or future action requires a verified family-admin session. The 18 declared but unimplemented legacy actions return `501 RPC_NOT_IMPLEMENTED`, including the former `authLogin` placeholder that invented admin roles. Unknown actions return `404 RPC_NOT_FOUND`; neither case reports false success. The Mini Program now sends its verified parent token on direct RPC requests, but parent credentials do not satisfy the admin guard. Protected workflows remain unavailable until their record-level ownership checks are implemented.
+The Mini Program RPC bridge is now default-deny. Only `getDictSubjects`, `getDictCycles` and the static `institutionList` remain public; every other current or future action requires a verified family-admin session. The 18 declared but unimplemented legacy actions return `501 RPC_NOT_IMPLEMENTED`, including the former `authLogin` placeholder that invented admin roles. Unknown actions return `404 RPC_NOT_FOUND`; neither case reports false success. Parent read wrappers use the scoped `/parent` endpoints below instead of privileged RPCs. Remaining protected RPC writes still require admin credentials and stay unavailable to parents until their record-level ownership checks are implemented.
 
 ## Parent identity and ownership grants
 
@@ -82,7 +84,9 @@ The Mini Program RPC bridge is now default-deny. Only `getDictSubjects`, `getDic
 
 Authentication does not imply ownership. `infra/migrations/010_parent_learner_grants.sql` defines standalone, revocable grants keyed by provider-verified parent OpenID and the running repository's string learner ID. Strict family admins create, list and revoke these grants through `/parent/learners/:learnerId/grant(s)`. Grant creation requires an existing learner. `GET /parent/session` returns only the authenticated parent's active granted learner IDs; revoking a grant removes access on the next request even while the parent token remains valid. Grant audit rows retain the revocation timestamp.
 
-The legacy `learners.parent_user_id`, `mp_default_parent_openid`, referrals, teacher IDs, registration IDs and institution IDs are not ownership evidence. The Mini Program uses `wx.login`, stores only the parent token, and refreshes expired sessions. Parent historical lookup, learner profiles, registration workflows, exports and checkout remain disabled until each operation enforces these grants at record level. No live migration or provider exchange is part of offline tests.
+The legacy `learners.parent_user_id`, `mp_default_parent_openid`, referrals, teacher IDs, registration IDs and institution IDs are not ownership evidence. The Mini Program uses `wx.login`, stores only the parent token, and refreshes expired sessions. Its learner and registration read wrappers now use scoped `/parent` endpoints while preserving the legacy `_id` and `workflow_status` response fields. Parent profile lists and details require active grants, and cross-owner learner IDs are denied before repository access. Registration lists and details return only records whose learner is currently granted; responses omit encrypted snapshots and internal status history. Revocation immediately removes both learner and registration access.
+
+Parent writes, historical lookup, exports and checkout remain disabled until each operation has equivalent record-level authorization. No live migration or provider exchange is part of offline tests.
 
 ## Historical student lookup authorization
 

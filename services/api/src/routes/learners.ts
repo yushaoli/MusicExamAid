@@ -39,7 +39,7 @@ interface UploadPhotoBody {
   persist_db?: boolean;
 }
 
-function toPublicLearner(learner: StoredLearner) {
+export function toPublicLearner(learner: StoredLearner) {
   return {
     id: learner.id,
     name_cn: learner.name_cn,
