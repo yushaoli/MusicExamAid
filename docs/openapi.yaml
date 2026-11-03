@@ -66,6 +66,80 @@ paths:
       responses:
         "200": { description: Consolidation report and ingested registration IDs }
         "401": { description: Missing, expired or invalid family-admin session }
+  /official-sync/media-proxy:
+    get:
+      summary: Proxy cached student media with an admin-only strict session
+      description: Requires a verified family-admin session before media SQL or object-storage access. Responses use Cache-Control=no-store.
+      security: &mediaFamilyAdminSecurity
+        - familySessionHeader: []
+        - familySessionCookie: []
+        - signedSessionBearer: []
+      responses:
+        "200": { description: Student photo or video bytes }
+        "206": { description: Requested media byte range }
+        "400": { description: Missing source URL }
+        "401": &mediaUnauthorized { description: Missing, expired or invalid family-admin session }
+  /official-sync/media-cache-stats:
+    get:
+      summary: Read admin-only media cache and dataset mirror statistics
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Cache statistics and recent media metadata }
+        "401": *mediaUnauthorized
+  /official-sync/media-prebuffer:
+    post:
+      summary: Prebuffer admin-selected student media into local object storage
+      description: Requires a verified family-admin session before reading historical exams or writing media. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Media prebuffer results }
+        "401": *mediaUnauthorized
+  /official-sync/stage-cert-or-photo:
+    post:
+      summary: Stage admin-only certificate, score screenshot or ID-photo metadata
+      description: Requires a verified family-admin session before historical student lookup. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Staged media metadata and student matches }
+        "401": *mediaUnauthorized
+  /official-sync/execute-cert-or-photo:
+    post:
+      summary: Execute an admin-only certificate or photo upload
+      description: Requires a verified family-admin session before database, storage or official-portal work. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Upload execution result }
+        "400": { description: Invalid upload request }
+        "401": *mediaUnauthorized
+  /official-sync/video-chushen-check:
+    post:
+      summary: Run admin-only video initial-review checks
+      description: Requires a verified family-admin session for both read-only checks and persisted updates. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Initial-review results }
+        "401": *mediaUnauthorized
+        "404": { description: No matching exam videos }
+  /official-sync/video-chushen-apply:
+    post:
+      summary: Apply admin-only initial-review outcomes
+      description: Requires a verified family-admin session before database or official-portal work. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Applied review outcomes }
+        "400": { description: Missing review items }
+        "401": *mediaUnauthorized
+  /official-sync/video-ai-5d-review:
+    post:
+      summary: Run an admin-only AI 5D pre-exam review
+      description: Requires a verified family-admin session before reading student history or videos. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      responses:
+        "200": { description: Pre-exam assessment }
+        "400": { description: Missing exam ID }
+        "401": *mediaUnauthorized
+        "404": { description: Exam not found }
   /official-sync/student-lookup:
     get:
       summary: Search historical student profiles and exam records within the verified session scope
@@ -531,12 +605,11 @@ paths:
     post:
       summary: Zero-rewrite RPC bridge for WeChat Mini Program (apps/wechat-mini)
       description: >-
-        Protected actions require a verified family-admin session in every environment and return
-        Cache-Control=no-store: superBatchExportOnce; the seven financial actions; learnerList,
-        learnerGet, learnerUpsert, enrollmentCreateOrUpdate, registrationCreate, registrationList,
-        teacherRosterList, registrationGet, teacherRegistrationGetDetail, registrationSubmit,
-        teacherRequestChanges, teacherConfirm, teacherLock and teacherUnlock. Public dictionary
-        actions remain available without a session. Authorization for other actions is follow-up work.
+        The bridge is default-deny. Only getDictSubjects, getDictCycles and institutionList are
+        public. Every other action requires a verified family-admin session in every environment
+        and returns Cache-Control=no-store. The 18 declared legacy actions without server
+        implementations return 501 RPC_NOT_IMPLEMENTED, including authLogin; unknown actions return
+        404 RPC_NOT_FOUND. Placeholder identities, roles and success results are never issued.
       parameters:
         - in: path
           name: action
@@ -546,7 +619,11 @@ paths:
         "200":
           description: RPC result ({ success, data })
         "401":
-          description: A protected export, financial or domain action requires a verified family-admin session
+          description: A non-public action requires a verified family-admin session
+        "404":
+          description: Unknown RPC action (RPC_NOT_FOUND)
+        "501":
+          description: Declared legacy action has no server implementation (RPC_NOT_IMPLEMENTED)
   /webhooks/wechat-mp:
     get:
       summary: WeChat Service Account server URL verification (echostr)
