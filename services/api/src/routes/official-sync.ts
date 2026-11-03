@@ -22,7 +22,7 @@ import * as path from 'node:path';
 import { getPostgresPool as getLivePostgresPool } from '../store/postgres';
 import type { Pool } from 'pg';
 import { buildSignedFamilyToken, verifySignedFamilyToken, extractAndVerifyRequestFamilySession,
-  requireFamilyAdminPreHandler, requireVerifiedFamilyAdmin, familySessionCookie } from '../auth/family-session';
+  requireVerifiedFamilyAdmin, familySessionCookie } from '../auth/family-session';
 import { buildSignedTeacherToken, isStrongTeacherInvite, requireHistoricalLookupScope,
   teacherSessionCookie } from '../auth/teacher-session';
 export { buildSignedFamilyToken, verifySignedFamilyToken } from '../auth/family-session';
@@ -115,8 +115,23 @@ export interface OfficialSyncOptions {
   postgresPool?: Pick<Pool, 'query'>;
 }
 
+// These entry points authenticate in their own handlers. Everything else is admin-only.
+const SELF_AUTHORIZING_OFFICIAL_SYNC_ROUTES = new Set([
+  '/official-sync/session-status',
+  '/official-sync/qr-session',
+  '/official-sync/wxauth-poll',
+  '/official-sync/family-auth',
+  '/official-sync/student-lookup',
+  '/official-sync/resolve-session',
+  '/official-sync/bind-teacher-wechat',
+]);
+
 export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyncOptions = {}): Promise<void> {
   const getPostgresPool = () => opts.postgresPool ?? getLivePostgresPool();
+  app.addHook('preHandler', async (req, reply) => {
+    if (SELF_AUTHORIZING_OFFICIAL_SYNC_ROUTES.has(req.routeOptions.url ?? '')) return;
+    await requireVerifiedFamilyAdmin(req, reply);
+  });
   // 0. Check whether ubtxiaomi already holds an active authenticated PHPSESSID session
   app.get('/official-sync/session-status', async (_req, reply) => {
     if (!cachedOfficialSession) {
@@ -470,7 +485,7 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
       }>,
       reply: FastifyReply,
     ) => {
-      await requireFamilyAdminPreHandler(req, reply);
+      await requireVerifiedFamilyAdmin(req, reply);
       if (reply.sent) return;
       const body = req.body ?? {};
       const sessId = body.php_sess_id || cachedOfficialSession?.php_sess_id;
@@ -812,7 +827,7 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
 
   // 7. List all Partner Teachers/Agents with invite_token, parent_referral_code & WeChat binding status (`GET /official-sync/partner-agents`)
   app.get('/official-sync/partner-agents', async (req, reply) => {
-    await requireFamilyAdminPreHandler(req, reply);
+    await requireVerifiedFamilyAdmin(req, reply);
     if (reply.sent) return;
     const pool = getPostgresPool();
     const { rows } = await pool.query(`
@@ -1011,7 +1026,7 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
 
   // 8b. Full-Year Combined (`寒假 + 暑假`) Teacher & Studio Evaluation (`GET /official-sync/studio-growth-intelligence`)
   app.get('/official-sync/studio-growth-intelligence', async (req, reply) => {
-    await requireFamilyAdminPreHandler(req, reply);
+    await requireVerifiedFamilyAdmin(req, reply);
     if (reply.sent) return;
     const pool = getPostgresPool();
     const [studiosRes, theoryGapRes] = await Promise.all([
@@ -1233,7 +1248,7 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
         reply.header('Set-Cookie', teacherSessionCookie(null));
         return reply.code(401).send({ error: 'INVALID_INVITE' });
       }
-      await requireFamilyAdminPreHandler(req, reply);
+      await requireVerifiedFamilyAdmin(req, reply);
       if (reply.sent) return;
       return reply.code(200).send({
         role: role === 'parent' ? 'parent' : 'admin',
@@ -1272,7 +1287,7 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
         return reply.code(400).send({ error: 'VALIDATION_ERROR', message: 'agent_id must be a positive integer' });
       }
       if (!body.invite_token) {
-        await requireFamilyAdminPreHandler(req, reply);
+        await requireVerifiedFamilyAdmin(req, reply);
         if (reply.sent) return;
       }
       // A token grants access only to its own row; a supplied numeric ID must also match.

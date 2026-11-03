@@ -44,7 +44,7 @@
 
 All `/exports` routes (`POST /exports`, `POST /exports/dedup-preflight`, CSV and ZIP downloads) require a verified family-admin session, including when `ENFORCE_SERVER_AUTH=0` in development. `POST /rpc/superBatchExportOnce` enforces the same boundary so the Mini Program bridge cannot bypass it. Header, bearer and family cookie credentials are supported; teacher sessions do not authorize exports. Responses use `Cache-Control: no-store` because previews and downloads contain plaintext identity numbers and portrait photos.
 
-Export batches do not yet have verified teacher ownership metadata. Teacher access therefore fails closed rather than trusting a client-supplied teacher or institution ID. Remaining official-sync administration and verified role ownership stay separate follow-up work.
+Export batches do not yet have verified teacher ownership metadata. Teacher access therefore fails closed rather than trusting a client-supplied teacher or institution ID. Verified parent/teacher ownership remains separate follow-up work.
 
 ## Financial authorization
 
@@ -57,6 +57,12 @@ The current teacher session identifies a numeric official-portal agent, while fi
 All learner, registration and archive routes require a verified family-admin session in every environment, including portrait upload and registration status changes. Their 14 learner/enrollment/registration/teacher-workflow RPC actions enforce the same boundary. `POST /official-sync/consolidate` and both upgrade-radar routes also require admin credentials because they read or create the same domain records. Learner-linked ID-photo polish requires admin credentials; generic photo processing without `learner_id` remains public because it does not open the repository.
 
 Anonymous and teacher credentials are rejected before repository access, and guarded responses use `Cache-Control: no-store`. Parent and teacher domain workflows stay disabled until verified ownership mappings exist. A client-supplied learner, registration, teacher or institution ID is never proof of ownership.
+
+## Official-sync authorization
+
+All official-sync administration routes are strict family-admin-only by default, including archive statistics and upgrade reports, partner agents, studio intelligence, teacher fee/filing reports, upload logs, score lookup/captcha, model status, and remote pulls. The policy applies before SQL, object-storage, media-processing or official-portal work in every environment and returns `Cache-Control: no-store`.
+
+Only seven entry points are exempt from the plugin-wide admin hook because they authenticate in their own handlers: session status, QR session creation/polling, family-token verification, teacher-scoped student lookup, invite/session resolution, and invite-based teacher WeChat binding. ID-based session resolution and teacher binding require strict admin credentials. Student lookup retains its narrower teacher scope; the exemptions do not make administrative data public.
 
 ## Media and remaining RPC authorization
 
@@ -72,4 +78,4 @@ The Mini Program RPC bridge is now default-deny. Only `getDictSubjects`, `getDic
 
 Each teacher lookup rechecks the current invite digest in Postgres, so rotating or removing the invite revokes existing sessions immediately. The server derives the agent ID from the signed token. An explicit different `agent_id` is rejected with 403. Teachers can see only student profiles currently assigned to their agent ID and exam rows recorded under that agent ID. Counts, latest exams and upgrade recommendations use that same restricted history; exams from other institutions are excluded. Admins may filter profiles by current agent while retaining access to complete exam history.
 
-Session resolution and lookup return `Cache-Control: no-store`. Invalid invites and parent referral resolution clear the teacher cookie. Parent referrals identify an entry channel; they do not prove ownership of any learner. Parent lookup remains unavailable until a verified parent-to-learner ownership model is implemented. Remaining official-sync administration and verified role ownership stay separate follow-up work.
+Session resolution and lookup return `Cache-Control: no-store`. Invalid invites and parent referral resolution clear the teacher cookie. Parent referrals identify an entry channel; they do not prove ownership of any learner. Parent lookup remains unavailable until a verified parent-to-learner ownership model is implemented. Verified parent/teacher ownership remains separate follow-up work.
