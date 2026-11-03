@@ -809,6 +809,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const chushenRes = await app.inject({
       method: 'POST',
       url: '/official-sync/video-chushen-check',
+      headers: adminHeaders(),
       payload: {
         season_code: 20245,
         limit: 3,
@@ -832,6 +833,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const applyRes = await app.inject({
       method: 'POST',
       url: '/official-sync/video-chushen-apply',
+      headers: adminHeaders(),
       payload: {
         operator_name: '谈老师 (AI初审台)',
         dry_run: true,
@@ -872,6 +874,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const aiReviewRes = await app.inject({
       method: 'POST',
       url: '/official-sync/video-ai-5d-review',
+      headers: adminHeaders(),
       payload: {
         exam_id: firstItem.exam_id,
       },

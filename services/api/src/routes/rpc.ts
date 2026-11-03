@@ -54,29 +54,33 @@ const DEFAULT_INSTITUTIONS = [
   { _id: 'inst_default', name: '星光音乐艺术中心', legacy_org_id: 'ORG001' },
 ];
 
-const FAMILY_ADMIN_RPC_ACTIONS = new Set([
-  'superBatchExportOnce',
-  'teacherRateCardsGet',
-  'adminUpsertTeacherRateCard',
-  'paymentCheckout',
-  'teacherConcessionWallet',
-  'adminConfirmConcession',
-  'teacherRequestWithdrawal',
-  'adminPayoutWithdrawal',
-  'learnerList',
-  'learnerGet',
-  'learnerUpsert',
-  'enrollmentCreateOrUpdate',
-  'registrationCreate',
-  'registrationList',
-  'teacherRosterList',
-  'registrationGet',
-  'teacherRegistrationGetDetail',
-  'registrationSubmit',
-  'teacherRequestChanges',
-  'teacherConfirm',
-  'teacherLock',
-  'teacherUnlock',
+// Only static dictionaries are public. Every current or future domain action fails closed.
+const PUBLIC_RPC_ACTIONS = new Set([
+  'getDictSubjects',
+  'getDictCycles',
+  'institutionList',
+]);
+
+// Keep legacy client calls explicit: never report a write as successful before it exists.
+const UNIMPLEMENTED_RPC_ACTIONS = new Set([
+  'authLogin',
+  'registrationUpdate',
+  'attachmentCommit',
+  'teacherSubmitToInstitution',
+  'instBatchCreate',
+  'instBatchList',
+  'instBatchGet',
+  'instBatchAddItems',
+  'instBatchRemoveItems',
+  'instBatchPreflight',
+  'instBatchSubmitToSuper',
+  'superIncomingInstBatchesList',
+  'superBatchCreate',
+  'superBatchGet',
+  'superBatchIngestInstitutionBatches',
+  'superBatchDedupRun',
+  'superBatchResolveConflict',
+  'superBatchPreflight',
 ]);
 
 export async function rpcRoutes(app: FastifyInstance): Promise<void> {
@@ -92,25 +96,22 @@ export async function rpcRoutes(app: FastifyInstance): Promise<void> {
       const { action } = req.params;
       const payload = (req.body ?? {}) as Record<string, any>;
 
-      // Do not let the RPC bridge bypass admin-only export, financial or domain boundaries.
-      if (FAMILY_ADMIN_RPC_ACTIONS.has(action)) {
+      // Default-deny every non-public action so future handlers cannot accidentally bypass auth.
+      if (!PUBLIC_RPC_ACTIONS.has(action)) {
         await requireVerifiedFamilyAdmin(req, reply);
         if (reply.sent) return;
       }
 
+      if (UNIMPLEMENTED_RPC_ACTIONS.has(action)) {
+        return reply.code(501).send({
+          success: false,
+          error: 'RPC action is not implemented',
+          code: 'RPC_NOT_IMPLEMENTED',
+        });
+      }
+
       try {
         switch (action) {
-          case 'authLogin':
-            return reply.send({
-              success: true,
-              data: {
-                openid: 'wx_openid_default',
-                household_id: 'hh_default',
-                roles: ['Parent', 'Teacher', 'Admin', 'Super'],
-                classIds: ['inst_default'],
-              },
-            });
-
           case 'getDictSubjects':
             return reply.send({ success: true, data: SUBJECTS_DICT });
 
@@ -390,9 +391,10 @@ export async function rpcRoutes(app: FastifyInstance): Promise<void> {
           }
 
           default:
-            return reply.send({
-              success: true,
-              data: { action, status: 'ok' },
+            return reply.code(404).send({
+              success: false,
+              error: 'Unknown RPC action',
+              code: 'RPC_NOT_FOUND',
             });
         }
       } catch (err) {

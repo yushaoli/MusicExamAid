@@ -1441,6 +1441,8 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
       }>,
       reply: FastifyReply,
     ) => {
+      await requireVerifiedFamilyAdmin(req, reply);
+      if (reply.sent) return;
       const sourceUrl = (req.query?.url || '').trim();
       if (!sourceUrl) {
         return reply.code(400).send({
@@ -1489,7 +1491,9 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
   );
 
   // 12. Query Local MinIO S3 Media Cache & ML Dataset Mirror Statistics (`GET /official-sync/media-cache-stats`)
-  app.get('/official-sync/media-cache-stats', async (_req, reply) => {
+  app.get('/official-sync/media-cache-stats', async (req, reply) => {
+    await requireVerifiedFamilyAdmin(req, reply);
+    if (reply.sent) return;
     const pool = getPostgresPool();
     const [summaryRes, recentRes, datasetRes] = await Promise.all([
       pool.query(`
@@ -1567,6 +1571,8 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
       }>,
       reply: FastifyReply,
     ) => {
+      await requireVerifiedFamilyAdmin(req, reply);
+      if (reply.sent) return;
       const pool = getPostgresPool();
       const body = req.body ?? {};
       const includeVideos = body.include_videos ?? true;
@@ -1846,6 +1852,8 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
       }>,
       reply: FastifyReply,
     ) => {
+      await requireVerifiedFamilyAdmin(req, reply);
+      if (reply.sent) return;
       const pool = getPostgresPool();
       const body = req.body ?? {};
       const rawFilename = (body.filename || '').trim();
@@ -2149,7 +2157,7 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
       }>,
       reply: FastifyReply,
     ) => {
-      await requireFamilyAdminPreHandler(req, reply);
+      await requireVerifiedFamilyAdmin(req, reply);
       if (reply.sent) return;
       const pool = getPostgresPool();
       const b = req.body ?? ({} as any);
@@ -2971,15 +2979,13 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
       }>,
       reply: FastifyReply,
     ) => {
+      await requireVerifiedFamilyAdmin(req, reply);
+      if (reply.sent) return;
       const pool = getPostgresPool();
       const body = req.body ?? {};
       const limit = Math.min(Math.max(Number(body.limit || (body.exam_id ? 1 : 30)), 1), 200);
       const shouldProbeMedia = body.probe_media ?? Boolean(body.exam_id);
       const shouldAutoPersist = body.auto_persist === true;
-      if (shouldAutoPersist) {
-        await requireFamilyAdminPreHandler(req, reply);
-        if (reply.sent) return;
-      }
       const agentKw = (body.agent_keyword || '').trim();
       const acousticModel = loadYushenAcousticModel();
 
@@ -3504,7 +3510,7 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
       }>,
       reply: FastifyReply,
     ) => {
-      await requireFamilyAdminPreHandler(req, reply);
+      await requireVerifiedFamilyAdmin(req, reply);
       if (reply.sent) return;
       const pool = getPostgresPool();
       const operatorName = (req.body?.operator_name || '谈老师 (AI初审台)').trim();
@@ -3677,6 +3683,8 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
       }>,
       reply: FastifyReply,
     ) => {
+      await requireVerifiedFamilyAdmin(req, reply);
+      if (reply.sent) return;
       let examId = Number(req.body?.exam_id || 0);
       let seasonCode = req.body?.season_code ? Number(req.body.season_code) : null;
       if (!examId && req.body?.id) {

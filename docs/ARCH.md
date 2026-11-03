@@ -44,7 +44,7 @@
 
 All `/exports` routes (`POST /exports`, `POST /exports/dedup-preflight`, CSV and ZIP downloads) require a verified family-admin session, including when `ENFORCE_SERVER_AUTH=0` in development. `POST /rpc/superBatchExportOnce` enforces the same boundary so the Mini Program bridge cannot bypass it. Header, bearer and family cookie credentials are supported; teacher sessions do not authorize exports. Responses use `Cache-Control: no-store` because previews and downloads contain plaintext identity numbers and portrait photos.
 
-Export batches do not yet have verified teacher ownership metadata. Teacher access therefore fails closed rather than trusting a client-supplied teacher or institution ID. Media authorization and other RPC actions remain separate follow-up work.
+Export batches do not yet have verified teacher ownership metadata. Teacher access therefore fails closed rather than trusting a client-supplied teacher or institution ID. Remaining official-sync administration and verified role ownership stay separate follow-up work.
 
 ## Financial authorization
 
@@ -58,6 +58,12 @@ All learner, registration and archive routes require a verified family-admin ses
 
 Anonymous and teacher credentials are rejected before repository access, and guarded responses use `Cache-Control: no-store`. Parent and teacher domain workflows stay disabled until verified ownership mappings exist. A client-supplied learner, registration, teacher or institution ID is never proof of ownership.
 
+## Media and remaining RPC authorization
+
+The media proxy, cache statistics, prebuffer, certificate/photo staging and execution, video initial-review check/apply, and AI 5D review routes require a verified family-admin session before SQL, object-storage, media-processing or portal work. This strict policy also applies in development and returns `Cache-Control: no-store`.
+
+The Mini Program RPC bridge is now default-deny. Only `getDictSubjects`, `getDictCycles` and the static `institutionList` remain public; every other current or future action requires a verified family-admin session. The 18 declared but unimplemented legacy actions return `501 RPC_NOT_IMPLEMENTED`, including the former `authLogin` placeholder that invented admin roles. Unknown actions return `404 RPC_NOT_FOUND`; neither case reports false success. Protected Mini Program workflows remain unavailable until the client can present a verified session.
+
 ## Historical student lookup authorization
 
 `GET /official-sync/student-lookup` always requires a verified session, including in development when `ENFORCE_SERVER_AUTH=0`. Family-admin sessions retain full historical access. A client-supplied role, agent ID, OpenID or referral code does not grant access.
@@ -66,4 +72,4 @@ Anonymous and teacher credentials are rejected before repository access, and gua
 
 Each teacher lookup rechecks the current invite digest in Postgres, so rotating or removing the invite revokes existing sessions immediately. The server derives the agent ID from the signed token. An explicit different `agent_id` is rejected with 403. Teachers can see only student profiles currently assigned to their agent ID and exam rows recorded under that agent ID. Counts, latest exams and upgrade recommendations use that same restricted history; exams from other institutions are excluded. Admins may filter profiles by current agent while retaining access to complete exam history.
 
-Session resolution and lookup return `Cache-Control: no-store`. Invalid invites and parent referral resolution clear the teacher cookie. Parent referrals identify an entry channel; they do not prove ownership of any learner. Parent lookup remains unavailable until a verified parent-to-learner ownership model is implemented. Media and remaining RPC authorization stay separate follow-up work.
+Session resolution and lookup return `Cache-Control: no-store`. Invalid invites and parent referral resolution clear the teacher cookie. Parent referrals identify an entry channel; they do not prove ownership of any learner. Parent lookup remains unavailable until a verified parent-to-learner ownership model is implemented. Remaining official-sync administration and verified role ownership stay separate follow-up work.
