@@ -266,7 +266,12 @@ paths:
           description: Archive record created
   /exports:
     post:
-      summary: Queue an export batch for locked registrations (generates Template v2.1 preview rows and portrait photo paths)
+      summary: Queue an admin-only export batch for locked registrations (generates Template v2.1 preview rows and portrait photo paths)
+      description: Requires a verified family-admin session in every environment. Teacher sessions and client-supplied owner IDs do not authorize exports. Responses use Cache-Control=no-store.
+      security:
+        - familySessionHeader: []
+        - familySessionCookie: []
+        - signedSessionBearer: []
       requestBody:
         required: true
         content:
@@ -284,9 +289,16 @@ paths:
       responses:
         "202":
           description: Export job queued with download_csv_url, download_zip_url, and dedup summary
+        "401":
+          description: Missing, expired or invalid family-admin session
   /exports/dedup-preflight:
     post:
-      summary: Preview SuperBatch deduplication and cross-institution/level conflicts before locking an export batch
+      summary: Preview admin-only SuperBatch deduplication and cross-institution/level conflicts before locking an export batch
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security:
+        - familySessionHeader: []
+        - familySessionCookie: []
+        - signedSessionBearer: []
       requestBody:
         required: true
         content:
@@ -302,9 +314,16 @@ paths:
       responses:
         "200":
           description: Dedup report (kept, auto_dropped, conflicts)
+        "401":
+          description: Missing, expired or invalid family-admin session
   /exports/{job_id}/csv:
     get:
-      summary: Download Excel-compatible UTF-8 BOM CSV in strict Template v2.1 column order
+      summary: Download admin-only Excel-compatible UTF-8 BOM CSV in strict Template v2.1 column order
+      description: The CSV contains plaintext identity numbers. Requires a verified family-admin session in every environment and returns Cache-Control=no-store.
+      security:
+        - familySessionHeader: []
+        - familySessionCookie: []
+        - signedSessionBearer: []
       parameters:
         - in: path
           name: job_id
@@ -313,9 +332,16 @@ paths:
       responses:
         "200":
           description: CSV attachment
+        "401":
+          description: Missing, expired or invalid family-admin session
   /exports/{job_id}/bundle.zip:
     get:
-      summary: Download complete ZIP bundle (报名汇总表.csv + photos/{id_number}_{name_cn}.jpg + manifest.json)
+      summary: Download admin-only complete ZIP bundle (报名汇总表.csv + photos/{id_number}_{name_cn}.jpg + manifest.json)
+      description: The bundle contains plaintext identity numbers and portrait photos. Requires a verified family-admin session in every environment and returns Cache-Control=no-store.
+      security:
+        - familySessionHeader: []
+        - familySessionCookie: []
+        - signedSessionBearer: []
       parameters:
         - in: path
           name: job_id
@@ -324,9 +350,12 @@ paths:
       responses:
         "200":
           description: ZIP archive attachment
+        "401":
+          description: Missing, expired or invalid family-admin session
   /rpc/{action}:
     post:
       summary: Zero-rewrite RPC bridge for WeChat Mini Program (apps/wechat-mini)
+      description: The superBatchExportOnce action requires a verified family-admin session in every environment, matching the direct export routes, and returns Cache-Control=no-store. Public dictionary actions remain available without a session. Authorization for other actions is route-specific follow-up work.
       parameters:
         - in: path
           name: action
@@ -335,6 +364,8 @@ paths:
       responses:
         "200":
           description: RPC result ({ success, data })
+        "401":
+          description: superBatchExportOnce requires a verified family-admin session
   /webhooks/wechat-mp:
     get:
       summary: WeChat Service Account server URL verification (echostr)

@@ -2,6 +2,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeWeChatSignature } from '@musicexamaid/shared';
 import { buildApp } from '../app';
+import { buildSignedFamilyToken } from '../auth/family-session';
+
+const adminHeaders = () => ({ 'x-mea-session': buildSignedFamilyToken() });
 
 if (process.env.LIVE_E2E !== '1') process.env.ENABLE_LIVE_STORAGE = '0';
 
@@ -111,6 +114,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const preflightRes = await app.inject({
       method: 'POST',
       url: '/exports/dedup-preflight',
+      headers: adminHeaders(),
       payload: { cycle_id: '2025-summer' },
     });
     assert.equal(preflightRes.statusCode, 200);
@@ -121,6 +125,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const expRes = await app.inject({
       method: 'POST',
       url: '/exports',
+      headers: adminHeaders(),
       payload: {
         cycle_id: '2025-summer',
         batch_type: 'super',
@@ -140,6 +145,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const csvRes = await app.inject({
       method: 'GET',
       url: exported.download_csv_url,
+      headers: adminHeaders(),
     });
     assert.equal(csvRes.statusCode, 200);
     assert.ok(String(csvRes.headers['content-type']).includes('text/csv'));
@@ -149,6 +155,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const zipRes = await app.inject({
       method: 'GET',
       url: exported.download_zip_url,
+      headers: adminHeaders(),
     });
     assert.equal(zipRes.statusCode, 200);
     assert.ok(String(zipRes.headers['content-type']).includes('application/zip'));
@@ -222,6 +229,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const expRes = await app.inject({
       method: 'POST',
       url: '/rpc/superBatchExportOnce',
+      headers: adminHeaders(),
       payload: { cycle_id: '2025-summer' },
     });
     assert.equal(expRes.json().success, true);
@@ -332,6 +340,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const expRes = await app.inject({
       method: 'POST',
       url: '/exports',
+      headers: adminHeaders(),
       payload: {
         cycle_id: '2025-summer',
         registration_ids: [regId],

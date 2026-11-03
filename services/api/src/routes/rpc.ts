@@ -12,6 +12,7 @@ import {
   SUBJECT_NAME_MAP,
   resolveSubjectName,
 } from '@musicexamaid/shared';
+import { requireVerifiedFamilyAdmin } from '../auth/family-session';
 
 const SUBJECTS_DICT = Object.entries(SUBJECT_NAME_MAP).map(
   ([subject_id, subject_name]) => ({
@@ -65,6 +66,12 @@ export async function rpcRoutes(app: FastifyInstance): Promise<void> {
     ) => {
       const { action } = req.params;
       const payload = (req.body ?? {}) as Record<string, any>;
+
+      // Do not let the RPC bridge bypass the export routes' admin-only boundary.
+      if (action === 'superBatchExportOnce') {
+        await requireVerifiedFamilyAdmin(req, reply);
+        if (reply.sent) return;
+      }
 
       try {
         switch (action) {
