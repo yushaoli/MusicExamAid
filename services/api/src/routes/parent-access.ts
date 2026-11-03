@@ -1,6 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
+import { resolveSubjectName } from '@musicexamaid/shared';
 import { getPostgresPool as getLivePostgresPool } from '../store/postgres';
+import type { StoredRegistration } from '../store/repository';
+import { toPublicLearner } from './learners';
 import { requireVerifiedFamilyAdmin } from '../auth/family-session';
 import {
   buildSignedParentToken,
@@ -17,10 +20,27 @@ interface ParentGrantBody {
   parent_openid?: string;
 }
 
+function toParentRegistration(registration: StoredRegistration) {
+  const {snapshot_json: _snapshot, ...publicFields} = registration;
+  return {
+    ...publicFields,
+    subject_name: resolveSubjectName(registration.subject_id),
+    has_snapshot: registration.snapshot_json !== null,
+  };
+}
+
 export async function parentAccessRoutes(
   app: FastifyInstance, opts: ParentAccessOptions = {},
 ): Promise<void> {
   const getPool = () => opts.postgresPool ?? getLivePostgresPool();
+  const activeLearnerIds = async (openid: string): Promise<string[]> => {
+    const {rows} = await getPool().query<{learner_id: string}>(
+      `SELECT learner_id FROM parent_learner_grants
+       WHERE parent_openid = $1 AND revoked_at IS NULL ORDER BY granted_at, learner_id`,
+      [openid],
+    );
+    return rows.map(row => row.learner_id);
+  };
 
   app.post(
     '/parent/auth',
@@ -64,17 +84,69 @@ export async function parentAccessRoutes(
   app.get('/parent/session', async (req, reply) => {
     const session = await requireVerifiedParent(req, reply);
     if (!session) return;
-    const {rows} = await getPool().query<{learner_id: string}>(
-      `SELECT learner_id FROM parent_learner_grants
-       WHERE parent_openid = $1 AND revoked_at IS NULL ORDER BY granted_at, learner_id`,
-      [session.openid],
-    );
     return reply.send({
       role: 'parent',
       expires_at: new Date(session.expiresAt * 1000).toISOString(),
-      learner_ids: rows.map(row => row.learner_id),
+      learner_ids: await activeLearnerIds(session.openid),
     });
   });
+
+  app.get('/parent/learners', async (req, reply) => {
+    const session = await requireVerifiedParent(req, reply);
+    if (!session) return;
+    const items = [];
+    for (const learnerId of await activeLearnerIds(session.openid)) {
+      const learner = app.store.getLearner(learnerId);
+      if (learner) items.push(toPublicLearner(learner));
+    }
+    return reply.send({items});
+  });
+
+  app.get(
+    '/parent/learners/:learnerId',
+    async (
+      req: FastifyRequest<{Params: {learnerId: string}}>, reply: FastifyReply,
+    ) => {
+      const session = await requireVerifiedParent(req, reply);
+      if (!session) return;
+      const granted = (await activeLearnerIds(session.openid)).includes(req.params.learnerId);
+      if (!granted) return reply.code(404).send({error: 'LEARNER_NOT_FOUND'});
+      const learner = app.store.getLearner(req.params.learnerId);
+      if (!learner) return reply.code(404).send({error: 'LEARNER_NOT_FOUND'});
+      return reply.send(toPublicLearner(learner));
+    },
+  );
+
+  app.get('/parent/registrations', async (req, reply) => {
+    const session = await requireVerifiedParent(req, reply);
+    if (!session) return;
+    const granted = new Set(await activeLearnerIds(session.openid));
+    if (granted.size === 0) return reply.send({items: []});
+    const items = app.store.listRegistrations()
+      .filter(registration => granted.has(registration.learner_id))
+      .map(registration => ({
+        ...toParentRegistration(registration),
+        learner_name_cn: app.store.getLearner(registration.learner_id)?.name_cn ?? '',
+      }));
+    return reply.send({items});
+  });
+
+  app.get(
+    '/parent/registrations/:registrationId',
+    async (
+      req: FastifyRequest<{Params: {registrationId: string}}>, reply: FastifyReply,
+    ) => {
+      const session = await requireVerifiedParent(req, reply);
+      if (!session) return;
+      const granted = new Set(await activeLearnerIds(session.openid));
+      if (granted.size === 0) return reply.code(404).send({error: 'REGISTRATION_NOT_FOUND'});
+      const registration = app.store.getRegistration(req.params.registrationId);
+      if (!registration || !granted.has(registration.learner_id)) {
+        return reply.code(404).send({error: 'REGISTRATION_NOT_FOUND'});
+      }
+      return reply.send(toParentRegistration(registration));
+    },
+  );
 
   app.put(
     '/parent/learners/:learnerId/grant',

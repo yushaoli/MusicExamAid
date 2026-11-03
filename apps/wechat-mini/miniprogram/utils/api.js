@@ -110,8 +110,17 @@ export const authLogin = (code) => callParentApi('/parent/auth', 'POST', { code 
 export const parentSession = () => callParentApi('/parent/session');
 
 // ============ Parent: Learner ============
-export const learnerList = () => callCloud('learnerList');
-export const learnerGet = (learner_id) => callCloud('learnerGet', { learner_id });
+const withLegacyLearnerId = (learner) => ({ _id: learner.id, ...learner });
+const withLegacyRegistrationFields = (registration) => ({
+  _id: registration.id,
+  ...registration,
+  workflow_status: registration.status,
+});
+
+export const learnerList = () => callParentApi('/parent/learners')
+  .then((body) => body.items.map(withLegacyLearnerId));
+export const learnerGet = (learner_id) =>
+  callParentApi(`/parent/learners/${encodeURIComponent(learner_id)}`).then(withLegacyLearnerId);
 export const learnerUpsert = (data) => callCloud('learnerUpsert', data);
 
 // ============ Parent: Enrollment ============
@@ -122,8 +131,13 @@ export const institutionList = () => callCloud('institutionList');
 export const registrationCreate = (data) => callCloud('registrationCreate', data);
 export const registrationUpdate = (data) => callCloud('registrationUpdate', data);
 export const registrationSubmit = (reg_id) => callCloud('registrationSubmit', { reg_id });
-export const registrationList = (filters = {}) => callCloud('registrationList', filters);
-export const registrationGet = (reg_id) => callCloud('registrationGet', { reg_id });
+export const registrationList = (filters = {}) => callParentApi('/parent/registrations')
+  .then((body) => body.items.map(withLegacyRegistrationFields));
+export const registrationGet = async (reg_id) => {
+  const registration = await callParentApi(`/parent/registrations/${encodeURIComponent(reg_id)}`);
+  const learner = await learnerGet(registration.learner_id);
+  return {...withLegacyRegistrationFields(registration), learner};
+};
 
 // ============ Attachments ============
 export const attachmentCommit = (data) => callCloud('attachmentCommit', data);
