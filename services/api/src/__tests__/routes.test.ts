@@ -365,6 +365,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const rateRes = await app.inject({
       method: 'PUT',
       url: '/concessions/rate-cards',
+      headers: adminHeaders(),
       payload: {
         teacher_id: 'tch_zhang',
         level: 5,
@@ -407,6 +408,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const payRes = await app.inject({
       method: 'POST',
       url: '/payments/checkout',
+      headers: adminHeaders(),
       payload: {
         registration_id: regId,
         teacher_id: 'tch_zhang',
@@ -432,6 +434,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const walletRes1 = await app.inject({
       method: 'GET',
       url: '/concessions/wallet?teacher_id=tch_zhang',
+      headers: adminHeaders(),
     });
     assert.equal(walletRes1.statusCode, 200);
     const w1 = walletRes1.json();
@@ -444,6 +447,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const confirmRes = await app.inject({
       method: 'PATCH',
       url: `/concessions/${ledgerId}/confirm`,
+      headers: adminHeaders(),
       payload: {
         adjusted_amount_fen: 9500,
         adjustment_note: '资深合伙协议 ¥80 + 满员额外奖励 ¥15',
@@ -458,6 +462,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const wdRes = await app.inject({
       method: 'POST',
       url: '/concessions/withdrawals',
+      headers: adminHeaders(),
       payload: {
         teacher_id: 'tch_zhang',
         teacher_note: '2025暑期考级第一批提现',
@@ -472,6 +477,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const payoutRes = await app.inject({
       method: 'PATCH',
       url: `/concessions/withdrawals/${withdrawalId}/payout`,
+      headers: adminHeaders(),
       payload: {
         admin_note: '已通过微信转账打款',
         payout_ref: 'wx_payout_20261016',
@@ -483,6 +489,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const walletRes2 = await app.inject({
       method: 'GET',
       url: '/concessions/wallet?teacher_id=tch_zhang',
+      headers: adminHeaders(),
     });
     const w2 = walletRes2.json();
     assert.equal(w2.summary.available_fen, 0);
@@ -603,6 +610,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const walletRes = await app.inject({
       method: 'GET',
       url: '/concessions/wallet?teacher_id=tch_zhang',
+      headers: adminHeaders(),
     });
     assert.equal(walletRes.json().summary.accrued_fen, 7000);
 
@@ -638,6 +646,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     await app.inject({
       method: 'PUT',
       url: '/concessions/rate-cards',
+      headers: adminHeaders(),
       payload: {
         teacher_id: 'tch_zhang',
         level: 6,
@@ -680,6 +689,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const payRes = await app.inject({
       method: 'POST',
       url: '/payments/checkout',
+      headers: adminHeaders(),
       payload: {
         registration_id: regId,
         teacher_id: 'tch_zhang',
@@ -707,6 +717,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const walletRes = await app.inject({
       method: 'GET',
       url: '/concessions/wallet?teacher_id=tch_zhang',
+      headers: adminHeaders(),
     });
     assert.equal(walletRes.json().summary.accrued_fen, 11490);
     assert.equal(walletRes.json().summary.accrued_yuan, '¥114.90');

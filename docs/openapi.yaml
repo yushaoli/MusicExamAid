@@ -352,10 +352,120 @@ paths:
           description: ZIP archive attachment
         "401":
           description: Missing, expired or invalid family-admin session
+  /concessions/rate-cards:
+    get:
+      summary: Read an admin-only per-teacher pricing and concession schedule
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: &familyAdminSecurity
+        - familySessionHeader: []
+        - familySessionCookie: []
+        - signedSessionBearer: []
+      parameters:
+        - in: query
+          name: teacher_id
+          schema: { type: string }
+      responses:
+        "200": { description: Resolved grade rate schedule }
+        "401": &financialUnauthorized { description: Missing, expired or invalid family-admin session }
+    put:
+      summary: Set an admin-only per-teacher, per-grade price and concession
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *familyAdminSecurity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [teacher_id, level, exam_fee_fen, concession_fen]
+              properties:
+                teacher_id: { type: string }
+                level: { type: string }
+                exam_fee_fen: { type: integer, minimum: 0 }
+                concession_fen: { type: integer, minimum: 0 }
+                note: { type: string }
+      responses:
+        "200": { description: Updated rate card }
+        "401": *financialUnauthorized
+  /payments/checkout:
+    post:
+      summary: Create an admin-only exam checkout and concession record
+      description: Requires a verified family-admin session in every environment. Parent checkout remains disabled until verified parent-to-registration ownership exists. Responses use Cache-Control=no-store.
+      security: *familyAdminSecurity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [registration_id]
+              properties:
+                registration_id: { type: string }
+                teacher_id: { type: string }
+                addon_ids: { type: array, items: { type: string } }
+                wx_transaction_id: { type: string }
+      responses:
+        "201": { description: Payment order and concession result }
+        "401": *financialUnauthorized
+  /concessions/wallet:
+    get:
+      summary: Read an admin-only teacher concession wallet, ledger and withdrawals
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *familyAdminSecurity
+      parameters:
+        - in: query
+          name: teacher_id
+          schema: { type: string }
+      responses:
+        "200": { description: Teacher wallet and rate schedule }
+        "401": *financialUnauthorized
+  /concessions/{ledger_id}/confirm:
+    patch:
+      summary: Confirm or adjust an admin-only concession ledger entry
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *familyAdminSecurity
+      parameters:
+        - in: path
+          name: ledger_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Confirmed ledger entry }
+        "401": *financialUnauthorized
+  /concessions/withdrawals:
+    post:
+      summary: Create an admin-only teacher withdrawal request
+      description: Requires a verified family-admin session in every environment. Teacher-initiated withdrawal remains disabled until a verified agent-to-teacher mapping exists. Responses use Cache-Control=no-store.
+      security: *familyAdminSecurity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                teacher_id: { type: string }
+                teacher_note: { type: string }
+                payout_channel: { type: string, enum: [wechat_transfer, bank_transfer] }
+      responses:
+        "201": { description: Withdrawal request and included ledger items }
+        "401": *financialUnauthorized
+  /concessions/withdrawals/{id}/payout:
+    patch:
+      summary: Approve an admin-only withdrawal payout
+      description: Requires a verified family-admin session in every environment. Responses use Cache-Control=no-store.
+      security: *familyAdminSecurity
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Approved payout }
+        "401": *financialUnauthorized
   /rpc/{action}:
     post:
       summary: Zero-rewrite RPC bridge for WeChat Mini Program (apps/wechat-mini)
-      description: The superBatchExportOnce action requires a verified family-admin session in every environment, matching the direct export routes, and returns Cache-Control=no-store. Public dictionary actions remain available without a session. Authorization for other actions is route-specific follow-up work.
+      description: The superBatchExportOnce action and financial actions (teacherRateCardsGet, adminUpsertTeacherRateCard, paymentCheckout, teacherConcessionWallet, adminConfirmConcession, teacherRequestWithdrawal, adminPayoutWithdrawal) require a verified family-admin session in every environment and return Cache-Control=no-store. Public dictionary actions remain available without a session. Authorization for other actions is route-specific follow-up work.
       parameters:
         - in: path
           name: action
@@ -365,7 +475,7 @@ paths:
         "200":
           description: RPC result ({ success, data })
         "401":
-          description: superBatchExportOnce requires a verified family-admin session
+          description: A protected export or financial action requires a verified family-admin session
   /webhooks/wechat-mp:
     get:
       summary: WeChat Service Account server URL verification (echostr)

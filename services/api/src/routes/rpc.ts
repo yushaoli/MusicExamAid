@@ -54,6 +54,17 @@ const DEFAULT_INSTITUTIONS = [
   { _id: 'inst_default', name: '星光音乐艺术中心', legacy_org_id: 'ORG001' },
 ];
 
+const FAMILY_ADMIN_RPC_ACTIONS = new Set([
+  'superBatchExportOnce',
+  'teacherRateCardsGet',
+  'adminUpsertTeacherRateCard',
+  'paymentCheckout',
+  'teacherConcessionWallet',
+  'adminConfirmConcession',
+  'teacherRequestWithdrawal',
+  'adminPayoutWithdrawal',
+]);
+
 export async function rpcRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     '/rpc/:action',
@@ -67,8 +78,8 @@ export async function rpcRoutes(app: FastifyInstance): Promise<void> {
       const { action } = req.params;
       const payload = (req.body ?? {}) as Record<string, any>;
 
-      // Do not let the RPC bridge bypass the export routes' admin-only boundary.
-      if (action === 'superBatchExportOnce') {
+      // Do not let the RPC bridge bypass admin-only export or financial boundaries.
+      if (FAMILY_ADMIN_RPC_ACTIONS.has(action)) {
         await requireVerifiedFamilyAdmin(req, reply);
         if (reply.sent) return;
       }
