@@ -17,6 +17,7 @@ import {
   RegistrationStatus,
 } from '@musicexamaid/shared';
 import type { RegistrationStatusType } from '@musicexamaid/shared';
+import { requireVerifiedFamilyAdmin } from '../auth/family-session';
 
 interface WeChatWebhookQuery {
   signature?: string;
@@ -118,7 +119,6 @@ export async function integrationRoutes(app: FastifyInstance): Promise<void> {
       const token = process.env.WECHAT_MP_TOKEN || 'dev_wechat_mp_token';
 
       if (
-        signature &&
         !verifyWeChatSignature({ token, signature, timestamp, nonce })
       ) {
         return reply.code(403).send({
@@ -164,9 +164,23 @@ export async function integrationRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.post('/webhooks/wecom', async (_req: FastifyRequest, reply: FastifyReply) => {
-    return reply.type('text/plain').code(200).send('success');
-  });
+  app.post(
+    '/webhooks/wecom',
+    async (
+      req: FastifyRequest<{ Querystring: WeChatWebhookQuery }>,
+      reply: FastifyReply,
+    ) => {
+      const { msg_signature = '', signature = '', timestamp = '', nonce = '' } = req.query ?? {};
+      const token = process.env.WECOM_CALLBACK_TOKEN || process.env.WECHAT_MP_TOKEN || 'dev_wecom_token';
+      if (!verifyWeChatSignature({ token, signature: msg_signature || signature, timestamp, nonce })) {
+        return reply.code(403).send({
+          error: 'INVALID_SIGNATURE',
+          message: 'WeCom webhook signature verification failed',
+        });
+      }
+      return reply.type('text/plain').code(200).send('success');
+    },
+  );
 
   // 4. Outbound WeCom alert via xgar relay (`https://wecom.xgar.com.cn/send/<token>`)
   app.post(
@@ -175,6 +189,8 @@ export async function integrationRoutes(app: FastifyInstance): Promise<void> {
       req: FastifyRequest<{ Body: WeComSendBody }>,
       reply: FastifyReply,
     ) => {
+      await requireVerifiedFamilyAdmin(req, reply);
+      if (reply.sent) return;
       const msg = req.body?.msg?.trim();
       if (!msg) {
         return reply.code(400).send({
@@ -199,6 +215,8 @@ export async function integrationRoutes(app: FastifyInstance): Promise<void> {
       req: FastifyRequest<{ Body: WeChatMpTemplateBody }>,
       reply: FastifyReply,
     ) => {
+      await requireVerifiedFamilyAdmin(req, reply);
+      if (reply.sent) return;
       const body = req.body ?? {};
       if (
         !body.mp_openid ||

@@ -58,6 +58,10 @@ All learner, registration and archive routes require a verified family-admin ses
 
 Anonymous and teacher credentials are rejected before repository access, and guarded responses use `Cache-Control: no-store`. Parent and teacher domain workflows stay disabled until verified ownership mappings exist. A client-supplied learner, registration, teacher or institution ID is never proof of ownership.
 
+## Integration and notification authorization
+
+Outbound WeCom and Service Account notification routes require a verified family-admin session before validation or dispatch and return `Cache-Control: no-store`. Anonymous and teacher credentials cannot trigger external messages. Signed inbound webhook callbacks remain public, but both WeChat MP and WeCom POST receivers now reject missing or invalid signatures instead of accepting unsigned events.
+
 ## Official-sync authorization
 
 All official-sync administration routes are strict family-admin-only by default, including archive statistics and upgrade reports, partner agents, studio intelligence, teacher fee/filing reports, upload logs, score lookup/captcha, model status, and remote pulls. The policy applies before SQL, object-storage, media-processing or official-portal work in every environment and returns `Cache-Control: no-store`.

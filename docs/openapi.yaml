@@ -714,10 +714,12 @@ paths:
         "200":
           description: Verified echostr
     post:
-      summary: WeChat Service Account inbound event/message webhook
+      summary: WeChat Service Account inbound event/message webhook with mandatory signature verification
       responses:
         "200":
           description: Literal "success"
+        "403":
+          description: Missing or invalid webhook signature
   /webhooks/wechat-mp/menu-config:
     get:
       summary: Generate WeChat Service Account custom menu JSON mounting /app tabs
@@ -731,22 +733,30 @@ paths:
         "200":
           description: Verified echostr
     post:
-      summary: WeCom inbound event webhook
+      summary: WeCom inbound event webhook with mandatory signature verification
       responses:
         "200":
           description: Literal "success"
+        "403":
+          description: Missing or invalid webhook signature
   /notifications/wecom:
     post:
-      summary: Dispatch markdown alert via wecom.xgar.com.cn relay
+      summary: Dispatch an admin-only markdown alert via wecom.xgar.com.cn relay
+      description: Requires a verified family-admin session before validation or outbound dispatch. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
       responses:
         "200":
           description: Dispatch status
+        "401": *mediaUnauthorized
   /notifications/wechat-mp:
     post:
-      summary: Build/send WeChat Service Account template message to parent
+      summary: Build/send an admin-only WeChat Service Account template message to a parent
+      description: Requires a verified family-admin session before validation or dispatch. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
       responses:
         "200":
           description: Template payload and dispatch status
+        "401": *mediaUnauthorized
 components:
   securitySchemes:
     familySessionHeader:
