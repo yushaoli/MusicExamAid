@@ -17,6 +17,7 @@ import {
 } from '@musicexamaid/shared';
 import { dispatchWeComAlert } from './integrations';
 import { minioClient } from '../store/minio';
+import { requireVerifiedFamilyAdmin } from '../auth/family-session';
 import {
   persistLearnerToPostgres,
   persistRegistrationToPostgres,
@@ -38,6 +39,10 @@ interface DedupPreflightBody {
 }
 
 export async function exportRoutes(app: FastifyInstance): Promise<void> {
+  // Export previews and downloads contain plaintext identity numbers and photos.
+  // No verified teacher ownership exists for these batches yet, so fail closed to admins only.
+  app.addHook('preHandler', requireVerifiedFamilyAdmin);
+
   app.post(
     '/exports/dedup-preflight',
     async (

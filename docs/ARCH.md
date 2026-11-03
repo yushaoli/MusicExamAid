@@ -40,6 +40,12 @@
 - `GET|POST /webhooks/wecom`
 - `POST /notifications/wecom`, `POST /notifications/wechat-mp`
 
+## Export authorization
+
+All `/exports` routes (`POST /exports`, `POST /exports/dedup-preflight`, CSV and ZIP downloads) require a verified family-admin session, including when `ENFORCE_SERVER_AUTH=0` in development. `POST /rpc/superBatchExportOnce` enforces the same boundary so the Mini Program bridge cannot bypass it. Header, bearer and family cookie credentials are supported; teacher sessions do not authorize exports. Responses use `Cache-Control: no-store` because previews and downloads contain plaintext identity numbers and portrait photos.
+
+Export batches do not yet have verified teacher ownership metadata. Teacher access therefore fails closed rather than trusting a client-supplied teacher or institution ID. Other RPC actions and the learner, registration, archive, financial and media authorization surfaces remain separate follow-up work.
+
 ## Historical student lookup authorization
 
 `GET /official-sync/student-lookup` always requires a verified session, including in development when `ENFORCE_SERVER_AUTH=0`. Family-admin sessions retain full historical access. A client-supplied role, agent ID, OpenID or referral code does not grant access.
@@ -48,4 +54,4 @@
 
 Each teacher lookup rechecks the current invite digest in Postgres, so rotating or removing the invite revokes existing sessions immediately. The server derives the agent ID from the signed token. An explicit different `agent_id` is rejected with 403. Teachers can see only student profiles currently assigned to their agent ID and exam rows recorded under that agent ID. Counts, latest exams and upgrade recommendations use that same restricted history; exams from other institutions are excluded. Admins may filter profiles by current agent while retaining access to complete exam history.
 
-Session resolution and lookup return `Cache-Control: no-store`. Invalid invites and parent referral resolution clear the teacher cookie. Parent referrals identify an entry channel; they do not prove ownership of any learner. Parent lookup remains unavailable until a verified parent-to-learner ownership model is implemented. Authorization for the other learner, export, registration, archive, financial, media and RPC routes remains a separate follow-up.
+Session resolution and lookup return `Cache-Control: no-store`. Invalid invites and parent referral resolution clear the teacher cookie. Parent referrals identify an entry channel; they do not prove ownership of any learner. Parent lookup remains unavailable until a verified parent-to-learner ownership model is implemented. Authorization for the other learner, registration, archive, financial, media and RPC routes remains a separate follow-up.

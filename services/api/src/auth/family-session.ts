@@ -61,13 +61,21 @@ export function extractAndVerifyRequestFamilySession(req: FastifyRequest): boole
   }
 }
 
+/** Strict guard for PII routes that must never fail open in development. */
+export async function requireVerifiedFamilyAdmin(
+  req: FastifyRequest, reply: FastifyReply,
+): Promise<void> {
+  reply.header('Cache-Control', 'no-store');
+  if (!extractAndVerifyRequestFamilySession(req)) {
+    reply.code(401).send({error: 'UNAUTHORIZED', message: '请先使用授权微信号扫码登录'});
+  }
+}
+
 export async function requireFamilyAdminPreHandler(
   req: FastifyRequest, reply: FastifyReply,
 ): Promise<void> {
   if (process.env.ENFORCE_SERVER_AUTH !== '1' && process.env.NODE_ENV !== 'production') return;
-  if (!extractAndVerifyRequestFamilySession(req)) {
-    reply.code(401).send({error: 'UNAUTHORIZED', message: '请先使用授权微信号扫码登录'});
-  }
+  await requireVerifiedFamilyAdmin(req, reply);
 }
 
 export function familySessionCookie(token: string): string {
