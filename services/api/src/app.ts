@@ -10,9 +10,11 @@ import { rpcRoutes } from './routes/rpc';
 import { paymentConcessionRoutes } from './routes/payments-concessions';
 import { officialSyncRoutes } from './routes/official-sync';
 import { valueAddedRoutes } from './routes/value-added';
+import { parentAccessRoutes } from './routes/parent-access';
 import { DomainRepository } from './store/repository';
 import { assertProductionAuthConfig } from './auth/family-session';
 import type { OfficialSyncOptions } from './routes/official-sync';
+import type { ParentAccessOptions } from './routes/parent-access';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -24,6 +26,7 @@ export interface BuildAppOptions {
   logger?: boolean | { level: string };
   store?: DomainRepository;
   officialSync?: OfficialSyncOptions;
+  parentAccess?: ParentAccessOptions;
 }
 
 export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
@@ -35,7 +38,8 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
   app.addHook('onRequest', async (req, reply) => {
     reply.header('Access-Control-Allow-Origin', '*');
     reply.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-    reply.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Mea-Session');
+    reply.header('Access-Control-Allow-Headers',
+      'Content-Type,Authorization,X-Mea-Session,X-Mea-Parent-Session');
     if (req.method === 'OPTIONS') {
       return reply.code(204).send();
     }
@@ -54,6 +58,7 @@ export function buildApp(opts: BuildAppOptions = {}): FastifyInstance {
   app.register(paymentConcessionRoutes);
   app.register(officialSyncRoutes, opts.officialSync ?? {});
   app.register(valueAddedRoutes);
+  app.register(parentAccessRoutes, opts.parentAccess ?? {});
 
   return app;
 }

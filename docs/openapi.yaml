@@ -707,6 +707,107 @@ paths:
           description: Unknown RPC action (RPC_NOT_FOUND)
         "501":
           description: Declared legacy action has no server implementation (RPC_NOT_IMPLEMENTED)
+  /parent/auth:
+    post:
+      summary: Exchange a Mini Program wx.login code for a verified parent session
+      description: >-
+        The server exchanges the one-time code with WeChat code2Session using
+        WECHAT_MINI_APPID and WECHAT_MINI_SECRET. Parent identity comes only from the
+        provider response. The two-hour parent token is returned as parent_token and in an
+        HttpOnly, SameSite=Lax cookie (Secure in production). WeChat session_key and raw
+        OpenID are not returned or persisted. Responses use Cache-Control=no-store.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, minLength: 1, maxLength: 256 }
+      responses:
+        "200":
+          description: Parent token, role and two-hour lifetime; no learner access is implied
+          headers:
+            Cache-Control: { schema: { type: string, enum: [no-store] } }
+            Set-Cookie: { schema: { type: string } }
+        "400": { description: Missing or invalid wx.login code }
+        "401": { description: WeChat rejected the code or returned no valid OpenID }
+        "502": { description: WeChat exchange unavailable or malformed }
+        "503": { description: Mini Program provider credentials are not configured }
+  /parent/session:
+    get:
+      summary: List learner IDs explicitly granted to the authenticated parent
+      description: >-
+        Authentication alone grants no records. Only active, admin-managed grants are
+        returned; revocation takes effect on the next request. No learner profile, OpenID
+        or other parent's records are exposed. Responses use Cache-Control=no-store.
+      security: &parentSessionSecurity
+        - parentSessionHeader: []
+        - parentSessionCookie: []
+        - signedSessionBearer: []
+      responses:
+        "200":
+          description: Parent role, token expiry and granted learner_ids
+        "401": &parentUnauthorized
+          description: Missing, expired or invalid parent session
+  /parent/learners/{learnerId}/grant:
+    parameters:
+      - in: path
+        name: learnerId
+        required: true
+        schema: { type: string }
+    put:
+      summary: Grant or restore an explicit parent-to-learner ownership assertion
+      description: >-
+        Strict family-admin only. The referenced learner must exist. Referrals, supplied
+        OpenIDs on parent requests, teacher IDs and the legacy default parent are not
+        accepted as ownership evidence. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parent_openid]
+              properties:
+                parent_openid: { type: string, pattern: '^[A-Za-z0-9_-]{1,128}$' }
+      responses:
+        "200": { description: Active grant for the provider-verified parent identity }
+        "400": { description: Invalid parent OpenID }
+        "401": *mediaUnauthorized
+        "404": { description: Learner not found }
+    delete:
+      summary: Revoke a parent-to-learner grant immediately
+      description: Strict family-admin only. Existing parent tokens remain valid but no longer list the revoked learner. Responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parent_openid]
+              properties:
+                parent_openid: { type: string, pattern: '^[A-Za-z0-9_-]{1,128}$' }
+      responses:
+        "200": { description: Whether an active grant was revoked }
+        "400": { description: Invalid parent OpenID }
+        "401": *mediaUnauthorized
+  /parent/learners/{learnerId}/grants:
+    get:
+      summary: List active and revoked grants for one learner
+      description: Strict family-admin only; responses use Cache-Control=no-store.
+      security: *mediaFamilyAdminSecurity
+      parameters:
+        - in: path
+          name: learnerId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Grant audit rows for the learner }
+        "401": *mediaUnauthorized
   /webhooks/wechat-mp:
     get:
       summary: WeChat Service Account server URL verification (echostr)
@@ -769,6 +870,16 @@ components:
       in: cookie
       name: mea_family_session
       description: Expiring HMAC-signed family-admin session
+    parentSessionHeader:
+      type: apiKey
+      in: header
+      name: X-Mea-Parent-Session
+      description: Two-hour HMAC-signed parent session issued after server-side code2Session
+    parentSessionCookie:
+      type: apiKey
+      in: cookie
+      name: mea_parent_session
+      description: Two-hour HttpOnly parent cookie issued by /parent/auth
     teacherSessionHeader:
       type: apiKey
       in: header
@@ -783,7 +894,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: HMAC
-      description: A signed family-admin or teacher session; each retains its own role
+      description: A signed family-admin, teacher or parent session; each retains its own role
     bearerAuth:
       type: http
       scheme: bearer

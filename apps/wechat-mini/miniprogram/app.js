@@ -1,3 +1,5 @@
+import { authLogin, parentSession } from './utils/api';
+
 App({
   globalData: {
     userInfo: null,
@@ -7,51 +9,52 @@ App({
   },
 
   onLaunch() {
-    if (!wx.cloud) {
-      console.error('请使用 2.2.3 或以上的基础库以使用云能力');
-      return;
+    if (wx.cloud) {
+      wx.cloud.init({
+        env: 'kaoji-assist-5gimm9yh10270edc',
+        traceUser: true,
+      });
     }
-    wx.cloud.init({
-      env: 'kaoji-assist-5gimm9yh10270edc',
-      traceUser: true,
-    });
-    
+
     // Store login promise for pages to await
     this.globalData.loginPromise = this.login();
   },
 
   async login() {
     try {
-      console.log('Starting login...');
-      const res = await wx.cloud.callFunction({ name: 'authLogin' });
-      console.log('Login response:', res);
-      
-      if (res.result && res.result.success) {
-        this.globalData.session = res.result.data;
-        this.globalData.loginReady = true;
-        console.log('Login success:', this.globalData.session);
-        return this.globalData.session;
-      } else {
-        console.error('Login failed:', res.result?.error);
-        this.globalData.loginReady = true;
-        return null;
-      }
+      const loginResult = await wx.login();
+      if (!loginResult.code) throw new Error('wx.login did not return a code');
+      const auth = await authLogin(loginResult.code);
+      wx.setStorageSync('MEA_PARENT_SESSION', auth.parent_token);
+      const access = await parentSession();
+      this.globalData.session = {...auth, ...access};
+      return this.globalData.session;
     } catch (err) {
-      console.error('Login error:', err);
-      this.globalData.loginReady = true;
+      wx.removeStorageSync('MEA_PARENT_SESSION');
+      this.globalData.session = null;
+      console.error('Parent login failed:', err?.message || 'Unknown error');
       return null;
+    } finally {
+      this.globalData.loginReady = true;
     }
   },
 
   // Pages should call this to ensure login is complete
   async ensureLogin() {
+    const session = this.globalData.session;
+    if (session && session.expires_at && Date.parse(session.expires_at) <= Date.now()) {
+      this.globalData.session = null;
+      this.globalData.loginReady = false;
+      this.globalData.loginPromise = this.login();
+    }
     if (this.globalData.loginReady) {
       return this.globalData.session;
     }
     if (this.globalData.loginPromise) {
       return await this.globalData.loginPromise;
     }
-    return null;
+    this.globalData.loginPromise = this.login();
+    return await this.globalData.loginPromise;
   },
 
   getSession() {
@@ -61,9 +64,7 @@ App({
   hasRole(role) {
     const s = this.globalData.session;
     if (!s) return false;
-    if (role === 'Teacher') return s.isTeacher;
-    if (role === 'Admin') return s.isAdmin;
-    if (role === 'Super') return s.isSuper;
+    if (role === 'Parent') return s.role === 'parent';
     return false;
   }
 });

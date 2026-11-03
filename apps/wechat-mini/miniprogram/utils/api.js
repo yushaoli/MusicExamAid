@@ -42,6 +42,36 @@ const callWxCloudMainland = (name, data = {}) =>
     });
   });
 
+const getParentSessionHeader = () => {
+  try {
+    const token = wx.getStorageSync('MEA_PARENT_SESSION');
+    return token ? {'X-Mea-Parent-Session': token} : {};
+  } catch (_e) {
+    return {};
+  }
+};
+
+const callParentApi = (path, method = 'GET', data) => new Promise((resolve, reject) => {
+  wx.request({
+    url: `${getApiBaseUrl()}${path}`,
+    method,
+    data,
+    header: {
+      'Content-Type': 'application/json',
+      ...getParentSessionHeader(),
+    },
+    success: (res) => {
+      const body = res.data || {};
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        resolve(body);
+      } else {
+        reject(new Error(body.error || body.message || `HTTP ${res.statusCode}`));
+      }
+    },
+    fail: (err) => reject(new Error(err?.errMsg || 'Network request failed')),
+  });
+});
+
 const callCloud = (name, data = {}) => {
   const url = `${getApiBaseUrl()}/rpc/${encodeURIComponent(name)}`;
   return new Promise((resolve, reject) => {
@@ -51,6 +81,7 @@ const callCloud = (name, data = {}) => {
       data,
       header: {
         'Content-Type': 'application/json',
+        ...getParentSessionHeader(),
       },
       success: (res) => {
         const body = res.data || {};
@@ -75,7 +106,8 @@ const callCloud = (name, data = {}) => {
 };
 
 // ============ Auth ============
-export const authLogin = () => callCloud('authLogin');
+export const authLogin = (code) => callParentApi('/parent/auth', 'POST', { code });
+export const parentSession = () => callParentApi('/parent/session');
 
 // ============ Parent: Learner ============
 export const learnerList = () => callCloud('learnerList');
@@ -146,7 +178,7 @@ export const adminPayoutWithdrawal = (withdrawal_id, admin_note = '', payout_ref
   callCloud('adminPayoutWithdrawal', { withdrawal_id, admin_note, payout_ref });
 
 export default {
-  authLogin,
+  authLogin, parentSession,
   learnerList, learnerGet, learnerUpsert,
   enrollmentCreateOrUpdate, institutionList,
   registrationCreate, registrationUpdate, registrationSubmit, registrationList, registrationGet,
