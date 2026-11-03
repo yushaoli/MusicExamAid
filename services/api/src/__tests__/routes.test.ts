@@ -50,6 +50,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const lrnRes = await app.inject({
       method: 'POST',
       url: '/learners',
+      headers: adminHeaders(),
       payload: {
         name_cn: '陈小乐',
         gender: '男',
@@ -66,6 +67,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const photoRes = await app.inject({
       method: 'POST',
       url: `/learners/${learner.id}/photo`,
+      headers: adminHeaders(),
       payload: { photo_base64: customJpeg.toString('base64') },
     });
     assert.equal(photoRes.statusCode, 200);
@@ -75,6 +77,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const regRes = await app.inject({
       method: 'POST',
       url: '/registrations',
+      headers: adminHeaders(),
       payload: {
         learner_id: learner.id,
         institution_id: 'INST_01',
@@ -93,6 +96,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const subRes = await app.inject({
       method: 'PATCH',
       url: `/registrations/${reg.id}/status`,
+      headers: adminHeaders(),
       payload: { to_status: 'submitted' },
     });
     assert.equal(subRes.statusCode, 200);
@@ -102,6 +106,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const lockRes = await app.inject({
       method: 'PATCH',
       url: `/registrations/${reg.id}/status`,
+      headers: adminHeaders(),
       payload: { to_status: 'locked', teacher_notes: '一键审核并锁定' },
     });
     assert.equal(lockRes.statusCode, 200);
@@ -188,6 +193,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const lrnRes = await app.inject({
       method: 'POST',
       url: '/rpc/learnerUpsert',
+      headers: adminHeaders(),
       payload: {
         name_cn: '林小琴',
         gender: '女',
@@ -203,6 +209,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const regRes = await app.inject({
       method: 'POST',
       url: '/rpc/registrationCreate',
+      headers: adminHeaders(),
       payload: {
         learner_id: learnerId,
         cycle_id: '2025-summer',
@@ -215,12 +222,14 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     await app.inject({
       method: 'POST',
       url: '/rpc/registrationSubmit',
+      headers: adminHeaders(),
       payload: { reg_id: regId },
     });
 
     const lockRes = await app.inject({
       method: 'POST',
       url: '/rpc/teacherLock',
+      headers: adminHeaders(),
       payload: { reg_id: regId },
     });
     assert.equal(lockRes.json().success, true);
@@ -243,6 +252,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const res = await app.inject({
       method: 'PATCH',
       url: '/registrations/reg_123/status',
+      headers: adminHeaders(),
       payload: {
         from_status: 'draft',
         to_status: 'locked',
@@ -286,6 +296,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const createRes = await app.inject({
       method: 'POST',
       url: '/learners',
+      headers: adminHeaders(),
       payload: {
         name_cn: '周星辰',
         gender: '男',
@@ -303,6 +314,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const photoRes = await app.inject({
       method: 'POST',
       url: `/learners/${learnerId}/photo`,
+      headers: adminHeaders(),
       payload: {
         photo_base64: Buffer.from('\xff\xd8\xff\xe0LIVE_S3_JPEG\xff\xd9').toString(
           'base64',
@@ -317,6 +329,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const regRes = await app.inject({
       method: 'POST',
       url: '/registrations',
+      headers: adminHeaders(),
       payload: {
         learner_id: learnerId,
         cycle_id: '2025-summer',
@@ -329,11 +342,13 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     await app.inject({
       method: 'PATCH',
       url: `/registrations/${regId}/status`,
+      headers: adminHeaders(),
       payload: { to_status: 'submitted' },
     });
     await app.inject({
       method: 'PATCH',
       url: `/registrations/${regId}/status`,
+      headers: adminHeaders(),
       payload: { to_status: 'locked' },
     });
 
@@ -381,6 +396,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const learnerRes = await app.inject({
       method: 'POST',
       url: '/learners',
+      headers: adminHeaders(),
       payload: {
         name_cn: '林小音',
         gender: '女',
@@ -395,6 +411,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const regRes = await app.inject({
       method: 'POST',
       url: '/registrations',
+      headers: adminHeaders(),
       payload: {
         learner_id: learnerId,
         cycle_id: '2025-summer',
@@ -423,11 +440,13 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     await app.inject({
       method: 'PATCH',
       url: `/registrations/${regId}/status`,
+      headers: adminHeaders(),
       payload: { to_status: 'submitted' },
     });
     await app.inject({
       method: 'PATCH',
       url: `/registrations/${regId}/status`,
+      headers: adminHeaders(),
       payload: { to_status: 'locked' },
     });
 
@@ -527,6 +546,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const lrnA = await app.inject({
       method: 'POST',
       url: '/learners',
+      headers: adminHeaders(),
       payload: {
         name_cn: '陈小乐',
         gender: '女',
@@ -539,6 +559,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     await app.inject({
       method: 'POST',
       url: '/registrations',
+      headers: adminHeaders(),
       payload: {
         learner_id: lrnA.json().id,
         cycle_id: '2025-summer',
@@ -550,6 +571,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const lrnB = await app.inject({
       method: 'POST',
       url: '/learners',
+      headers: adminHeaders(),
       payload: {
         name_cn: '林小音',
         gender: '女',
@@ -562,6 +584,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     await app.inject({
       method: 'POST',
       url: '/registrations',
+      headers: adminHeaders(),
       payload: {
         learner_id: lrnB.json().id,
         cycle_id: '2025-summer',
@@ -576,6 +599,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const consRes = await app.inject({
       method: 'POST',
       url: '/official-sync/consolidate',
+      headers: adminHeaders(),
       payload: {
         cycle_id: '2025-summer',
         official_registrations: [
@@ -665,6 +689,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const lrn = await app.inject({
       method: 'POST',
       url: '/learners',
+      headers: adminHeaders(),
       payload: {
         name_cn: '周星辰',
         gender: '男',
@@ -677,6 +702,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const reg = await app.inject({
       method: 'POST',
       url: '/registrations',
+      headers: adminHeaders(),
       payload: {
         learner_id: lrn.json().id,
         cycle_id: '2025-summer',
@@ -706,11 +732,13 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     await app.inject({
       method: 'PATCH',
       url: `/registrations/${regId}/status`,
+      headers: adminHeaders(),
       payload: { to_status: 'submitted' },
     });
     await app.inject({
       method: 'PATCH',
       url: `/registrations/${regId}/status`,
+      headers: adminHeaders(),
       payload: { to_status: 'locked' },
     });
 
@@ -728,6 +756,7 @@ describe('API baseline, 1-click lock, ZIP/CSV export, RPC bridge & Service Accou
     const radarRes = await app.inject({
       method: 'POST',
       url: '/value-added/upgrade-radar',
+      headers: adminHeaders(),
       payload: {
         target_cycle_id: '2025-summer',
         historical_records: [

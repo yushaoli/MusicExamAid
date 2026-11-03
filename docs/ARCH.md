@@ -44,13 +44,19 @@
 
 All `/exports` routes (`POST /exports`, `POST /exports/dedup-preflight`, CSV and ZIP downloads) require a verified family-admin session, including when `ENFORCE_SERVER_AUTH=0` in development. `POST /rpc/superBatchExportOnce` enforces the same boundary so the Mini Program bridge cannot bypass it. Header, bearer and family cookie credentials are supported; teacher sessions do not authorize exports. Responses use `Cache-Control: no-store` because previews and downloads contain plaintext identity numbers and portrait photos.
 
-Export batches do not yet have verified teacher ownership metadata. Teacher access therefore fails closed rather than trusting a client-supplied teacher or institution ID. The learner, registration, archive and media authorization surfaces, plus other RPC actions, remain separate follow-up work.
+Export batches do not yet have verified teacher ownership metadata. Teacher access therefore fails closed rather than trusting a client-supplied teacher or institution ID. Media authorization and other RPC actions remain separate follow-up work.
 
 ## Financial authorization
 
 All payment and concession routes require a verified family-admin session in every environment: rate-card reads/writes, checkout, wallet reads, concession confirmation, withdrawal requests, and payout approval. The equivalent RPC actions (`teacherRateCardsGet`, `adminUpsertTeacherRateCard`, `paymentCheckout`, `teacherConcessionWallet`, `adminConfirmConcession`, `teacherRequestWithdrawal`, and `adminPayoutWithdrawal`) enforce the same boundary. Anonymous and teacher credentials are rejected before financial repository access, and guarded responses use `Cache-Control: no-store`.
 
 The current teacher session identifies a numeric official-portal agent, while financial records use string teacher IDs. No verified mapping or parent-to-registration ownership exists yet. Financial operations therefore remain admin-only instead of trusting a request's `teacher_id` or `registration_id`. Verified parent checkout and teacher wallet/withdrawal access require that ownership model first.
+
+## Learner, registration and archive authorization
+
+All learner, registration and archive routes require a verified family-admin session in every environment, including portrait upload and registration status changes. Their 14 learner/enrollment/registration/teacher-workflow RPC actions enforce the same boundary. `POST /official-sync/consolidate` and both upgrade-radar routes also require admin credentials because they read or create the same domain records. Learner-linked ID-photo polish requires admin credentials; generic photo processing without `learner_id` remains public because it does not open the repository.
+
+Anonymous and teacher credentials are rejected before repository access, and guarded responses use `Cache-Control: no-store`. Parent and teacher domain workflows stay disabled until verified ownership mappings exist. A client-supplied learner, registration, teacher or institution ID is never proof of ownership.
 
 ## Historical student lookup authorization
 
@@ -60,4 +66,4 @@ The current teacher session identifies a numeric official-portal agent, while fi
 
 Each teacher lookup rechecks the current invite digest in Postgres, so rotating or removing the invite revokes existing sessions immediately. The server derives the agent ID from the signed token. An explicit different `agent_id` is rejected with 403. Teachers can see only student profiles currently assigned to their agent ID and exam rows recorded under that agent ID. Counts, latest exams and upgrade recommendations use that same restricted history; exams from other institutions are excluded. Admins may filter profiles by current agent while retaining access to complete exam history.
 
-Session resolution and lookup return `Cache-Control: no-store`. Invalid invites and parent referral resolution clear the teacher cookie. Parent referrals identify an entry channel; they do not prove ownership of any learner. Parent lookup remains unavailable until a verified parent-to-learner ownership model is implemented. Authorization for the other learner, registration, archive, media and RPC routes remains a separate follow-up.
+Session resolution and lookup return `Cache-Control: no-store`. Invalid invites and parent referral resolution clear the teacher cookie. Parent referrals identify an entry channel; they do not prove ownership of any learner. Parent lookup remains unavailable until a verified parent-to-learner ownership model is implemented. Media and remaining RPC authorization stay separate follow-up work.

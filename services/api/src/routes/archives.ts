@@ -7,6 +7,7 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { resolveSubjectName } from '@musicexamaid/shared';
+import { requireVerifiedFamilyAdmin } from '../auth/family-session';
 
 interface CreateArchiveBody {
   learner_id?: string;
@@ -18,6 +19,9 @@ interface CreateArchiveBody {
 }
 
 export async function archiveRoutes(app: FastifyInstance): Promise<void> {
+  // Archive records reveal learner identity and exam history; fail closed by default.
+  app.addHook('preHandler', requireVerifiedFamilyAdmin);
+
   app.get('/archives', async (_req: FastifyRequest, reply: FastifyReply) => {
     const items = app.store.listArchives().map(a => {
       const learner = app.store.getLearner(a.learner_id);

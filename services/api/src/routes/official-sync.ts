@@ -22,7 +22,7 @@ import * as path from 'node:path';
 import { getPostgresPool as getLivePostgresPool } from '../store/postgres';
 import type { Pool } from 'pg';
 import { buildSignedFamilyToken, verifySignedFamilyToken, extractAndVerifyRequestFamilySession,
-  requireFamilyAdminPreHandler, familySessionCookie } from '../auth/family-session';
+  requireFamilyAdminPreHandler, requireVerifiedFamilyAdmin, familySessionCookie } from '../auth/family-session';
 import { buildSignedTeacherToken, isStrongTeacherInvite, requireHistoricalLookupScope,
   teacherSessionCookie } from '../auth/teacher-session';
 export { buildSignedFamilyToken, verifySignedFamilyToken } from '../auth/family-session';
@@ -362,6 +362,8 @@ export async function officialSyncRoutes(app: FastifyInstance, opts: OfficialSyn
       }>,
       reply: FastifyReply,
     ) => {
+      await requireVerifiedFamilyAdmin(req, reply);
+      if (reply.sent) return;
       const body = req.body ?? {};
       const cycleId = body.cycle_id || '2025-summer';
       const officialRaw = body.official_registrations ?? [];

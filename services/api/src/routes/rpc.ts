@@ -63,6 +63,20 @@ const FAMILY_ADMIN_RPC_ACTIONS = new Set([
   'adminConfirmConcession',
   'teacherRequestWithdrawal',
   'adminPayoutWithdrawal',
+  'learnerList',
+  'learnerGet',
+  'learnerUpsert',
+  'enrollmentCreateOrUpdate',
+  'registrationCreate',
+  'registrationList',
+  'teacherRosterList',
+  'registrationGet',
+  'teacherRegistrationGetDetail',
+  'registrationSubmit',
+  'teacherRequestChanges',
+  'teacherConfirm',
+  'teacherLock',
+  'teacherUnlock',
 ]);
 
 export async function rpcRoutes(app: FastifyInstance): Promise<void> {
@@ -78,7 +92,7 @@ export async function rpcRoutes(app: FastifyInstance): Promise<void> {
       const { action } = req.params;
       const payload = (req.body ?? {}) as Record<string, any>;
 
-      // Do not let the RPC bridge bypass admin-only export or financial boundaries.
+      // Do not let the RPC bridge bypass admin-only export, financial or domain boundaries.
       if (FAMILY_ADMIN_RPC_ACTIONS.has(action)) {
         await requireVerifiedFamilyAdmin(req, reply);
         if (reply.sent) return;
