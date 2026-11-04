@@ -38,7 +38,8 @@
 - `POST /rpc/:action` — Mini Program RPC bridge
 - `POST /parent/auth`, `GET /parent/session`
 - `GET /parent/learners`, `GET /parent/learners/:learnerId`
-- `GET /parent/registrations`, `GET /parent/registrations/:registrationId`
+- `GET|POST /parent/registrations`, `GET /parent/registrations/:registrationId`
+- `POST /parent/registrations/:registrationId/submit`
 - `PUT|DELETE /parent/learners/:learnerId/grant`, `GET /parent/learners/:learnerId/grants`
 - `GET|POST /webhooks/wechat-mp`, `GET /webhooks/wechat-mp/menu-config`
 - `GET|POST /webhooks/wecom`
@@ -60,7 +61,7 @@ The current teacher session identifies a numeric official-portal agent, while fi
 
 All learner, registration and archive routes require a verified family-admin session in every environment, including portrait upload and registration status changes. Their 14 learner/enrollment/registration/teacher-workflow RPC actions enforce the same boundary. `POST /official-sync/consolidate` and both upgrade-radar routes also require admin credentials because they read or create the same domain records. Learner-linked ID-photo polish requires admin credentials; generic photo processing without `learner_id` remains public because it does not open the repository.
 
-Anonymous and teacher credentials are rejected before repository access, and guarded responses use `Cache-Control: no-store`. The original admin domain and RPC routes remain admin-only. Separate read-only `/parent/learners` and `/parent/registrations` routes enforce current parent grants at record level; parent writes and teacher domain workflows remain disabled. A client-supplied learner, registration, teacher or institution ID is never proof of ownership.
+Anonymous and teacher credentials are rejected before repository access, and guarded responses use `Cache-Control: no-store`. The original admin domain and RPC routes remain admin-only. Separate `/parent` routes enforce current parent grants at record level for learner/registration reads, registration creation, and registration submission. Learner writes, other registration mutations, and teacher domain workflows remain disabled. A client-supplied learner, registration, teacher or institution ID is never proof of ownership.
 
 ## Integration and notification authorization
 
@@ -84,9 +85,11 @@ The Mini Program RPC bridge is now default-deny. Only `getDictSubjects`, `getDic
 
 Authentication does not imply ownership. `infra/migrations/010_parent_learner_grants.sql` defines standalone, revocable grants keyed by provider-verified parent OpenID and the running repository's string learner ID. Strict family admins create, list and revoke these grants through `/parent/learners/:learnerId/grant(s)`. Grant creation requires an existing learner. `GET /parent/session` returns only the authenticated parent's active granted learner IDs; revoking a grant removes access on the next request even while the parent token remains valid. Grant audit rows retain the revocation timestamp.
 
-The legacy `learners.parent_user_id`, `mp_default_parent_openid`, referrals, teacher IDs, registration IDs and institution IDs are not ownership evidence. The Mini Program uses `wx.login`, stores only the parent token, and refreshes expired sessions. Its learner and registration read wrappers now use scoped `/parent` endpoints while preserving the legacy `_id` and `workflow_status` response fields. Parent profile lists and details require active grants, and cross-owner learner IDs are denied before repository access. Registration lists and details return only records whose learner is currently granted; responses omit encrypted snapshots and internal status history. Revocation immediately removes both learner and registration access.
+The legacy `learners.parent_user_id`, `mp_default_parent_openid`, referrals, teacher IDs, registration IDs and institution IDs are not ownership evidence. The Mini Program uses `wx.login`, stores only the parent token, and refreshes expired sessions. Its learner/registration read, registration-create and registration-submit wrappers use scoped `/parent` endpoints while preserving legacy response fields. Parent profile lists and details require active grants, and cross-owner learner IDs are denied before repository access. Registration lists and details return only records whose learner is currently granted; responses omit encrypted snapshots and internal status history.
 
-Parent writes, historical lookup, exports and checkout remain disabled until each operation has equivalent record-level authorization. No live migration or provider exchange is part of offline tests.
+`POST /parent/registrations` creates a draft only for a granted learner and validates levels 1–10. `POST /parent/registrations/:registrationId/submit` checks the registration's current learner grant before any mutation and permits only valid transitions into `submitted`. Cross-owner IDs return 404, invalid states return 409, and revocation immediately removes read and write access. These parent submission routes do not dispatch external notifications.
+
+Learner writes, other registration edits, historical lookup, exports and checkout remain disabled until each operation has equivalent record-level authorization. No live migration or provider exchange is part of offline tests.
 
 ## Historical student lookup authorization
 

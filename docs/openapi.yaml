@@ -787,6 +787,34 @@ paths:
       responses:
         "200": { description: Owned registrations with workflow status and learner name }
         "401": *parentUnauthorized
+    post:
+      summary: Create a draft registration for an actively granted learner
+      description: >-
+        The learner grant is checked before repository access. Client-supplied learner IDs
+        without a grant return 404. Responses omit snapshot_json and use Cache-Control=no-store.
+      security: *parentSessionSecurity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [learner_id, cycle_id, subject_id, level]
+              properties:
+                learner_id: { type: string }
+                institution_id: { type: string }
+                class_id: { type: string, description: Legacy alias for institution_id }
+                cycle_id: { type: string }
+                subject_id: { type: string }
+                level: { type: integer, minimum: 1, maximum: 10 }
+                exam_mode: { type: string, enum: [现场, 视频, 音基] }
+                exam_site_id_optional: { type: string }
+                repertoire: { type: array, items: { type: string } }
+      responses:
+        "201": { description: Created owned draft registration }
+        "400": { description: Missing fields or a level outside 1..10 }
+        "401": *parentUnauthorized
+        "404": { description: Learner missing or not granted to this parent }
   /parent/registrations/{registrationId}:
     get:
       summary: Read one registration only when its learner is granted to the parent
@@ -805,6 +833,24 @@ paths:
         "200": { description: Owned public registration details }
         "401": *parentUnauthorized
         "404": { description: Registration missing or its learner is not granted }
+  /parent/registrations/{registrationId}/submit:
+    post:
+      summary: Submit an owned draft or needs-change registration
+      description: >-
+        The server verifies the registration's current learner grant before any mutation.
+        Only valid transitions into submitted are accepted; cross-owner IDs return 404 and
+        invalid states return 409. Responses omit snapshot_json and use Cache-Control=no-store.
+      security: *parentSessionSecurity
+      parameters:
+        - in: path
+          name: registrationId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Updated owned registration in submitted status }
+        "401": *parentUnauthorized
+        "404": { description: Registration missing or its learner is not granted }
+        "409": { description: Current status cannot transition to submitted }
   /parent/learners/{learnerId}/grant:
     parameters:
       - in: path

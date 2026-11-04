@@ -128,9 +128,12 @@ export const enrollmentCreateOrUpdate = (data) => callCloud('enrollmentCreateOrU
 export const institutionList = () => callCloud('institutionList');
 
 // ============ Parent: Registration ============
-export const registrationCreate = (data) => callCloud('registrationCreate', data);
+export const registrationCreate = (data) => callParentApi('/parent/registrations', 'POST', data)
+  .then(withLegacyRegistrationFields);
 export const registrationUpdate = (data) => callCloud('registrationUpdate', data);
-export const registrationSubmit = (reg_id) => callCloud('registrationSubmit', { reg_id });
+export const registrationSubmit = (reg_id) =>
+  callParentApi(`/parent/registrations/${encodeURIComponent(reg_id)}/submit`, 'POST', {})
+    .then(withLegacyRegistrationFields);
 export const registrationList = (filters = {}) => callParentApi('/parent/registrations')
   .then((body) => body.items.map(withLegacyRegistrationFields));
 export const registrationGet = async (reg_id) => {

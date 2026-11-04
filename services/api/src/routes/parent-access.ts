@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
-import { resolveSubjectName } from '@musicexamaid/shared';
+import { canTransition, RegistrationStatus, resolveSubjectName } from '@musicexamaid/shared';
 import { getPostgresPool as getLivePostgresPool } from '../store/postgres';
 import type { StoredRegistration } from '../store/repository';
 import { toPublicLearner } from './learners';
@@ -18,6 +18,18 @@ export interface ParentAccessOptions {
 
 interface ParentGrantBody {
   parent_openid?: string;
+}
+
+interface ParentRegistrationBody {
+  learner_id?: string;
+  institution_id?: string;
+  class_id?: string;
+  cycle_id?: string;
+  subject_id?: string;
+  level?: number;
+  exam_mode?: '现场' | '视频' | '音基';
+  exam_site_id_optional?: string;
+  repertoire?: string[];
 }
 
 function toParentRegistration(registration: StoredRegistration) {
@@ -145,6 +157,67 @@ export async function parentAccessRoutes(
         return reply.code(404).send({error: 'REGISTRATION_NOT_FOUND'});
       }
       return reply.send(toParentRegistration(registration));
+    },
+  );
+
+  app.post(
+    '/parent/registrations',
+    async (
+      req: FastifyRequest<{Body?: ParentRegistrationBody}>, reply: FastifyReply,
+    ) => {
+      const session = await requireVerifiedParent(req, reply);
+      if (!session) return;
+      const body = req.body ?? {};
+      const learnerId = String(body.learner_id || '');
+      const level = Number(body.level);
+      if (!learnerId || !body.cycle_id || !body.subject_id ||
+          !Number.isInteger(level) || level < 1 || level > 10) {
+        return reply.code(400).send({
+          error: 'VALIDATION_ERROR',
+          message: 'learner_id, cycle_id, subject_id, and level (1..10) are required',
+        });
+      }
+      const granted = (await activeLearnerIds(session.openid)).includes(learnerId);
+      if (!granted) return reply.code(404).send({error: 'LEARNER_NOT_FOUND'});
+      const registration = app.store.createRegistration({
+        learner_id: learnerId,
+        institution_id: body.institution_id ?? body.class_id ?? null,
+        cycle_id: body.cycle_id,
+        subject_id: body.subject_id,
+        level,
+        exam_mode: body.exam_mode ?? '现场',
+        exam_site_id_optional: body.exam_site_id_optional,
+        repertoire: body.repertoire ?? [],
+      });
+      return reply.code(201).send(toParentRegistration(registration));
+    },
+  );
+
+  app.post(
+    '/parent/registrations/:registrationId/submit',
+    async (
+      req: FastifyRequest<{Params: {registrationId: string}}>, reply: FastifyReply,
+    ) => {
+      const session = await requireVerifiedParent(req, reply);
+      if (!session) return;
+      const granted = new Set(await activeLearnerIds(session.openid));
+      if (granted.size === 0) return reply.code(404).send({error: 'REGISTRATION_NOT_FOUND'});
+      const registration = app.store.getRegistration(req.params.registrationId);
+      if (!registration || !granted.has(registration.learner_id)) {
+        return reply.code(404).send({error: 'REGISTRATION_NOT_FOUND'});
+      }
+      if (!canTransition(registration.status, RegistrationStatus.SUBMITTED)) {
+        return reply.code(409).send({
+          error: 'INVALID_STATUS_TRANSITION',
+          message: `Cannot submit registration from ${registration.status}`,
+        });
+      }
+      const updated = app.store.transitionRegistration({
+        id: registration.id,
+        from_status: registration.status,
+        to_status: RegistrationStatus.SUBMITTED,
+      });
+      return reply.send(toParentRegistration(updated));
     },
   );
 
