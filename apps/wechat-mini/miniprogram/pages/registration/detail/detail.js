@@ -6,6 +6,8 @@ Page({
     id: null,
     reg: null,
     loading: true,
+    previewLoading: false,
+    checkoutPreview: null,
   },
 
   async onLoad(options) {
@@ -19,14 +21,33 @@ Page({
   },
 
   async load() {
-    this.setData({ loading: true });
+    const request = this.previewRequest = (this.previewRequest || 0) + 1;
+    this.setData({ loading: true, reg: null, checkoutPreview: null, previewLoading: false });
     try {
       const reg = await api.registrationGet(this.data.id);
+      if (request !== this.previewRequest) return;
       this.setData({ reg, loading: false });
     } catch (e) {
+      if (request !== this.previewRequest) return;
       console.error(e);
       this.setData({ loading: false });
       wx.showToast({ title: '加载失败', icon: 'none' });
+    }
+  },
+
+  async onPreviewCheckout() {
+    if (this.data.loading || !this.data.reg || this.data.previewLoading) return;
+    const request = this.previewRequest = (this.previewRequest || 0) + 1;
+    this.setData({ previewLoading: true, checkoutPreview: null });
+    try {
+      const preview = await api.paymentCheckoutPreview(this.data.id);
+      if (request !== this.previewRequest) return;
+      this.setData({ checkoutPreview: preview });
+    } catch (e) {
+      if (request !== this.previewRequest) return;
+      wx.showToast({ title: '费用暂不可用，请稍后重试', icon: 'none' });
+    } finally {
+      if (request === this.previewRequest) this.setData({ previewLoading: false });
     }
   },
 
@@ -44,33 +65,4 @@ Page({
     }
   },
 
-  async onUploadPortrait() {
-    const reg = this.data.reg;
-    if (!reg) return;
-
-    try {
-      const choose = await wx.chooseImage({ count: 1, sizeType: ['compressed'], sourceType: ['album', 'camera'] });
-      const filePath = choose.tempFilePaths[0];
-
-      wx.showLoading({ title: '上传中...' });
-      const up = await wx.cloud.uploadFile({
-        cloudPath: `attachments/portrait_${reg.learner_id}_${Date.now()}.jpg`,
-        filePath,
-      });
-
-      await api.attachmentCommit({
-        owner_type: 'learner',
-        owner_id: reg.learner_id,
-        file_type: 'portrait_photo',
-        cloud_file_id: up.fileID,
-      });
-
-      wx.hideLoading();
-      wx.showToast({ title: '已上传', icon: 'success' });
-    } catch (e) {
-      wx.hideLoading();
-      console.error(e);
-      wx.showToast({ title: e.message || '上传失败', icon: 'none' });
-    }
-  },
 });

@@ -204,8 +204,12 @@ export const teacherRateCardsGet = (teacher_id = 'tch_default') =>
   callCloud('teacherRateCardsGet', { teacher_id });
 export const adminUpsertTeacherRateCard = (teacher_id, level, exam_fee_fen, concession_fen, note = '') =>
   callCloud('adminUpsertTeacherRateCard', { teacher_id, level, exam_fee_fen, concession_fen, note });
-export const paymentCheckout = (reg_id, teacher_id) =>
-  callCloud('paymentCheckout', { reg_id, teacher_id });
+export const paymentCheckoutPreview = (reg_id) => {
+  if (!reg_id) return Promise.reject(new Error('缺少报名记录编号'));
+  return callParentApi(`/parent/registrations/${encodeURIComponent(reg_id)}/checkout-preview`);
+};
+export const paymentCheckout = () =>
+  Promise.reject(new Error('微信支付尚未开放，请联系报名机构'));
 export const teacherConcessionWallet = (teacher_id = 'tch_default') =>
   callCloud('teacherConcessionWallet', { teacher_id });
 export const adminConfirmConcession = (ledger_id, adjusted_amount_fen, adjustment_note) =>
@@ -225,7 +229,7 @@ export default {
   instBatchCreate, instBatchList, instBatchGet, instBatchAddItems, instBatchRemoveItems, instBatchPreflight, instBatchSubmitToSuper,
   superIncomingInstBatchesList, superBatchCreate, superBatchGet, superBatchIngestInstitutionBatches, superBatchDedupRun, superBatchResolveConflict, superBatchPreflight, superBatchExportOnce,
   getDictSubjects, getDictCycles,
-  teacherRateCardsGet, adminUpsertTeacherRateCard, paymentCheckout, teacherConcessionWallet, adminConfirmConcession, teacherRequestWithdrawal, adminPayoutWithdrawal,
+  teacherRateCardsGet, adminUpsertTeacherRateCard, paymentCheckoutPreview, paymentCheckout, teacherConcessionWallet, adminConfirmConcession, teacherRequestWithdrawal, adminPayoutWithdrawal,
 };
 
 
