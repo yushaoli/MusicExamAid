@@ -1,16 +1,16 @@
-<view class="container" wx:if="{{!loading}}">
+<view class="container" wx:if="{{!loading && !loadFailed && editable}}">
   <view class="title">{{id ? '编辑报名' : '新建报名'}}</view>
 
   <view class="field">
     <text class="label">考生</text>
-    <picker mode="selector" range="{{learners}}" range-key="name_cn" value="{{learnerIndex}}" bindchange="onLearnerChange">
+    <picker disabled="{{!!id}}" mode="selector" range="{{learners}}" range-key="name_cn" value="{{learnerIndex}}" bindchange="onLearnerChange">
       <view class="picker">{{learners.length ? learners[learnerIndex].name_cn : '请先添加考生'}}</view>
     </picker>
   </view>
 
   <view class="field">
     <text class="label">考期</text>
-    <picker mode="selector" range="{{cycles}}" range-key="display_name" value="{{cycleIndex}}" bindchange="onCycleChange">
+    <picker disabled="{{!!id}}" mode="selector" range="{{cycles}}" range-key="display_name" value="{{cycleIndex}}" bindchange="onCycleChange">
       <view class="picker">{{cycles.length ? cycles[cycleIndex].display_name : '请先初始化考期'}}</view>
     </picker>
   </view>
@@ -47,3 +47,4 @@
   <button class="primary" bindtap="onSave">保存</button>
   <view class="hint">提示：首次新建报名需要先在“选择报名机构”里为考生绑定机构。</view>
 </view>
+<view class="container" wx:elif="{{!loading}}">{{loadFailed ? '加载失败，请返回后重试。' : '当前报名状态不可编辑，请返回查看详情。'}}</view>

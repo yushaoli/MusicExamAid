@@ -5,6 +5,7 @@ export {
   RegistrationStatus,
   VALID_TRANSITIONS,
   canTransition,
+  canParentEditRegistration,
   assertTransition,
 } from './registration-status';
 export type { RegistrationStatus as RegistrationStatusType } from './registration-status';

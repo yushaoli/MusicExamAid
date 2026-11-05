@@ -143,7 +143,15 @@ export const institutionList = () => callCloud('institutionList');
 // ============ Parent: Registration ============
 export const registrationCreate = (data) => callParentApi('/parent/registrations', 'POST', data)
   .then(withLegacyRegistrationFields);
-export const registrationUpdate = (data) => callCloud('registrationUpdate', data);
+export const registrationUpdate = (data = {}) => {
+  if (!data.reg_id) return Promise.reject(new Error('缺少报名记录编号'));
+  const patch = {};
+  for (const field of ['subject_id', 'level', 'exam_mode', 'exam_site_id_optional', 'repertoire']) {
+    if (data[field] !== undefined) patch[field] = field === 'level' ? Number(data[field]) : data[field];
+  }
+  return callParentApi(`/parent/registrations/${encodeURIComponent(data.reg_id)}`, 'PATCH', patch)
+    .then(withLegacyRegistrationFields);
+};
 export const registrationSubmit = (reg_id) =>
   callParentApi(`/parent/registrations/${encodeURIComponent(reg_id)}/submit`, 'POST', {})
     .then(withLegacyRegistrationFields);

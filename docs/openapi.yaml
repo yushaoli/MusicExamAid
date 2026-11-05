@@ -874,6 +874,49 @@ paths:
         "200": { description: Owned public registration details }
         "401": *parentUnauthorized
         "404": { description: Registration missing or its learner is not granted }
+    patch:
+      summary: Edit an owned draft or returned registration without changing ownership or workflow
+      description: >-
+        Requires a verified parent session and a current grant for the registration's
+        stored learner. Client-supplied ownership hints grant no access. Missing and
+        cross-owner IDs return 404; submitted, confirmed and locked records return 409.
+        Only subject, level, exam mode, site and repertoire can be changed. Learner, cycle,
+        institution, teacher, status, notes, snapshot, timestamps and storage flags are
+        rejected. Omitted details, locked snapshots and internal status history are
+        preserved; an empty site or repertoire array clears that field. A different level
+        is rejected with REGISTRATION_PRICE_LOCKED after any checkout order exists, since
+        payment reconciliation is outside this edit flow. Responses omit
+        snapshot_json and use Cache-Control=no-store. Uses the current in-memory domain
+        repository pending the separate durable persistence milestone.
+      security: *parentSessionSecurity
+      parameters:
+        - in: path
+          name: registrationId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: false
+              properties:
+                subject_id: { type: string, minLength: 1, maxLength: 128 }
+                level: { type: integer, minimum: 1, maximum: 10 }
+                exam_mode: { type: string, enum: [现场, 视频, 音基] }
+                exam_site_id_optional: { type: string, maxLength: 128 }
+                repertoire:
+                  type: array
+                  maxItems: 20
+                  items: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        "200": { description: Updated owned registration details with unchanged workflow status }
+        "400": { description: Empty patch, protected fields or invalid detail values }
+        "401": *parentUnauthorized
+        "404": { description: Registration missing or its stored learner is not granted }
+        "409": { description: Current status forbids edits or a checkout order prevents changing the level }
   /parent/registrations/{registrationId}/submit:
     post:
       summary: Submit an owned draft or needs-change registration

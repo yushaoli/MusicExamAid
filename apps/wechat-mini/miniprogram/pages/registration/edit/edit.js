@@ -5,6 +5,9 @@ Page({
   data: {
     id: null,
     loading: true,
+    loadFailed: false,
+    editable: false,
+    repertoireExtra: [],
     learners: [],
     subjects: [],
     cycles: [],
@@ -20,7 +23,7 @@ Page({
     learnerIndex: 0,
     cycleIndex: 0,
     subjectIndex: 0,
-    examModeOptions: ['现场', '线上'],
+    examModeOptions: ['现场', '视频', '音基'],
     examModeIndex: 0,
   },
 
@@ -28,9 +31,16 @@ Page({
     await app.ensureLogin();
     const id = options.id || null;
     this.setData({ id });
-    await this.bootstrap();
-    if (id) await this.loadReg(id);
-    this.setData({ loading: false });
+    try {
+      await this.bootstrap();
+      if (id) await this.loadReg(id);
+      else this.setData({ editable: true });
+    } catch (e) {
+      this.setData({ loadFailed: true });
+      wx.showToast({ title: '加载失败，请返回重试', icon: 'none' });
+    } finally {
+      this.setData({ loading: false });
+    }
   },
 
   async bootstrap() {
@@ -63,6 +73,8 @@ Page({
     const examModeIndex = Math.max(0, this.data.examModeOptions.findIndex(x => x === (reg.exam_mode || '现场')));
 
     this.setData({
+      editable: ['draft', 'needs_change'].includes(reg.status),
+      repertoireExtra: Array.isArray(reg.repertoire) ? reg.repertoire.slice(2) : [],
       form: {
         learner_id: reg.learner_id,
         cycle_id: reg.cycle_id,
@@ -80,11 +92,13 @@ Page({
   },
 
   onLearnerChange(e) {
+    if (this.data.id) return;
     const i = Number(e.detail.value);
     this.setData({ learnerIndex: i, 'form.learner_id': this.data.learners[i]._id });
   },
 
   onCycleChange(e) {
+    if (this.data.id) return;
     const i = Number(e.detail.value);
     this.setData({ cycleIndex: i, 'form.cycle_id': this.data.cycles[i].cycle_id });
   },
@@ -105,13 +119,14 @@ Page({
   },
 
   async onSave() {
+    if (this.data.loading || this.data.loadFailed || !this.data.editable) return;
     const { id, form } = this.data;
     if (!form.learner_id || !form.cycle_id) {
       wx.showToast({ title: '请选择考生与考期', icon: 'none' });
       return;
     }
 
-    const repertoire = [form.repertoire0, form.repertoire1].filter(x => !!x);
+    const repertoire = [...[form.repertoire0, form.repertoire1].filter(x => !!x), ...this.data.repertoireExtra];
 
     try {
       let savedId = id;
@@ -141,7 +156,8 @@ Page({
       }, 600);
     } catch (e) {
       console.error(e);
-      const msg = e.message || '保存失败';
+      const msg = e.message === 'REGISTRATION_PRICE_LOCKED'
+        ? '缴费后改级别请联系管理员' : (e.message || '保存失败');
       wx.showToast({ title: msg, icon: 'none' });
       if (String(msg).includes('No enrollment') || String(msg).includes('enrollment')) {
         setTimeout(() => wx.navigateTo({ url: '/pages/enrollment/select/select' }), 800);

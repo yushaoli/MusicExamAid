@@ -10,6 +10,7 @@ import * as crypto from 'crypto';
 import {
   RegistrationStatus,
   assertTransition,
+  canParentEditRegistration,
   encryptIdNumber,
   getIdLast4,
   buildRegistrationSnapshot,
@@ -90,6 +91,12 @@ export interface StoredStatusHistory {
   notes: string;
   created_at: string;
 }
+
+export const REGISTRATION_DETAIL_FIELDS = [
+  'subject_id', 'level', 'exam_mode', 'exam_site_id_optional', 'repertoire',
+] as const;
+
+export type RegistrationDetailsPatch = Partial<Pick<StoredRegistration, typeof REGISTRATION_DETAIL_FIELDS[number]>>;
 
 export interface StoredArchive {
   id: string;
@@ -284,6 +291,28 @@ export class DomainRepository {
 
   getRegistration(id: string): StoredRegistration | undefined {
     return this.registrations.get(id);
+  }
+
+  updateRegistrationDetails(id: string, patch: RegistrationDetailsPatch): StoredRegistration | undefined {
+    const existing = this.registrations.get(id);
+    if (!existing) return undefined;
+    if (!canParentEditRegistration(existing.status)) {
+      throw new Error('Registration cannot be edited in current status');
+    }
+    if (patch.level !== undefined && patch.level !== existing.level && this.hasRegistrationPayment(id)) {
+      throw new Error('Registration level is fixed after checkout');
+    }
+    const updated = {...existing, updated_at: new Date().toISOString()};
+    for (const field of REGISTRATION_DETAIL_FIELDS) {
+      const value = patch[field];
+      if (value !== undefined) Object.assign(updated, {[field]: Array.isArray(value) ? [...value] : value});
+    }
+    this.registrations.set(id, updated);
+    return updated;
+  }
+
+  hasRegistrationPayment(registrationId: string): boolean {
+    return Array.from(this.paymentOrders.values()).some(order => order.registration_id === registrationId);
   }
 
   listRegistrations(): StoredRegistration[] {
