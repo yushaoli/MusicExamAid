@@ -1,9 +1,12 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
-import { canTransition, RegistrationStatus, resolveSubjectName } from '@musicexamaid/shared';
+import { canTransition, canParentEditRegistration, RegistrationStatus, resolveSubjectName } from '@musicexamaid/shared';
 import { getPostgresPool as getLivePostgresPool } from '../store/postgres';
 import type { StoredRegistration } from '../store/repository';
-import { LEARNER_PROFILE_FIELDS, type LearnerProfilePatch } from '../store/repository';
+import {
+  LEARNER_PROFILE_FIELDS, type LearnerProfilePatch,
+  REGISTRATION_DETAIL_FIELDS, type RegistrationDetailsPatch,
+} from '../store/repository';
 import { toPublicLearner } from './learners';
 import { requireVerifiedFamilyAdmin } from '../auth/family-session';
 import {
@@ -57,6 +60,24 @@ function isLearnerProfilePatch(body: unknown): body is LearnerProfilePatch {
     }
     if (['name_cn', 'nationality', 'guardian_phone'].includes(field)) return value.trim().length > 0;
     return true;
+  });
+}
+
+function isRegistrationDetailsPatch(body: unknown): body is RegistrationDetailsPatch {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const entries = Object.entries(body);
+  if (entries.length === 0) return false;
+  const allowed = new Set<string>(REGISTRATION_DETAIL_FIELDS);
+  return entries.every(([field, value]) => {
+    if (!allowed.has(field)) return false;
+    if (field === 'level') return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 10;
+    if (field === 'exam_mode') return value === '现场' || value === '视频' || value === '音基';
+    if (field === 'repertoire') {
+      return Array.isArray(value) && value.length <= 20 && value.every(item =>
+        typeof item === 'string' && item.trim().length > 0 && item.length <= 500);
+    }
+    return typeof value === 'string' && value.length <= 128 &&
+      (field === 'exam_site_id_optional' || value.trim().length > 0);
   });
 }
 
@@ -197,6 +218,35 @@ export async function parentAccessRoutes(
         return reply.code(404).send({error: 'REGISTRATION_NOT_FOUND'});
       }
       return reply.send(toParentRegistration(registration));
+    },
+  );
+
+  app.patch(
+    '/parent/registrations/:registrationId',
+    async (
+      req: FastifyRequest<{Params: {registrationId: string}; Body: unknown}>, reply: FastifyReply,
+    ) => {
+      const session = await requireVerifiedParent(req, reply);
+      if (!session) return;
+      const granted = new Set(await activeLearnerIds(session.openid));
+      if (granted.size === 0) return reply.code(404).send({error: 'REGISTRATION_NOT_FOUND'});
+      const registration = app.store.getRegistration(req.params.registrationId);
+      if (!registration || !granted.has(registration.learner_id)) {
+        return reply.code(404).send({error: 'REGISTRATION_NOT_FOUND'});
+      }
+      if (!canParentEditRegistration(registration.status)) {
+        return reply.code(409).send({error: 'REGISTRATION_NOT_EDITABLE'});
+      }
+      if (!isRegistrationDetailsPatch(req.body)) {
+        return reply.code(400).send({error: 'VALIDATION_ERROR', message: 'Supply valid registration detail fields only'});
+      }
+      if (req.body.level !== undefined && req.body.level !== registration.level &&
+          app.store.hasRegistrationPayment(registration.id)) {
+        return reply.code(409).send({error: 'REGISTRATION_PRICE_LOCKED'});
+      }
+      const updated = app.store.updateRegistrationDetails(registration.id, req.body);
+      if (!updated) return reply.code(404).send({error: 'REGISTRATION_NOT_FOUND'});
+      return reply.send(toParentRegistration(updated));
     },
   );
 

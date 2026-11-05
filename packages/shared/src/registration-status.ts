@@ -64,6 +64,11 @@ export const VALID_TRANSITIONS: Readonly<
 // Guards
 // ---------------------------------------------------------------------------
 
+/** Parents can edit details only before review or after a teacher returns the record. */
+export function canParentEditRegistration(status: RegistrationStatus): boolean {
+  return status === RegistrationStatus.DRAFT || status === RegistrationStatus.NEEDS_CHANGE;
+}
+
 /** Returns `true` if the `from → to` transition is permitted. */
 export function canTransition(
   from: RegistrationStatus,
