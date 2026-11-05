@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { canTransition, RegistrationStatus, resolveSubjectName } from '@musicexamaid/shared';
 import { getPostgresPool as getLivePostgresPool } from '../store/postgres';
 import type { StoredRegistration } from '../store/repository';
+import { LEARNER_PROFILE_FIELDS, type LearnerProfilePatch } from '../store/repository';
 import { toPublicLearner } from './learners';
 import { requireVerifiedFamilyAdmin } from '../auth/family-session';
 import {
@@ -39,6 +40,24 @@ function toParentRegistration(registration: StoredRegistration) {
     subject_name: resolveSubjectName(registration.subject_id),
     has_snapshot: registration.snapshot_json !== null,
   };
+}
+
+function isLearnerProfilePatch(body: unknown): body is LearnerProfilePatch {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const entries = Object.entries(body);
+  if (entries.length === 0) return false;
+  const allowed = new Set<string>(LEARNER_PROFILE_FIELDS);
+  return entries.every(([field, value]) => {
+    if (!allowed.has(field) || typeof value !== 'string' || value.length > 500) return false;
+    if (field === 'gender') return value === '男' || value === '女';
+    if (field === 'dob') {
+      const date = new Date(value);
+      return /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+        !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+    }
+    if (['name_cn', 'nationality', 'guardian_phone'].includes(field)) return value.trim().length > 0;
+    return true;
+  });
 }
 
 export async function parentAccessRoutes(
@@ -124,6 +143,27 @@ export async function parentAccessRoutes(
       const granted = (await activeLearnerIds(session.openid)).includes(req.params.learnerId);
       if (!granted) return reply.code(404).send({error: 'LEARNER_NOT_FOUND'});
       const learner = app.store.getLearner(req.params.learnerId);
+      if (!learner) return reply.code(404).send({error: 'LEARNER_NOT_FOUND'});
+      return reply.send(toPublicLearner(learner));
+    },
+  );
+
+  app.patch(
+    '/parent/learners/:learnerId',
+    async (
+      req: FastifyRequest<{Params: {learnerId: string}; Body: unknown}>, reply: FastifyReply,
+    ) => {
+      const session = await requireVerifiedParent(req, reply);
+      if (!session) return;
+      const granted = (await activeLearnerIds(session.openid)).includes(req.params.learnerId);
+      if (!granted) return reply.code(404).send({error: 'LEARNER_NOT_FOUND'});
+      if (!isLearnerProfilePatch(req.body)) {
+        return reply.code(400).send({
+          error: 'VALIDATION_ERROR',
+          message: 'Supply profile/contact fields only; document identifiers and photos require an administrator',
+        });
+      }
+      const learner = app.store.updateLearnerProfile(req.params.learnerId, req.body);
       if (!learner) return reply.code(404).send({error: 'LEARNER_NOT_FOUND'});
       return reply.send(toPublicLearner(learner));
     },
