@@ -121,7 +121,20 @@ export const learnerList = () => callParentApi('/parent/learners')
   .then((body) => body.items.map(withLegacyLearnerId));
 export const learnerGet = (learner_id) =>
   callParentApi(`/parent/learners/${encodeURIComponent(learner_id)}`).then(withLegacyLearnerId);
-export const learnerUpsert = (data) => callCloud('learnerUpsert', data);
+export const learnerUpsert = (data = {}) => {
+  if (!data.learner_id) return Promise.reject(new Error('请联系管理员建立学员档案并授权'));
+  if (data.id_number) return Promise.reject(new Error('请联系管理员修改证件号码'));
+  const patch = {};
+  for (const field of [
+    'name_cn', 'name_en_optional', 'gender', 'dob', 'nationality',
+    'ethnicity_optional', 'guardian_phone', 'mailing_address_optional',
+    'recipient_name_optional', 'recipient_phone_optional',
+  ]) {
+    if (data[field] !== undefined) patch[field] = data[field];
+  }
+  return callParentApi(`/parent/learners/${encodeURIComponent(data.learner_id)}`, 'PATCH', patch)
+    .then(withLegacyLearnerId);
+};
 
 // ============ Parent: Enrollment ============
 export const enrollmentCreateOrUpdate = (data) => callCloud('enrollmentCreateOrUpdate', data);

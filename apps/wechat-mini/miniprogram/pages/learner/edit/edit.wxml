@@ -1,4 +1,5 @@
 <view class="container">
+  <block wx:if="{{id && ready}}">
   <view class="form-group">
     <text class="label">姓名 *</text>
     <input class="input" value="{{form.name_cn}}" data-field="name_cn" bindinput="onInput" placeholder="中文姓名"/>
@@ -20,14 +21,13 @@
     </picker>
   </view>
   <view class="form-group">
-    <text class="label">证件类型 *</text>
-    <picker mode="selector" range="{{idTypeOptions}}" data-field="id_type" data-options="idTypeOptions" bindchange="onPickerChange">
-      <view class="picker">{{form.id_type || '请选择'}}</view>
-    </picker>
+    <text class="label">证件类型</text>
+    <text>{{form.id_type}}</text>
   </view>
   <view class="form-group">
-    <text class="label">证件号码 *</text>
-    <input class="input" value="{{form.id_number}}" data-field="id_number" bindinput="onInput" placeholder="{{id ? '重新输入以更新' : '请输入'}}"/>
+    <text class="label">证件号码（末四位）</text>
+    <text>{{form.id_last4}}</text>
+    <text>修改证件信息请联系管理员</text>
   </view>
   <view class="form-group">
     <text class="label">联系电话 *</text>
@@ -38,5 +38,8 @@
     <input class="input" value="{{form.mailing_address_optional}}" data-field="mailing_address_optional" bindinput="onInput" placeholder="可选"/>
   </view>
   <button class="submit-btn" bindtap="onSubmit">保存</button>
+  </block>
+  <view wx:elif="{{id}}">{{loadFailed ? '加载失败，请返回后重试。' : '加载中…'}}</view>
+  <view wx:else>请联系管理员建立学员档案并授权后编辑。</view>
 </view>
 

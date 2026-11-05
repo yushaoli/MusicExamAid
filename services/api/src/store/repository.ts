@@ -53,6 +53,15 @@ export interface StoredLearner {
   updated_at: string;
 }
 
+// Document identifiers, photo state and record metadata are not parent-editable.
+export const LEARNER_PROFILE_FIELDS = [
+  'name_cn', 'name_en_optional', 'gender', 'dob', 'nationality',
+  'ethnicity_optional', 'guardian_phone', 'mailing_address_optional',
+  'recipient_name_optional', 'recipient_phone_optional',
+] as const;
+
+export type LearnerProfilePatch = Partial<Pick<StoredLearner, typeof LEARNER_PROFILE_FIELDS[number]>>;
+
 export interface StoredRegistration {
   id: string;
   learner_id: string;
@@ -198,6 +207,17 @@ export class DomainRepository {
 
   getLearner(id: string): StoredLearner | undefined {
     return this.learners.get(id);
+  }
+
+  updateLearnerProfile(id: string, patch: LearnerProfilePatch): StoredLearner | undefined {
+    const existing = this.learners.get(id);
+    if (!existing) return undefined;
+    const updated = {...existing, updated_at: new Date().toISOString()};
+    for (const field of LEARNER_PROFILE_FIELDS) {
+      if (patch[field] !== undefined) Object.assign(updated, {[field]: patch[field]});
+    }
+    this.learners.set(id, updated);
+    return updated;
   }
 
   listLearners(): StoredLearner[] {

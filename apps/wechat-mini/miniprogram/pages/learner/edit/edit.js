@@ -4,13 +4,14 @@ import api from '../../../utils/api';
 Page({
   data: {
     id: null,
+    ready: false,
+    loadFailed: false,
     form: {
       name_cn: '', name_en_optional: '', gender: '男', dob: '',
       nationality: '中国', ethnicity_optional: '', id_type: '身份证', id_number: '',
       guardian_phone: '', mailing_address_optional: '', recipient_name_optional: '', recipient_phone_optional: ''
     },
     genderOptions: ['男', '女'],
-    idTypeOptions: ['身份证', '护照', '港澳通行证', '台湾通行证'],
   },
 
   async onLoad(options) {
@@ -24,9 +25,10 @@ Page({
   async loadLearner(id) {
     try {
       const data = await api.learnerGet(id);
-      this.setData({ form: { ...this.data.form, ...data, id_number: '' } });
+      this.setData({ form: { ...this.data.form, ...data, id_number: '' }, ready: true });
     } catch (e) {
       console.error('Load learner failed:', e);
+      this.setData({ loadFailed: true });
       wx.showToast({ title: '加载失败', icon: 'none' });
     }
   },
@@ -47,14 +49,10 @@ Page({
   },
 
   async onSubmit() {
-    const { id, form } = this.data;
+    const { id, form, ready } = this.data;
+    if (!id || !ready) return;
     if (!form.name_cn || !form.guardian_phone) {
       wx.showToast({ title: '请填写必填项', icon: 'none' });
-      return;
-    }
-    // id_number required for new learner
-    if (!id && !form.id_number) {
-      wx.showToast({ title: '请填写证件号码', icon: 'none' });
       return;
     }
     try {
