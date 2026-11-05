@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
-import { canTransition, canParentEditRegistration, RegistrationStatus, resolveSubjectName } from '@musicexamaid/shared';
+import { canTransition, canParentEditRegistration, formatRmbYuan, RegistrationStatus, resolveSubjectName } from '@musicexamaid/shared';
 import { getPostgresPool as getLivePostgresPool } from '../store/postgres';
 import type { StoredRegistration } from '../store/repository';
 import {
@@ -218,6 +218,45 @@ export async function parentAccessRoutes(
         return reply.code(404).send({error: 'REGISTRATION_NOT_FOUND'});
       }
       return reply.send(toParentRegistration(registration));
+    },
+  );
+
+  app.get(
+    '/parent/registrations/:registrationId/checkout-preview',
+    async (
+      req: FastifyRequest<{Params: {registrationId: string}}>, reply: FastifyReply,
+    ) => {
+      const session = await requireVerifiedParent(req, reply);
+      if (!session) return;
+      const granted = new Set(await activeLearnerIds(session.openid));
+      if (granted.size === 0) return reply.code(404).send({error: 'REGISTRATION_NOT_FOUND'});
+      const registration = app.store.getRegistration(req.params.registrationId);
+      if (!registration || !granted.has(registration.learner_id)) {
+        return reply.code(404).send({error: 'REGISTRATION_NOT_FOUND'});
+      }
+      if (Object.keys(req.query as Record<string, unknown>).length > 0) {
+        return reply.code(400).send({error: 'VALIDATION_ERROR', message: 'Checkout preview accepts no pricing or identity overrides'});
+      }
+      if (!Number.isInteger(registration.level) || registration.level < 1 || registration.level > 10) {
+        return reply.code(409).send({error: 'REGISTRATION_PRICING_UNAVAILABLE'});
+      }
+      const rate = app.store.getTeacherGradeRateSchedule(registration.teacher_id)
+        .find(item => item.levelNum === registration.level);
+      if (!rate || !Number.isSafeInteger(rate.feeFen) || rate.feeFen < 0) {
+        return reply.code(409).send({error: 'REGISTRATION_PRICING_UNAVAILABLE'});
+      }
+      // A price preview is neither an order nor evidence of a payment.
+      return reply.send({
+        status: 'preview_only',
+        payment_available: false,
+        quote: {
+          registration_id: registration.id,
+          level: registration.level,
+          currency: 'CNY',
+          exam_fee_fen: rate.feeFen,
+          exam_fee_yuan: formatRmbYuan(rate.feeFen),
+        },
+      });
     },
   );
 

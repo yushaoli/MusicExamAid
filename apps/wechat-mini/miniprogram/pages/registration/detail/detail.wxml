@@ -11,12 +11,16 @@
   </view>
 
   <view class="actions">
-    <button bindtap="onUploadPortrait">上传证件照</button>
-    <button wx:if="{{reg.workflow_status === 'Draft' || reg.workflow_status === 'NeedsChanges'}}" bindtap="goEdit">编辑</button>
-    <button class="primary" wx:if="{{reg.workflow_status === 'Draft' || reg.workflow_status === 'NeedsChanges'}}" bindtap="onSubmit">提交老师审核</button>
+    <button bindtap="onPreviewCheckout" loading="{{previewLoading}}" disabled="{{previewLoading}}">查看报名费用</button>
+    <button wx:if="{{reg.workflow_status === 'draft' || reg.workflow_status === 'needs_change'}}" bindtap="goEdit">编辑</button>
+    <button class="primary" wx:if="{{reg.workflow_status === 'draft' || reg.workflow_status === 'needs_change'}}" bindtap="onSubmit">提交老师审核</button>
   </view>
 
-  <view class="hint">提交后不可编辑；如老师退回修改，将显示为 NeedsChanges。</view>
+  <view class="card" wx:if="{{checkoutPreview}}">
+    <view class="row"><text class="label">预估报名费</text><text class="value">{{checkoutPreview.quote.exam_fee_yuan}}</text></view>
+    <view class="hint">仅供参考。微信支付尚未开放，实际缴费请联系报名机构。</view>
+  </view>
+  <view class="hint">提交后如需修改，请等待老师退回。证件照更新请联系管理员。</view>
 </view>
 
 <view class="container" wx:elif="{{loading}}">加载中...</view>

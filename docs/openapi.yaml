@@ -612,7 +612,12 @@ paths:
   /payments/checkout:
     post:
       summary: Create an admin-only exam checkout and concession record
-      description: Requires a verified family-admin session in every environment. Parent checkout remains disabled until verified parent-to-registration ownership exists. Responses use Cache-Control=no-store.
+      description: >-
+        Requires a verified family-admin session in every environment. This legacy helper
+        marks an order paid without a WeChat settlement exchange and is not a parent payment
+        endpoint. Parent payment writes remain disabled pending verified settlement and durable
+        orders. Parents can use the grant-scoped checkout-preview endpoint for an indicative
+        exam fee only. Responses use Cache-Control=no-store.
       security: *familyAdminSecurity
       requestBody:
         required: true
@@ -917,6 +922,50 @@ paths:
         "401": *parentUnauthorized
         "404": { description: Registration missing or its stored learner is not granted }
         "409": { description: Current status forbids edits or a checkout order prevents changing the level }
+  /parent/registrations/{registrationId}/checkout-preview:
+    get:
+      summary: Preview the exam fee for an owned registration without creating an order
+      description: >-
+        Requires a verified parent session and an active grant for the registration's stored
+        learner. Missing/cross-owner IDs return 404 before pricing access; no grants or failed
+        grant storage authorize no records. Uses only the stored teacher and level and the
+        current server rate schedule. Rejects all query parameters, including teacher, price,
+        learner, add-on and transaction overrides. Returns only an indicative base exam fee;
+        no add-ons, teacher IDs, commissions, private notes or payment records are returned.
+        This is not an existing order's paid amount or status. Every success explicitly reports
+        status=preview_only and payment_available=false. No order, payment, concession,
+        notification or price lock is created. Responses use Cache-Control=no-store. Domain
+        and pricing data still use the current in-memory repository.
+      security: *parentSessionSecurity
+      parameters:
+        - in: path
+          name: registrationId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Indicative exam fee with payment disabled
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, payment_available, quote]
+                properties:
+                  status: { type: string, enum: [preview_only] }
+                  payment_available: { type: boolean, enum: [false] }
+                  quote:
+                    type: object
+                    required: [registration_id, level, currency, exam_fee_fen, exam_fee_yuan]
+                    properties:
+                      registration_id: { type: string }
+                      level: { type: integer, minimum: 1, maximum: 10 }
+                      currency: { type: string, enum: [CNY] }
+                      exam_fee_fen: { type: integer, minimum: 0 }
+                      exam_fee_yuan: { type: string, example: '¥300.00' }
+        "400": { description: Query parameters are not accepted }
+        "401": *parentUnauthorized
+        "404": { description: Registration missing or its stored learner is not granted }
+        "409": { description: Stored level or server pricing is invalid }
   /parent/registrations/{registrationId}/submit:
     post:
       summary: Submit an owned draft or needs-change registration
